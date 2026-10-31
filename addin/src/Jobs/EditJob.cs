@@ -277,11 +277,7 @@ namespace Flo2Rvt.Addin.Jobs
             RunResult run = ChangeRunner.Run(doc, context.Data.RevitApp, "delete the elements on level " + level.Name, d => { deleted = d.Delete(targets); });
             if (run.Committed && deleted != null) foreach (ElementId id in deleted) run.Deleted.Add(id.Value);
             Record(doc, r, index, run, targets.Select(id => id.Value).ToList());
-            if (run.Committed)
-            {
-                r.Status = ChangeStatus.ForCommitted(couldNot.Count);
-                if (couldNot.Count > 0) r.Why = couldNot.Count + " element(s) on the level could not be deleted (could_not)";
-            }
+            if (run.Committed) Reconcile.Committed(new DeleteFacts { Kind = change.Kind, PreChecked = couldNot, Deleted = run.Deleted }).ApplyTo(r);
         }
 
         private static void DeleteByGlobalId(JobContext context, ElementIndex index, Change change, ChangeReport r)
@@ -339,11 +335,7 @@ namespace Flo2Rvt.Addin.Jobs
             RunResult run = ChangeRunner.Run(doc, context.Data.RevitApp, "delete " + targets.Count + " element(s) by GlobalId", d => { deleted = d.Delete(targets); });
             if (run.Committed && deleted != null) foreach (ElementId id in deleted) run.Deleted.Add(id.Value);
             Record(doc, r, index, run, targets.Select(id => id.Value).ToList());
-            if (run.Committed)
-            {
-                r.Status = ChangeStatus.ForCommitted(notDone);
-                if (notDone > 0) r.Why = notFound.Count + " GlobalId(s) not found, " + couldNot.Count + " element(s) not deletable by this change";
-            }
+            if (run.Committed) Reconcile.Committed(new DeleteFacts { Kind = change.Kind, PreChecked = couldNot, Deleted = run.Deleted, NotFound = notFound.Count }).ApplyTo(r);
         }
 
         private static LevelElevation Read(Level level)

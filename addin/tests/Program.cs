@@ -12,6 +12,7 @@ using System.Text;
 using System.Text.Json;
 using Flo2Rvt.Addin.Edit;
 using Flo2Rvt.Addin.Edit.Logic;
+using Flo2Rvt.ChangeLists;
 
 namespace Flo2Rvt.Addin.Tests
 {
@@ -229,9 +230,49 @@ namespace Flo2Rvt.Addin.Tests
                 Eq("central", read.Exports.ModelRvt.SavedAs, "saved as a central");
             });
 
+            // ─── the first live edit (2026-10-31, Autodesk's sample model), change c3
+            Test("the first live edit's c3, assembled by the add-in's logic, keeps every invariant of the report", () =>
+            {
+                ChangeReport r = LiveC3(root);
+                List<string> broken = ReportCheck.Violations(r);
+                Is(broken.Count == 0, broken.Count + " invariant(s) broken, the first: " + string.Join("; ", broken.Take(3)));
+            });
+
             Console.WriteLine();
             Console.WriteLine(passed + " passed, " + failed.Count + " failed");
             return failed.Count == 0 ? 0 : 1;
+        }
+
+        /// <summary>
+        /// The live edit's c3 (delete_elements_on_level "Level 2"), from its element ids and GlobalIds
+        /// (addin/tests/fixtures/live-edit-2026-10-31-c3.json), run through the logic the edit job
+        /// assembles a committed delete's report with: what the check before the transaction
+        /// refused, judged against what the transaction deleted.
+        /// </summary>
+        private static ChangeReport LiveC3(string root)
+        {
+            using (var doc = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(root, "addin", "tests", "fixtures", "live-edit-2026-10-31-c3.json"))))
+            {
+                JsonElement f = doc.RootElement;
+                Func<JsonElement, ElementFacts> facts = e => new ElementFacts
+                {
+                    Id = e.GetProperty("element_id").GetInt64(),
+                    GlobalId = e.TryGetProperty("global_id", out JsonElement g) ? g.GetString() : null,
+                };
+                var matched = new ElementTally();
+                foreach (JsonElement e in f.GetProperty("matched").EnumerateArray()) matched.Add(facts(e));
+                var deleted = new ElementTally();
+                foreach (JsonElement e in f.GetProperty("deleted").EnumerateArray()) deleted.Add(facts(e));
+                var preChecked = f.GetProperty("could_not").EnumerateArray()
+                    .Select(e => new CouldNot { ElementId = facts(e).Id, GlobalId = facts(e).GlobalId, Why = "Revit says it cannot be deleted" })
+                    .ToList();
+                var r = new ChangeReport { Index = 2, Id = "c3", Kind = ChangeKinds.DeleteElementsOnLevel, Committed = true };
+                r.Matched = ReportedElements.From(matched);
+                r.Deleted = ReportedElements.From(deleted);
+                var c3 = new DeleteFacts { Kind = r.Kind, PreChecked = preChecked, Deleted = new HashSet<long>(deleted.Listed.Select(e => e.Id)) };
+                Reconcile.Committed(c3).ApplyTo(r);
+                return r;
+            }
         }
 
         /// <summary>Every value in the fixture (but its _note) is in what the contract wrote, the same.</summary>
