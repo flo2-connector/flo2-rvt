@@ -1,0 +1,29 @@
+{
+  "_source": "Autodesk-Forge/forge-api-dotnet-design.automation@280da5ec8d3cda63b5232956711dc964c65557e5 tests/e2e/recordings/AppBundles_GetAll.json [0]",
+  "status": 200,
+  "body": {
+    "paginationToken": "3eyJOYW1lX2xhYmVsIjp7IlMiOiJDbGFyaXR5VGFza1Byb2Nlc3NvcjIwMjNSMjAucHJvZCJ9LCJSZWNlaXZlciI6eyJTIjoiZXZlcnlvbmUifSwiT3duZXIiOnsiUyI6IkNsYXJpdHkifX0%3D",
+    "data": [
+      "SdkTester.MyApp+$LATEST",
+      "SdkTester.MyApp+beta",
+      "SdkTester.MyApp+latest",
+      "SdkTester.MyApp+rc",
+      "Inventor.Configuration2019+prod",
+      "Clarity.ClarityTaskProcessor2023R23+prod",
+      "Clarity.ClarityTaskProcessor2023R21+prod",
+      "Clarity.ClarityTaskProcessor2022R19+prod",
+      "Clarity.ClarityTaskProcessor2022R22+prod",
+      "Inventor.ChangeParams2019+prod",
+      "Clarity.ClarityTaskProcessor2022R20+prod",
+      "Inventor.Configuration2020+prod",
+      "AutoCAD.Publish2View22+prod",
+      "Autodesk.TestsApp+Latest",
+      "Inventor.iLogicSampleAppPackage2020+prod",
+      "3dsMax.UVUnwrap+latest",
+      "Clarity.ClarityTaskProcessor2022R21+prod",
+      "Inventor.ChPa+prod",
+      "Inventor.Configuration2021+prod",
+      "Clarity.ClarityTaskProcessor2023R20+prod"
+    ]
+  }
+}

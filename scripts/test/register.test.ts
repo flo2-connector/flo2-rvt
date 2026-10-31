@@ -92,6 +92,59 @@ describe('flo2-rvt register', () => {
     }
   });
 
+  test('on a fresh app with no nickname it sets one FIRST, then creates everything under it', async () => {
+    const aps = new MockAps({ noNicknameFor: ENV.APS_CLIENT_ID });
+    await aps.start();
+    try {
+      const { code, lines } = await runCli(aps, ['register', '--bundle', zip]);
+      assert.equal(code, 0, lines.join('\n'));
+      const order = aps.calls.map((c) => `${c.method} ${c.path}`).filter((p) => !p.includes('/authentication/'));
+      const patch = order.indexOf('PATCH /da/us-east/v3/forgeapps/me');
+      assert.ok(patch > 0 && patch < order.indexOf('POST /da/us-east/v3/appbundles'), 'the nickname is set before anything is created');
+      assert.deepEqual(aps.calls.find((c) => c.method === 'PATCH' && c.path.endsWith('/forgeapps/me'))?.json, { nickname: 'flo2rvt_madeupclient' });
+      assert.deepEqual((aps.calls.find((c) => c.path === '/da/us-east/v3/activities' && c.method === 'POST')?.json as { appbundles: string[] }).appbundles, ['flo2rvt_madeupclient.Flo2RvtProbe+prod']);
+      assert.match(lines.join('\n'), /Activity flo2rvt_madeupclient\.Flo2RvtProbe\+prod: created 1/);
+      assert.ok(!aps.calls.some((c) => c.method === 'DELETE'), 'never DELETE /forgeapps/me');
+    } finally {
+      await aps.stop();
+    }
+  });
+
+  test('APS_NICKNAME names the nickname; a taken one stops before anything is created', async () => {
+    const aps = new MockAps({ noNicknameFor: ENV.APS_CLIENT_ID });
+    await aps.start();
+    try {
+      const { code } = await runCli(aps, ['register', '--bundle', zip], { ...ENV, APS_NICKNAME: 'sample_owner_app' });
+      assert.equal(code, 0);
+      assert.deepEqual(aps.calls.find((c) => c.method === 'PATCH')?.json, { nickname: 'sample_owner_app' });
+    } finally {
+      await aps.stop();
+    }
+    const taken = new MockAps({ noNicknameFor: ENV.APS_CLIENT_ID, nicknameTaken: true });
+    await taken.start();
+    try {
+      await assert.rejects(runCli(taken, ['register', '--bundle', zip], { ...ENV, APS_NICKNAME: 'sample_owner_app' }), /taken by another Autodesk app.*Choose another with APS_NICKNAME/);
+      assert.ok(!taken.calls.some((c) => c.method === 'POST' && c.path.startsWith('/da/')), 'nothing was created');
+    } finally {
+      await taken.stop();
+    }
+  });
+
+  test('an app with data and no nickname carries on under its client id, and never deletes', async () => {
+    const aps = new MockAps({ noNicknameFor: ENV.APS_CLIENT_ID, ownsDataAsClientId: true });
+    await aps.start();
+    try {
+      const { code, lines } = await runCli(aps, ['register', '--bundle', zip], { ...ENV, APS_NICKNAME: 'sample_owner_app' });
+      assert.equal(code, 0, lines.join('\n'));
+      assert.ok(!aps.calls.some((c) => c.method === 'PATCH' && c.path.endsWith('/forgeapps/me')));
+      assert.ok(!aps.calls.some((c) => c.method === 'DELETE'));
+      assert.match(lines.join('\n'), /Carrying on with the client id as the owner/);
+      assert.match(lines.join('\n'), new RegExp(`Activity ${ENV.APS_CLIENT_ID}\\.Flo2RvtProbe\\+prod`));
+    } finally {
+      await aps.stop();
+    }
+  });
+
   test('without the keys in the environment it stops before calling Autodesk', async () => {
     const aps = new MockAps();
     await aps.start();

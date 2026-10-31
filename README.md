@@ -131,10 +131,16 @@ Node 22.18 or later runs the TypeScript directly. On flo2.io it runs as its own 
 
    ```sh
    npm ci
-   APS_MONTHLY_HOURS=2 npx flo2-rvt register --bundle addin/dist/Flo2RvtProbe.bundle.zip
+   APS_NICKNAME=my_flo2rvt_app APS_MONTHLY_HOURS=2 npx flo2-rvt register --bundle addin/dist/Flo2RvtProbe.bundle.zip
    ```
 
-   It uploads the AppBundle (a new version if it exists), creates or updates the `Flo2RvtProbe` Activity on the `Autodesk.Revit+2024` engine, points both `prod` aliases at the new versions, and sets Autodesk's own monthly processing cap on the app (`frontendLimits.limitMonthlyProcessingTimeInHours`, `APS_MONTHLY_HOURS`, default 2). It prints the nickname, each version and alias, and the cap Autodesk reports back.
+   In this order:
+   1. **The nickname, first.** Autodesk lets an app take a nickname only while it has no AppBundle or Activity ([Task 3, Create a Nickname](https://aps.autodesk.com/en/docs/design-automation/v3/tutorials/revit/step3-create-nickname/)). On a fresh app it sets `APS_NICKNAME` (letters, digits and underscores; default `flo2rvt_` and the first twelve letters and digits of the client id, lowercased) with `PATCH /forgeapps/me`. Nicknames are global: a taken one stops the run before anything is created, and asks for another `APS_NICKNAME`. A nickname already set is kept. An app that already has data and no nickname carries on with its client id as the owner prefix: setting one then would need `DELETE /forgeapps/me`, which deletes everything on the app, and this command never calls it.
+   2. The AppBundle, uploaded as a new AppBundle or a new version of it, and its `prod` alias.
+   3. The `Flo2RvtProbe` Activity on the `Autodesk.Revit+2024` engine, named `<owner>.Flo2RvtProbe+prod`, and its `prod` alias.
+   4. Autodesk's own monthly processing cap on the app (`frontendLimits.limitMonthlyProcessingTimeInHours`, `APS_MONTHLY_HOURS`, default 2), read back.
+
+   It prints the owner prefix and how it was settled, each version and alias, and the cap Autodesk reports. flo2-rvt's server reads the same prefix from `GET /forgeapps/me` for every job.
 4. **Check the engines** whenever the monthly check asks: `npx flo2-rvt engines` lists Design Automation's Revit engines beside the dates Autodesk's Engine Lifecycle Policy page gives. The Revit 2024 engine takes no new AppBundles or Activities after **2027-03-29** and is removed on 2029-03-29.
 
 ## Development

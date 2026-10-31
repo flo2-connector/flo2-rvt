@@ -38,6 +38,12 @@ interface Upload {
 
 export interface MockOptions {
   nickname?: string;
+  /** An app with no nickname: forgeapps/me answers this client id until a PATCH sets one. */
+  noNicknameFor?: string;
+  /** Every nickname is taken: PATCH forgeapps/me answers 409. */
+  nicknameTaken?: boolean;
+  /** The app already owns an AppBundle under its client id. */
+  ownsDataAsClientId?: boolean;
   /** Who owns a bucket that already exists: 'me' answers 409 then details 200; 'other' answers 409 then 403. */
   existingBucket?: 'me' | 'other';
   /** The WorkItem statuses GET returns in turn; the last repeats. On reaching 'success' the outputs are written. */
@@ -58,6 +64,7 @@ export class MockAps {
   private readonly aliases = new Set<string>();
   private readonly entities = new Set<string>();
   private statusIndex = 0;
+  private nicknameSet: string | undefined;
   private expired = false;
   serviceLimits: unknown = recorded('da-servicelimits-get').body;
   private server: Server | undefined;
@@ -185,9 +192,29 @@ export class MockAps {
     }
 
     // Design Automation
-    if (path === '/da/us-east/v3/forgeapps/me') {
+    if (path === '/da/us-east/v3/forgeapps/me' && req.method === 'PATCH') {
+      if (this.opts.nicknameTaken) return this.send(res, 409, '"Conflict (in use by someone else)."');
+      const r = recorded('da-forgeapps-patch');
+      this.nicknameSet = (call.json as { nickname: string }).nickname;
+      res.writeHead(r.status);
+      res.end();
+      return;
+    }
+    if (path === '/da/us-east/v3/forgeapps/me' && req.method === 'GET') {
       const r = recorded('da-forgeapps-me');
-      return this.send(res, r.status, this.opts.nickname ?? r.body);
+      return this.send(res, r.status, this.nicknameSet ?? this.opts.noNicknameFor ?? this.opts.nickname ?? r.body);
+    }
+    if (req.method === 'GET' && (path === '/da/us-east/v3/appbundles' || path === '/da/us-east/v3/activities')) {
+      const kind = path.endsWith('appbundles') ? 'appbundles' : 'activities';
+      // Recorded pages; the activities recording keeps only its first page, so a second page is empty.
+      const page = call.query.page
+        ? kind === 'appbundles'
+          ? recorded('da-appbundles-get-page2').body
+          : { paginationToken: null, data: [] }
+        : recorded(kind === 'appbundles' ? 'da-appbundles-get-page1' : 'da-activities-get').body;
+      const body = page as { data: string[] };
+      if (kind === 'appbundles' && !call.query.page && this.opts.ownsDataAsClientId && this.opts.noNicknameFor) body.data.push(`${this.opts.noNicknameFor}.OlderApp+prod`);
+      return this.send(res, 200, body);
     }
     if (req.method === 'POST' && path === '/da/us-east/v3/workitems') {
       this.workItems.push(call.json);
@@ -262,12 +289,16 @@ export class MockAps {
   private entityAnswer(kind: 'appbundles' | 'activities', id: string, version: number): unknown {
     if (kind === 'activities') {
       const r = recorded('da-activities-post');
-      return { ...(r.body as object), id: `SdkTester.${id}`, version };
+      return { ...(r.body as object), id: `${this.owner()}.${id}`, version };
     }
     const r = recorded(version === 1 ? 'da-appbundles-post' : 'da-appbundles-versions-post');
     const b = r.body as { uploadParameters: { endpointURL: string } };
     b.uploadParameters.endpointURL = `${this.base}/s3/appbundle`;
-    return { ...b, id: `SdkTester.${id}`, version };
+    return { ...b, id: `${this.owner()}.${id}`, version };
+  }
+
+  private owner(): string {
+    return this.nicknameSet ?? this.opts.noNicknameFor ?? this.opts.nickname ?? (recorded('da-forgeapps-me').body as string);
   }
 
   /** What the add-in would leave: the outputs, written where the WorkItem said to put them. */

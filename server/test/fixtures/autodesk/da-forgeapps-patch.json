@@ -1,0 +1,5 @@
+{
+  "_source": "Autodesk-Forge/forge-api-dotnet-design.automation@280da5ec8d3cda63b5232956711dc964c65557e5 tests/e2e/recordings/ForgeApps_CreateNickname.json (request {\"nickname\": \"SdkTester\"}; the answer has no body)",
+  "status": 200,
+  "body": null
+}

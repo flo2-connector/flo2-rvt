@@ -5,9 +5,13 @@
 // or a token.
 //
 //   flo2-rvt register [--bundle addin/dist/Flo2RvtProbe.bundle.zip]
-//       Upload the AppBundle, create or update the Activity, point both `prod`
-//       aliases at the new versions, and set Autodesk's monthly processing cap
-//       (APS_MONTHLY_HOURS, default 2). Run it once, and again for a new add-in.
+//       First settle the app's nickname: on an app with no data, set it
+//       (APS_NICKNAME, default flo2rvt_ and the start of the client id); keep one
+//       already set; on an app with data and no nickname, use the client id.
+//       Then upload the AppBundle, create or update the Activity, point both
+//       `prod` aliases at the new versions, and set Autodesk's monthly
+//       processing cap (APS_MONTHLY_HOURS, default 2). Run it once, and again
+//       for a new add-in. It never calls DELETE /forgeapps/me.
 //
 //   flo2-rvt engines
 //       List Design Automation's Revit engines, beside the lifecycle dates
@@ -35,11 +39,11 @@ function usage(io: CliIo): number {
   return 2;
 }
 
-async function context(io: CliIo): Promise<ApsContext> {
+async function context(io: CliIo): Promise<{ ctx: ApsContext; clientId: string }> {
   const creds = credentialsFromEnv(io.env);
   const base = io.apsBaseUrl ? { baseUrl: io.apsBaseUrl } : {};
   const token = await twoLeggedToken(creds, REGISTRATION_SCOPES, base);
-  return { token, ...base };
+  return { ctx: { token, ...base }, clientId: creds.clientId };
 }
 
 interface DocEngine {
@@ -90,9 +94,12 @@ export async function main(argv: string[], io: CliIo): Promise<number> {
       io.out('APS_MONTHLY_HOURS must be a whole number of hours, 1 or more.');
       return 1;
     }
-    const ctx = await context(io);
-    const r = await register(ctx, bundle, hours);
-    io.out(`Nickname: ${r.nickname}`);
+    const { ctx, clientId } = await context(io);
+    const wanted = io.env.APS_NICKNAME?.trim() || undefined;
+    const r = await register(ctx, bundle, hours, clientId, wanted);
+    const how = { existing: 'already set', set: 'set now, before anything was created', client_id: 'none; the client id is the owner' }[r.ownerHow];
+    io.out(`Owner: ${r.ownerHow === 'client_id' ? 'the client id' : r.nickname} (nickname ${how}).`);
+    if (r.ownerNote) io.out(r.ownerNote);
     io.out(`AppBundle Flo2RvtProbe: ${r.appBundle.created ? 'created' : 'new version'} ${r.appBundle.version}; alias prod ${r.appBundle.alias} to it.`);
     io.out(`Activity ${r.activity.id}: ${r.activity.created ? 'created' : 'new version'} ${r.activity.version}; alias prod ${r.activity.alias} to it.`);
     io.out(`Monthly processing cap: asked for ${r.monthlyHours.requested} h; Autodesk now reports ${r.monthlyHours.reported ?? 'no value'} h.`);
@@ -100,7 +107,7 @@ export async function main(argv: string[], io: CliIo): Promise<number> {
     return 0;
   }
   if (command === 'engines') {
-    const ctx = await context(io);
+    const { ctx } = await context(io);
     for (const line of engineLines(await revitEngines(ctx), docLifecycle())) io.out(line);
     return 0;
   }

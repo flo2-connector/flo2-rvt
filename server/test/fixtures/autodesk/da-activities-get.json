@@ -1,0 +1,29 @@
+{
+  "_source": "Autodesk-Forge/forge-api-dotnet-design.automation@280da5ec8d3cda63b5232956711dc964c65557e5 tests/e2e/recordings/Activities_GetAll.json [0]",
+  "status": 200,
+  "body": {
+    "paginationToken": "3eyJOYW1lX2xhYmVsIjp7IlMiOiJDb25maWd1cmF0aW9uMjAyMC5wcm9kIn0sIlJlY2VpdmVyIjp7IlMiOiJldmVyeW9uZSJ9LCJPd25lciI6eyJTIjoiSW52ZW50b3IifX0%3D",
+    "data": [
+      "SdkTester.MyAct+$LATEST",
+      "SdkTester.MyAct+latest",
+      "Inventor.Configuration2019+prod",
+      "Clarity.ClarityTaskProcessor2023R23+prod",
+      "AutoCAD.PlotSheetsetToPDF+prod",
+      "Autodesk.VarArgInputsOnly+Latest",
+      "Autodesk.Nop+Latest",
+      "Autodesk.VarArgOutputsOnly+Latest",
+      "Inventor.iLogic_Volume2021+prod",
+      "Autodesk.VarArg+Latest",
+      "3dsMax.OpenNetworkTests+Latest",
+      "Clarity.ClarityTaskProcessor2023R21+prod",
+      "AutoCAD.AcSvfPublish+prod",
+      "Clarity.ClarityTaskProcessor2022R19+prod",
+      "Clarity.ClarityTaskProcessor2022R22+prod",
+      "Autodesk.Long+Latest",
+      "Inventor.ChangeParams2019+prod",
+      "3dsMax.UVUnwrapMesh+prod",
+      "Clarity.ClarityTaskProcessor2022R20+prod",
+      "Inventor.Configuration2020+prod"
+    ]
+  }
+}
