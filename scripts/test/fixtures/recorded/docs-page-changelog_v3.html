@@ -1,0 +1,46 @@
+<!-- A short excerpt, recorded 2026-10-31 from developer.doc.autodesk.com/bPlouYTd/ (the page HTML the APS docs portal renders), kept only as a test fixture. Autodesk documentation, (c) Autodesk, Inc.; not covered by this repository's licence. -->
+<div class="api-documentation">
+<h1>V3 Changelog</h1>
+<hr class="docutils">
+<section id="release-date-2026-08-10">
+<a href="#release-date-2026-08-10"><h2>Release Date: 2026-08-10</h2></a>
+<p><strong>Added</strong></p>
+<ul class="simple">
+<li><code class="docutils literal notranslate"><span class="pre">GET</span> <span class="pre">workitems/:id</span></code> now returns <code class="docutils literal notranslate"><span class="pre">approximateQueuePosition</span></code>, the approximate 1-based position of a pending WorkItem in its engine’s processing queue.</li>
+</ul>
+<p><strong>Fixed</strong></p>
+<ul class="simple">
+<li><code class="docutils literal notranslate"><span class="pre">GET</span> <span class="pre">health/:engine</span></code> and <code class="docutils literal notranslate"><span class="pre">GET</span> <span class="pre">health/:engine/stats</span></code>: clarified the <code class="docutils literal notranslate"><span class="pre">engine</span></code> URI parameter description to explicitly list all valid values (<code class="docutils literal notranslate"><span class="pre">AutoCAD</span></code>, <code class="docutils literal notranslate"><span class="pre">Revit</span></code>, <code class="docutils literal notranslate"><span class="pre">Inventor</span></code>, <code class="docutils literal notranslate"><span class="pre">Fusion</span></code>, <code class="docutils literal notranslate"><span class="pre">3dsMax</span></code>).</li>
+<li><code class="docutils literal notranslate"><span class="pre">GET</span> <span class="pre">health/:engine/stats</span></code> is now designated as a Beta endpoint; its response format may change without notice.</li>
+<li><code class="docutils literal notranslate"><span class="pre">approximateQueuePosition</span></code> (returned by <code class="docutils literal notranslate"><span class="pre">GET</span> <span class="pre">workitems/:id</span></code>) is a Beta field; its behavior may change without notice.</li>
+</ul>
+</section>
+<section id="release-date-2025-06-30">
+<a href="#release-date-2025-06-30"><h2>Release Date: 2025-06-30</h2></a>
+<p><strong>Renamed</strong></p>
+<ul class="simple">
+<li>Renamed the Design Automation API to the Automation API.</li>
+<li>Replaced all occurrences of “Design Automation” with “Automation Service” when referring to the backend service.</li>
+<li>Updated product-specific API names:</p>
+<ul>
+<li>Design Automation for AutoCAD API → AutoCAD Automation API</li>
+<li>Design Automation for Inventor API → Inventor Automation API</li>
+<li>Design Automation for Revit API → Revit Automation API</li>
+<li>Design Automation for 3ds Max API → 3ds Max Automation API</li>
+<li>Design Automation for Fusion API → Fusion Automation API</li>
+</ul>
+</li>
+<li>Updated product-specific service names:</p>
+<ul>
+<li>Design Automation for AutoCAD → AutoCAD Automation Service</li>
+<li>Design Automation for Inventor → Inventor Automation Service</li>
+<li>Design Automation for Revit → Revit Automation Service</li>
+<li>Design Automation for 3ds Max → 3ds Max Automation Service</li>
+<li>Design Automation for Fusion → Fusion Automation Service</li>
+</ul>
+</li>
+</ul>
+</section>
+<section id="release-date-2024-03-12">
+
+</div>

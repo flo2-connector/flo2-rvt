@@ -1,0 +1,79 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    flo2-rvt's Revit 2024 add-in for Autodesk's Design Automation (Automation API for Revit).
+    Builds against reference assemblies only, on any OS: RevitAPI.dll from Nice3point's
+    reference package, DesignAutomationBridge.dll from Autodesk's own package, and the
+    .NET Framework 4.8 reference assemblies. None of them is copied into the AppBundle:
+    the Revit engine provides all three at run time.
+
+    `dotnet build -c Release` also checks that the generated change-list types match
+    ../schema/change-list.schema.json, and packs dist/Flo2RvtProbe.bundle.zip.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <PlatformTarget>x64</PlatformTarget>
+    <AssemblyName>Flo2RvtProbe</AssemblyName>
+    <RootNamespace>Flo2Rvt.Addin</RootNamespace>
+    <Version>0.1.0</Version>
+    <LangVersion>7.3</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <Deterministic>true</Deterministic>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <BundleName>Flo2RvtProbe.bundle</BundleName>
+    <BundleStage>$(MSBuildProjectDirectory)/obj/bundle-stage</BundleStage>
+    <BundleZip>$(MSBuildProjectDirectory)/dist/Flo2RvtProbe.bundle.zip</BundleZip>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Revit 2024's RevitAPI.dll, compile-time only (MIT packaging; the assembly is Autodesk's). -->
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPI" Version="2024.3.60" PrivateAssets="all" ExcludeAssets="runtime" />
+    <!-- Autodesk's DesignAutomationBridge for the Revit 2024 engine, compile-time only. -->
+    <PackageReference Include="Autodesk.Forge.DesignAutomation.Revit" Version="2024.0.2" PrivateAssets="all" ExcludeAssets="runtime" />
+    <!-- .NET Framework 4.8 reference assemblies, so the add-in builds without Windows. -->
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net48" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="System.Runtime.Serialization" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The one change-list schema travels inside the add-in it was built against. -->
+    <EmbeddedResource Include="../schema/change-list.schema.json" LogicalName="Flo2Rvt.change-list.schema.json" />
+  </ItemGroup>
+
+  <!-- The C# types must come from the schema as it is now. -->
+  <Target Name="CheckChangeListTypes" BeforeTargets="CoreCompile">
+    <GetFileHash Files="../schema/change-list.schema.json" Algorithm="SHA256" HashEncoding="hex">
+      <Output TaskParameter="Hash" PropertyName="SchemaHash" />
+    </GetFileHash>
+    <ReadLinesFromFile File="Generated/change-list.schema.sha256">
+      <Output TaskParameter="Lines" PropertyName="GeneratedHash" />
+    </ReadLinesFromFile>
+    <Error Condition="'$(SchemaHash.ToLowerInvariant())' != '$(GeneratedHash.Trim().ToLowerInvariant())'"
+           Text="addin/Generated/ChangeList.g.cs was generated from another version of schema/change-list.schema.json. Run `npm run gen`." />
+  </Target>
+
+  <!--
+    The AppBundle, laid out as the Revit walkthrough describes it:
+      Flo2RvtProbe.bundle/PackageContents.xml
+      Flo2RvtProbe.bundle/Contents/Flo2RvtProbe.addin
+      Flo2RvtProbe.bundle/Contents/Flo2RvtProbe.dll
+  -->
+  <Target Name="PackAppBundle" AfterTargets="Build" Condition="'$(Configuration)' == 'Release'">
+    <RemoveDir Directories="$(BundleStage)" />
+    <Copy SourceFiles="bundle/PackageContents.xml" DestinationFolder="$(BundleStage)/$(BundleName)" />
+    <Copy SourceFiles="bundle/Contents/Flo2RvtProbe.addin;$(TargetPath)" DestinationFolder="$(BundleStage)/$(BundleName)/Contents" />
+    <MakeDir Directories="$(MSBuildProjectDirectory)/dist" />
+    <ZipDirectory SourceDirectory="$(BundleStage)" DestinationFile="$(BundleZip)" Overwrite="true" />
+    <Message Importance="high" Text="AppBundle: $(BundleZip)" />
+  </Target>
+
+</Project>

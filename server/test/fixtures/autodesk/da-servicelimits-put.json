@@ -1,0 +1,11 @@
+{
+  "_source": "Autodesk-Forge/forge-api-dotnet-design.automation@280da5ec8d3cda63b5232956711dc964c65557e5 tests/e2e/recordings/ServiceLimits_Update.json",
+  "status": 200,
+  "body": {
+    "backendLimits": {
+      "AutoCAD": {
+        "limitProcessingTimeSec": 300
+      }
+    }
+  }
+}

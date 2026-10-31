@@ -1,0 +1,90 @@
+name: dependencies
+
+# flo2-rvt's dependencies are reviewed and updated monthly, and flo2-rvt is
+# checked monthly against Autodesk's Design Automation and storage APIs.
+# This is that review's first half: two dated reports. The second half is a
+# person or agent reading them and moving what they name, each in its own
+# pull request.
+#
+# - currency: every npm pin, NuGet pin and GitHub Action against its latest
+#   release, and the Revit engine against its deprecation date
+#   (scripts/dependency-currency.ts; holds in dependency-holds.json).
+# - autodesk: Autodesk's repositories, packages and documentation against
+#   watch/autodesk.json (scripts/autodesk-watch.ts). When anything moved it
+#   opens ONE issue, listing the commits, the version changes, the pages added,
+#   removed or changed, the new Change History entries in full, and the Revit
+#   engine lifecycle, and linking the Automation API reference and developer's
+#   guide for a person to read. CI holds no Autodesk key: the issue reminds the
+#   reader to run `flo2-rvt engines` on the owner's machine.
+#
+# - MONTHLY: the schedule below, on the first of the month.
+# - ON DEMAND: workflow_dispatch.
+# - ON A PULL REQUEST that moves a pin, a hold, the watch file, a workflow or the checkers.
+
+on:
+  schedule:
+    - cron: "0 6 1 * *"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "package.json"
+      - "package-lock.json"
+      - "addin/Flo2RvtProbe.csproj"
+      - "addin/packages.lock.json"
+      - "dependency-holds.json"
+      - "watch/autodesk.json"
+      - ".github/workflows/**"
+      - "scripts/dependency-currency.ts"
+      - "scripts/autodesk-watch.ts"
+      - "scripts/lib/watch.ts"
+
+permissions:
+  contents: read
+
+jobs:
+  currency:
+    name: dependency currency (npm, NuGet, Actions, the Revit engine)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - name: Report every dependency against its latest release
+        env:
+          # Raises the GitHub API's rate limit for the Actions lookups. Read-only.
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/dependency-currency.ts --json "dependency-report-$(date -u +%F).json"
+      - name: Keep the dated report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: dependency-report
+          path: dependency-report-*.json
+          if-no-files-found: warn
+          retention-days: 90
+
+  autodesk:
+    name: Autodesk's APIs, packages and docs since the watch pins
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - name: Compare, and open one issue when anything moved
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        # On a pull request it only reports; the schedule and a manual run open the issue.
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            node scripts/autodesk-watch.ts
+          else
+            node scripts/autodesk-watch.ts --open-issue
+          fi

@@ -1,0 +1,9 @@
+node_modules/
+addin/bin/
+addin/obj/
+addin/dist/
+*.log
+.env
+.env.*
+dependency-report-*.json
+autodesk-watch-*.md

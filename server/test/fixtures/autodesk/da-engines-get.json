@@ -1,0 +1,8 @@
+{
+  "_source": "aps.autodesk.com/en/docs/design-automation/v3/reference/http/engines-GET/ (the reference page's example response)",
+  "status": 200,
+  "body": {
+    "paginationToken": "",
+    "data": ["Autodesk.3dsMax+2020", "Autodesk.AutoCAD+22", "Autodesk.Inventor+23", "Autodesk.AutoCAD+23", "Autodesk.3dsMax+2021", "Autodesk.Revit+2018", "Autodesk.Test+Latest", "Autodesk.Inventor+22", "Autodesk.AutoCAD+21", "Autodesk.Revit+2019", "Autodesk.Revit+2020", "Autodesk.Revit+2021", "Autodesk.AutoCAD+20_1"]
+  }
+}

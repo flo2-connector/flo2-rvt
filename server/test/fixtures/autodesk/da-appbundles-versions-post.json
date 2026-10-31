@@ -1,0 +1,25 @@
+{
+  "_source": "Autodesk-Forge/forge-api-dotnet-design.automation@280da5ec8d3cda63b5232956711dc964c65557e5 tests/e2e/recordings/AppBundles_Update.json [0]",
+  "status": 200,
+  "body": {
+    "uploadParameters": {
+      "endpointURL": "https://dasprod-store.s3.amazonaws.com",
+      "formData": {
+        "key": "apps/SdkTester/MyApp/2",
+        "content-type": "application/octet-stream",
+        "policy": "(elided)",
+        "success_action_status": "200",
+        "success_action_redirect": "",
+        "x-amz-signature": "(elided)",
+        "x-amz-credential": "(elided)",
+        "x-amz-algorithm": "AWS4-HMAC-SHA256",
+        "x-amz-date": "20230726T024556Z",
+        "x-amz-server-side-encryption": "AES256",
+        "x-amz-security-token": "(elided)"
+      }
+    },
+    "id": "SdkTester.MyApp",
+    "engine": "Autodesk.AutoCAD+24",
+    "version": 2
+  }
+}

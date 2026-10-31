@@ -1,0 +1,19 @@
+{
+  "_source": "Autodesk-Forge/forge-api-dotnet-design.automation@280da5ec8d3cda63b5232956711dc964c65557e5 tests/e2e/recordings/WorkItems_Create.json [last]",
+  "status": 200,
+  "body": {
+    "status": "success",
+    "reportUrl": "https://dasprod-store.s3.amazonaws.com/workItem/SdkTester/f62103c311a54a6ba571a0950ce6eca3/report.txt?X-Amz-Signature=(elided)",
+    "stats": {
+      "timeQueued": "2023-07-26T02:46:00.8341083Z",
+      "timeDownloadStarted": "2023-07-26T02:46:00.9500329Z",
+      "timeInstructionsStarted": "2023-07-26T02:46:01.3748103Z",
+      "timeInstructionsEnded": "2023-07-26T02:46:04.6337709Z",
+      "timeUploadEnded": "2023-07-26T02:46:11.3012457Z",
+      "timeFinished": "2023-07-26T02:46:11.8273259Z",
+      "bytesDownloaded": 227008,
+      "bytesUploaded": 22
+    },
+    "id": "f62103c311a54a6ba571a0950ce6eca3"
+  }
+}
