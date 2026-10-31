@@ -5,6 +5,7 @@
   "description": "An MCP server that lets an agent working through flo2.io have real Revit, in Autodesk's cloud (APS Design Automation v3), read a person's .rvt model. v0 is a read-only probe.",
   "license": "Apache-2.0",
   "type": "module",
+  "main": "server/src/index.ts",
   "engines": {
     "node": ">=22.18"
   },
