@@ -1,0 +1,16 @@
+{
+  "_source": "autodesk-platform-services/aps-sdk-openapi@d411c0851cfb078ff15ac442223b495b82e3a0b7 oss/oss.yaml createBucket 200 example",
+  "status": 200,
+  "body": {
+    "bucketKey": "apptestbucket",
+    "bucketOwner": "RlKfGlAbb7N8VJwLllOvpfonB1Ex52qG",
+    "createdDate": 1463785698600,
+    "permissions": [
+      {
+        "authId": "RlKffonB1Ex52GlAbb7N8VJwLllOvpqG",
+        "access": "full"
+      }
+    ],
+    "policyKey": "transient"
+  }
+}

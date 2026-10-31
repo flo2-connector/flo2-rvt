@@ -1,0 +1,109 @@
+{
+ "_source": "GET https://developer.doc.config.autodesk.com/bPlouYTd/design-automation_v3.json, recorded 2026-10-31 and pruned to six pages (structure and fields as served)",
+ "status": 200,
+ "body": {
+  "api_name": "Automation API",
+  "framework_version": "v3",
+  "doc_version": "v3",
+  "url_path": "design-automation",
+  "children": [
+   {
+    "url_path": "developers_guide",
+    "display_name": "Developer's Guide",
+    "children": [
+     {
+      "url_path": "overview",
+      "display_name": "Overview",
+      "source": "design-automation-forge-doc-master-792222/design-automation/v3/developers_guide/overview.html",
+      "id": "ec5513cf-465d-e3fe-6ccd-6efa921fc60d"
+     },
+     {
+      "url_path": "engine-lifecycle",
+      "display_name": "Engine Lifecycle Policy",
+      "source": "design-automation-forge-doc-master-792222/design-automation/v3/developers_guide/engine-lifecycle.html",
+      "id": "4e8bc0c0-f094-3704-bd1c-503a6723e000"
+     }
+    ],
+    "id": "751c0610-60de-32fc-7526-f395dbff30f2"
+   },
+   {
+    "url_path": "tutorials",
+    "display_name": "How-to Guide",
+    "children": [
+     {
+      "display_name": "Execute an AutoCAD Plug-in",
+      "url_path": "autocad",
+      "children": [
+       {
+        "url_path": "task6-post-workitem",
+        "display_name": "Task 6 \u2013 Submit a WorkItem",
+        "order": 0,
+        "source": "design-automation-forge-doc-master-792222/design-automation/v3/tutorials/autocad/task6-post-workitem.html",
+        "id": "093e2d6a-96ba-9919-7a10-7a6f04834634"
+       }
+      ],
+      "id": "f140680a-e552-975e-ab29-0a2a6e2f4e36"
+     },
+     {
+      "display_name": "Execute a Revit Add-in",
+      "url_path": "revit",
+      "children": [
+       {
+        "url_path": "step7-post-workitem",
+        "display_name": "Task 7 \u2013 Submit a WorkItem",
+        "order": 0,
+        "source": "design-automation-forge-doc-master-792222/design-automation/v3/tutorials/revit/step7-post-workitem.html",
+        "id": "cc1e37fa-fb77-d6ea-7dfc-d98a5a0437ad"
+       }
+      ],
+      "id": "56ca64b6-5f2e-d095-804e-d8ecd11b75b8"
+     }
+    ],
+    "id": "a960edc7-108a-e3a5-c78e-0b24d59f330a"
+   },
+   {
+    "url_path": "reference",
+    "display_name": "Reference Guide",
+    "children": [
+     {
+      "url_path": "http",
+      "display_name": "REST API Reference",
+      "children": [
+       {
+        "display_name": "ForgeApps",
+        "children": [
+         {
+          "url_path": "forgeapps-id-GET",
+          "display_name": "GET forgeapps/:id",
+          "source": "design-automation-forge-doc-master-792222/design-automation/v3/reference/http/design-automation/forgeapps-id-GET.html",
+          "id": "097e0ed2-2a05-a983-8f9d-ba41b2e0f68e"
+         }
+        ],
+        "id": "72f8f92f-a527-b5c6-d417-b8416ab396e5"
+       }
+      ],
+      "id": "dcde8fca-980a-9c2b-2521-5496aac2843c"
+     }
+    ],
+    "id": "86e6ebd8-e6a5-ab13-5b8d-aa55760f51c3"
+   },
+   {
+    "url_path": "change_history",
+    "display_name": "Change History",
+    "children": [
+     {
+      "url_path": "changelog_v3",
+      "display_name": "Automation API Changelog",
+      "source": "design-automation-forge-doc-master-792222/design-automation/_change_history/changelog_v3.html",
+      "id": "b523d396-f817-eb78-1170-2f545f32fa0c"
+     }
+    ],
+    "id": "bc09e8ba-ca0a-a3bd-7608-df11e86cad25"
+   }
+  ],
+  "id": "23d7604a-7da3-1a50-4302-6a0f8496c8b7",
+  "old_versions": [
+   "v3"
+  ]
+ }
+}

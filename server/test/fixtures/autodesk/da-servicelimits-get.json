@@ -1,0 +1,35 @@
+{
+  "_source": "Autodesk-Forge/forge-api-dotnet-design.automation@280da5ec8d3cda63b5232956711dc964c65557e5 tests/e2e/recordings/ServiceLimits_Get.json",
+  "status": 200,
+  "body": {
+    "frontendLimits": {
+      "limitPayloadSizeInKB": 16,
+      "limitVersions": 100,
+      "limitAliases": 100,
+      "limitPublicAliases": 0,
+      "limitAppUploadSizeInMB": 100
+    },
+    "backendLimits": {
+      "3dsMax": {
+        "limitProcessingTimeSec": 3600,
+        "limitTotalUncompressedAppsSizeInMB": 5000
+      },
+      "AutoCAD": {
+        "limitProcessingTimeSec": 100,
+        "limitTotalUncompressedAppsSizeInMB": 500
+      },
+      "Inventor": {
+        "limitProcessingTimeSec": 900,
+        "limitTotalUncompressedAppsSizeInMB": 500
+      },
+      "Revit": {
+        "limitProcessingTimeSec": 10800,
+        "limitTotalUncompressedAppsSizeInMB": 5000
+      },
+      "Test": {
+        "limitProcessingTimeSec": 300,
+        "limitTotalUncompressedAppsSizeInMB": 500
+      }
+    }
+  }
+}

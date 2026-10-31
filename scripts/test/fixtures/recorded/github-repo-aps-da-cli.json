@@ -1,0 +1,10 @@
+{
+  "_source": "GET https://api.github.com/repos/autodesk-platform-services/aps-da-cli, recorded 2026-10-31 (fields flo2-rvt reads)",
+  "status": 200,
+  "body": {
+    "full_name": "autodesk-platform-services/aps-da-cli",
+    "default_branch": "main",
+    "html_url": "https://github.com/autodesk-platform-services/aps-da-cli",
+    "pushed_at": "2026-09-21T15:00:27Z"
+  }
+}

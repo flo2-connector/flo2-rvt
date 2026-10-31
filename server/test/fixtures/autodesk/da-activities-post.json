@@ -1,0 +1,37 @@
+{
+  "_source": "Autodesk-Forge/forge-api-dotnet-design.automation@280da5ec8d3cda63b5232956711dc964c65557e5 tests/e2e/recordings/Activities_Create.json [0]",
+  "status": 200,
+  "body": {
+    "commandLine": [
+      "\"$(engine.path)\\accoreconsole.exe\" /i \"$(args[dwg].path)\" /s \"$(settings[script].path)\""
+    ],
+    "parameters": {
+      "dwg": {
+        "verb": "get"
+      },
+      "params": {
+        "verb": "read",
+        "localName": "params.json"
+      },
+      "token": {
+        "verb": "read"
+      },
+      "results": {
+        "zip": true,
+        "verb": "post",
+        "localName": "outputs"
+      }
+    },
+    "id": "SdkTester.MyAct",
+    "engine": "Autodesk.AutoCAD+24",
+    "appbundles": [
+      "SdkTester.MyApp+latest"
+    ],
+    "settings": {
+      "script": {
+        "value": "_test params.json outputs\n"
+      }
+    },
+    "version": 1
+  }
+}

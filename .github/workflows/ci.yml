@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  server:
+    name: server (lint, typecheck, generated types, tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          # flo2.io's droplet runs Node 22; the server runs its TypeScript directly (type stripping).
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      # Both sides' change-list types must be generated from the schema as it is.
+      - run: npm run gen:check
+      # Schema, server-contract and Design Automation client tests: recorded Autodesk
+      # responses on a loopback stand-in, no network, no Autodesk key.
+      - run: npm test
+
+  addin:
+    name: add-in (Revit 2024, .NET Framework 4.8, AppBundle zip)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+      # Reference assemblies only (Revit 2024 API, the Design Automation bridge, .NET 4.8), from NuGet.
+      - run: dotnet restore addin/Flo2RvtProbe.csproj --locked-mode
+      # Warnings are errors; the build also refuses change-list types generated from another schema.
+      - run: dotnet build addin/Flo2RvtProbe.csproj -c Release --no-restore
+      - name: The probe commits no transaction and never saves
+        run: |
+          if grep -rnE '\.Commit\(|\.Save\(|\.SaveAs\(|SynchronizeWithCentral' addin/src; then
+            echo "The read-only probe must not commit, save or synchronize." >&2
+            exit 1
+          fi
+      - name: The AppBundle has the layout Design Automation expects
+        run: |
+          unzip -l addin/dist/Flo2RvtProbe.bundle.zip
+          for f in Flo2RvtProbe.bundle/PackageContents.xml Flo2RvtProbe.bundle/Contents/Flo2RvtProbe.addin Flo2RvtProbe.bundle/Contents/Flo2RvtProbe.dll; do
+            unzip -l addin/dist/Flo2RvtProbe.bundle.zip | grep -q " $f$" || { echo "missing $f" >&2; exit 1; }
+          done
+          if unzip -l addin/dist/Flo2RvtProbe.bundle.zip | grep -qiE 'RevitAPI|DesignAutomationBridge'; then
+            echo "Autodesk's assemblies must not be shipped in the bundle; the engine provides them." >&2
+            exit 1
+          fi
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Flo2RvtProbe.bundle
+          path: addin/dist/Flo2RvtProbe.bundle.zip
+          if-no-files-found: error
+          retention-days: 90

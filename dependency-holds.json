@@ -1,0 +1,29 @@
+{
+  "_about": "Dependencies held back ON PURPOSE, each with its reason and a date to look again. scripts/dependency-currency.ts reads this file: a newer major with no hold here fails the monthly check, and so does a hold past its look_again date or without a reason. Remove a hold when its move lands.",
+  "holds": [
+    {
+      "kind": "npm",
+      "name": "typescript",
+      "reason": "TypeScript 7 is the native compiler; typescript-eslint 8.72 (the lint) supports only typescript >=4.8.4 <6.1.0. Move when typescript-eslint supports 7.",
+      "look_again": "2026-12-01"
+    },
+    {
+      "kind": "npm",
+      "name": "@types/node",
+      "reason": "The types follow the Node major flo2-rvt runs on (22, as flo2.io's droplet does); a newer major describes APIs Node 22 lacks. Move with the runtime.",
+      "look_again": "2027-04-30"
+    },
+    {
+      "kind": "nuget",
+      "name": "Nice3point.Revit.Api.RevitAPI",
+      "reason": "The reference package's major is the Revit year, and the add-in targets the Autodesk.Revit+2024 engine, matching the models it reads. Move with the engine, before Revit 2024's engine deprecation on 2027-03-29.",
+      "look_again": "2027-03-01"
+    },
+    {
+      "kind": "nuget",
+      "name": "Autodesk.Forge.DesignAutomation.Revit",
+      "reason": "The bridge's major is the Revit year; 2024.0.2 is the bridge for the Autodesk.Revit+2024 engine. Move with the engine, before its deprecation on 2027-03-29.",
+      "look_again": "2027-03-01"
+    }
+  ]
+}

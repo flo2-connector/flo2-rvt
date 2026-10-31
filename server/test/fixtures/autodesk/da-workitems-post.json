@@ -1,0 +1,11 @@
+{
+  "_source": "Autodesk-Forge/forge-api-dotnet-design.automation@280da5ec8d3cda63b5232956711dc964c65557e5 tests/e2e/recordings/WorkItems_Create.json [0]",
+  "status": 200,
+  "body": {
+    "status": "pending",
+    "stats": {
+      "timeQueued": "2023-07-26T02:46:00.8341083Z"
+    },
+    "id": "f62103c311a54a6ba571a0950ce6eca3"
+  }
+}

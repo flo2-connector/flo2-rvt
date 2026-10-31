@@ -1,0 +1,8 @@
+{
+  "_source": "Autodesk-Forge/forge-api-dotnet-design.automation@280da5ec8d3cda63b5232956711dc964c65557e5 tests/e2e/recordings/AppBundles_Create.json [2]",
+  "status": 200,
+  "body": {
+    "version": 1,
+    "id": "beta"
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "schema": "flo2-rvt/probe-report",
+  "version": 1,
+  "_note": "Made-up data in the shape the add-in writes, standing for a probe of Autodesk's public sample model rac_basic_sample_project.rvt. No real model was read to make it.",
+  "probe": {
+    "addin_version": "0.1.0",
+    "started_at": "2026-10-31T12:00:05.0000000Z",
+    "finished_at": "2026-10-31T12:03:41.0000000Z",
+    "transactions_committed": 0,
+    "saved": false
+  },
+  "engine": {
+    "version_name": "Autodesk Revit 2024",
+    "version_number": "2024",
+    "sub_version_number": "2024.2",
+    "build": "24.2.0.63"
+  },
+  "file": {
+    "format": "2024",
+    "is_workshared": false,
+    "is_central": false,
+    "saved_in_current_version": true,
+    "saved_in_later_version": false,
+    "opened_detached": false
+  },
+  "levels": [
+    { "name": "Level 1", "elevation_ft": 0, "elevation_mm": 0, "project_elevation_ft": 0, "project_elevation_mm": 0, "element_id": 311, "unique_id": "00000000-0000-0000-0000-000000000001-00000137" },
+    { "name": "Level 2", "elevation_ft": 10, "elevation_mm": 3048, "project_elevation_ft": 10, "project_elevation_mm": 3048, "element_id": 694, "unique_id": "00000000-0000-0000-0000-000000000001-000002b6" },
+    { "name": "Roof", "elevation_ft": 20, "elevation_mm": 6096, "project_elevation_ft": 20, "project_elevation_mm": 6096, "element_id": 30734, "unique_id": "00000000-0000-0000-0000-000000000001-0000780e" }
+  ],
+  "sheets": [
+    { "number": "A001", "name": "Title Sheet", "is_placeholder": false, "printable": true },
+    { "number": "A101", "name": "Level 1 Plan", "is_placeholder": false, "printable": true },
+    { "number": "A102", "name": "Level 2 Plan", "is_placeholder": false, "printable": true },
+    { "number": "A201", "name": "Elevations", "is_placeholder": false, "printable": true }
+  ],
+  "links": [
+    { "kind": "cad_import", "name": "site survey.dwg", "status": "Imported", "instances": 1 }
+  ],
+  "element_counts": [
+    { "category": "Doors", "count": 14 },
+    { "category": "Floors", "count": 3 },
+    { "category": "Walls", "count": 52 },
+    { "category": "Windows", "count": 21 }
+  ],
+  "element_count_total": 90,
+  "exports": {
+    "sheets_pdf": { "written": true, "sheets": 4 },
+    "model_ifc": { "written": true, "ifc_version": "IFC4DTV", "base_quantities": true }
+  },
+  "warnings": [
+    { "source": "revit", "text": "Highlighted walls overlap. One of them may be ignored when Revit finds room boundaries.", "count": 2 }
+  ],
+  "warnings_total": 2
+}

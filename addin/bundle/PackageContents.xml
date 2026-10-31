@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  Adapted from Autodesk's PackageContents.xml in aps-sample-revit-mcp-tools-bundle
+  (github.com/autodesk-platform-services/aps-sample-revit-mcp-tools-bundle, commit
+  13d02b1464d0a22839fff9d3ce41b84180268c1a, RevitMcpTools.bundle/PackageContents.xml).
+  Copyright (c) 2026 Autodesk, Inc. MIT License; see THIRD_PARTY_NOTICES.md.
+  Changes: the component names flo2-rvt's probe, and the series is pinned to Revit 2024.
+-->
+<ApplicationPackage>
+  <Components Description="flo2-rvt probe for Revit 2024">
+    <RuntimeRequirements OS="Win64"
+                         Platform="Revit"
+                         SeriesMin="R2024"
+                         SeriesMax="R2024" />
+    <ComponentEntry AppName="Flo2RvtProbe"
+                    Version="0.1.0"
+                    ModuleName="./Contents/Flo2RvtProbe.addin"
+                    AppDescription="Opens a Revit model read-only and reports its levels, sheets, links and element counts, with a sheets PDF and an IFC export."
+                    LoadOnCommandInvocation="False"
+                    LoadOnRevitStartup="True" />
+  </Components>
+</ApplicationPackage>

@@ -1,0 +1,1083 @@
+{
+  "_about": "What the monthly Autodesk check (scripts/autodesk-watch.ts, .github/workflows/dependencies.yml) compares against. Every pin is what was there when a person last read the changes. Move them with `npm run watch:autodesk -- --update` in a pull request, after reading the issue the check opened.",
+  "checked_at": "2026-10-31",
+  "repos": [
+    {
+      "repo": "autodesk-platform-services/aps-sdk-openapi",
+      "sha": "d411c0851cfb078ff15ac442223b495b82e3a0b7",
+      "why": "The OpenAPI descriptions of the storage (OSS) and sign-in APIs flo2-rvt calls."
+    },
+    {
+      "repo": "autodesk-platform-services/aps-sdk-node",
+      "sha": "0c1035bec2a108af26b390d3002c57f3596fe73a",
+      "why": "Autodesk's Node SDK; flo2-rvt's chunked upload and token request are adapted from it."
+    },
+    {
+      "repo": "autodesk-platform-services/aps-design-automation-dotnet",
+      "sha": "482e73f07b128722213fb697004e682e7825cb35",
+      "why": "The Design Automation tutorial sample in .NET, including its Revit add-in."
+    },
+    {
+      "repo": "autodesk-platform-services/aps-sample-mcp-server-revit-automation",
+      "sha": "51facc54d890b80b25c70cb011bc2286dad6779b",
+      "why": "Autodesk's own MCP server for Revit automation: prior art for the WorkItem and status tools."
+    },
+    {
+      "repo": "autodesk-platform-services/aps-sample-revit-mcp-tools-bundle",
+      "sha": "13d02b1464d0a22839fff9d3ce41b84180268c1a",
+      "why": "Its AppBundle layout, entry point and registered-tool dispatch are adapted in the add-in."
+    },
+    {
+      "repo": "autodesk-platform-services/aps-da-cli",
+      "sha": "438f18ee667f77c28f998b13cb71d3c797349fa3",
+      "why": "Autodesk's Design Automation command line: the calls as Autodesk makes them."
+    },
+    {
+      "repo": "autodesk-platform-services/aps-designautomation-signer",
+      "sha": "f42514e295f954b0badbaef3e74bc8d4de09a9a6",
+      "why": "Activity signing, a recorded later hardening."
+    },
+    {
+      "repo": "autodesk-platform-services/skills",
+      "sha": "3e85dafcec0cc0898ff0dae0069670300f58435f",
+      "why": "The aps-docs-portal method this check reads the documentation by."
+    },
+    {
+      "repo": "autodesk-platform-services/aps-export-revit-pdf",
+      "sha": "4b62539284e404530c4fe2705fee45712c19d0d7",
+      "why": "The add-in's PDF export is adapted from it."
+    }
+  ],
+  "nuget": [
+    {
+      "name": "Autodesk.Forge.DesignAutomation",
+      "version": "6.0.2"
+    },
+    {
+      "name": "Autodesk.Forge.DesignAutomation.Revit",
+      "version": "2027.0.0"
+    }
+  ],
+  "npm": [
+    {
+      "name": "@aps_sdk/oss",
+      "version": "1.3.3"
+    },
+    {
+      "name": "@aps_sdk/authentication",
+      "version": "1.0.1"
+    }
+  ],
+  "docs": {
+    "sources": {
+      "design-automation_v3": {
+        "include": [
+          "reference/http/",
+          "developers_guide/",
+          "change_history/",
+          "tutorials/revit/"
+        ]
+      },
+      "oauth_v2": {
+        "include": [
+          ""
+        ]
+      },
+      "data_v2": {
+        "include": [
+          "reference/http/buckets",
+          "reference/http/signedresources",
+          "tutorials/app-managed-bucket/"
+        ]
+      }
+    },
+    "pages": {
+      "https://aps.autodesk.com/en/docs/data/v2/reference/http/buckets-:bucketKey-DELETE/": {
+        "title": "DELETE Delete Bucket",
+        "sha256": "5c949975070baf4090a7e62b0b3ee26222025642061d686e1844260eab677484"
+      },
+      "https://aps.autodesk.com/en/docs/data/v2/reference/http/buckets-:bucketKey-details-GET/": {
+        "title": "GET Get Bucket Details",
+        "sha256": "40dc8bd804dcccf23c31c807ac67f78689c86d40396dfcccb02b26e7f7af2a9f"
+      },
+      "https://aps.autodesk.com/en/docs/data/v2/reference/http/buckets-:bucketKey-objects-:objectKey-copyto-:newObjectKey-PUT/": {
+        "title": "PUT Copy Object",
+        "sha256": "6c972a7ea324a6e2d4b0908234277c366533312c2ac075c4d8ac80d3ef41bca2"
+      },
+      "https://aps.autodesk.com/en/docs/data/v2/reference/http/buckets-:bucketKey-objects-:objectKey-DELETE/": {
+        "title": "DELETE Delete Object",
+        "sha256": "221a166cb1a88a8ff4df36e00487b948ab184e0806d95b4a285cad51b94cdd15"
+      },
+      "https://aps.autodesk.com/en/docs/data/v2/reference/http/buckets-:bucketKey-objects-:objectKey-details-GET/": {
+        "title": "GET Get Object Details",
+        "sha256": "a0c606c38dce5f48808d2d506249bd691f9d2ffbc2da285f8c83da92fe7dafb4"
+      },
+      "https://aps.autodesk.com/en/docs/data/v2/reference/http/buckets-:bucketKey-objects-:objectKey-signed-POST/": {
+        "title": "POST Generate Signed OSS URL",
+        "sha256": "39763a2aaa33c4a96485a146925f5bdd5cae05ea7e1452f3981d2d7c68bb901c"
+      },
+      "https://aps.autodesk.com/en/docs/data/v2/reference/http/buckets-:bucketKey-objects-:objectKey-signeds3download-GET/": {
+        "title": "GET Generate Signed S3 Download URL",
+        "sha256": "91ebe1294dbe73da3b71fca3563e4784e753b61bf6f8da99d05e17c5772c81b6"
+      },
+      "https://aps.autodesk.com/en/docs/data/v2/reference/http/buckets-:bucketKey-objects-:objectKey-signeds3upload-GET/": {
+        "title": "GET Generate Signed S3 Upload URL",
+        "sha256": "e884f514268b5467fc8959829948b36c0596d6a885a0acb9f590a195ef7a9576"
+      },
+      "https://aps.autodesk.com/en/docs/data/v2/reference/http/buckets-:bucketKey-objects-:objectKey-signeds3upload-POST/": {
+        "title": "POST Complete Upload to S3 Signed URL",
+        "sha256": "d87d90bf5fcbfb5c033ea2f200c734110e02d3a823f33d02c26c79fdaac8e017"
+      },
+      "https://aps.autodesk.com/en/docs/data/v2/reference/http/buckets-:bucketKey-objects-batchcompleteupload-POST/": {
+        "title": "POST Complete Batch Upload to S3 Signed URLs",
+        "sha256": "886a7c7d8875d8d913c7c741defdec00137dd16183714779381702306a259c38"
+      },
+      "https://aps.autodesk.com/en/docs/data/v2/reference/http/buckets-:bucketKey-objects-batchsigneds3download-POST/": {
+        "title": "POST Generate Signed S3 Download URLs (Batch)",
+        "sha256": "a87cc5cd40c601371efd8e2a7406294e2ccda5fb4a1d07e4bc2f7f8d89f49247"
+      },
+      "https://aps.autodesk.com/en/docs/data/v2/reference/http/buckets-:bucketKey-objects-batchsigneds3upload-POST/": {
+        "title": "POST Batch Generate Signed S3 Upload URLs",
+        "sha256": "83e3a4eba331711b31e329f35eb5b3b75981029c99bc14135ffaf27a88148038"
+      },
+      "https://aps.autodesk.com/en/docs/data/v2/reference/http/buckets-:bucketKey-objects-GET/": {
+        "title": "GET List Objects",
+        "sha256": "2ffdbfe40d9e0347e417b24a304cc51f082cbe0574039b55d78e14a4a3fe4704"
+      },
+      "https://aps.autodesk.com/en/docs/data/v2/reference/http/buckets-GET/": {
+        "title": "GET List Buckets",
+        "sha256": "7903f2eb394ac24a81215641ae2b19cec3fee53708d9b3c3d761dab9915b4c9a"
+      },
+      "https://aps.autodesk.com/en/docs/data/v2/reference/http/buckets-POST/": {
+        "title": "POST Create Bucket",
+        "sha256": "db8adb655688c51b4e2fff49c8be0b52c3461814bce01e7d096b24c0791e4b13"
+      },
+      "https://aps.autodesk.com/en/docs/data/v2/reference/http/signedresources-:id-DELETE/": {
+        "title": "DELETE Delete Object Using Signed URL",
+        "sha256": "59324e77dc360a05d56c2df22757de76c47d7a1c153d7db632b06a1ce3d6d43b"
+      },
+      "https://aps.autodesk.com/en/docs/data/v2/reference/http/signedresources-:id-GET/": {
+        "title": "GET Download Object Using Signed URL",
+        "sha256": "9955605e2c5fa70dfa43f5ad3a0c93c7c8544194e03a6feed82d0b7caa16215f"
+      },
+      "https://aps.autodesk.com/en/docs/data/v2/reference/http/signedresources-:id-PUT/": {
+        "title": "PUT Replace Object Using Signed URL",
+        "sha256": "235d1bdac42bf4ebb2cf7d9267260e0e962016beecdbdc0daf49e74bc85eaac5"
+      },
+      "https://aps.autodesk.com/en/docs/data/v2/reference/http/signedresources-:id-resumable-PUT/": {
+        "title": "PUT Upload Object Using Signed URL",
+        "sha256": "14f2d94b80e61ba954303a4d5725aed9234ed1f5a06690ba88134d1a78f87920"
+      },
+      "https://aps.autodesk.com/en/docs/data/v2/tutorials/app-managed-bucket/": {
+        "title": "Create an App-Managed Bucket and Upload a File",
+        "sha256": "8906d8e90250775788f3867635920c9e3f5ef128ea79775a0d55cb35610866d7"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/change_history/acad_release_notes/": {
+        "title": "AutoCAD Automation Service Release Notes",
+        "sha256": "90455be8e7bc8f63ce7c5c9fa2ee357d334ed3fa111437154a9d42e8ff5cf25b"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/change_history/changelog_v3/": {
+        "title": "Automation API Changelog",
+        "sha256": "1c368a6b47de4818767c2585cbd93b2c2cd306d3a067f3cfaa590be413d22523"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/change_history/inventor_release_notes/": {
+        "title": "Inventor Automation Service Release Notes",
+        "sha256": "fa12bd4e71e7a7824ffcbd29e42fe258b66dae3e266c7a2c140902dd2ee4e493"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/change_history/revit_release_notes/": {
+        "title": "Revit Automation Service Release Notes",
+        "sha256": "ad389af9783c30e9a8cb77d95b602f70ab09499a2111e20fb88d8b6739854040"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/developers_guide/3-legged-oauth-token-usage/": {
+        "title": "Using 3-legged OAuth Tokens",
+        "sha256": "6162c2f0ebc7363f5ca22043905d8c3118e3420cfc5fbd904affb93c14b17054"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/developers_guide/aliases-and-ids/": {
+        "title": "Aliases and IDs",
+        "sha256": "15dc0dee7c883f1236493870e8bfacbbdd144442c58207772604e4effae6c0c2"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/developers_guide/basics/": {
+        "title": "API Basics",
+        "sha256": "a05f06d4b37fcfde69c5a94c83f5c781a19dd0047e207498adc2505367b759ae"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/developers_guide/callbacks/": {
+        "title": "Callbacks",
+        "sha256": "caa1d8b03f87a81e4279939e17aa5bccef93020f93d74725f610750a9f1fa95d"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/developers_guide/engine-lifecycle/": {
+        "title": "Engine Lifecycle Policy",
+        "sha256": "2ba933ea2fc43afa944f154eea4e212937b46d374390d0a10a2b75825d1445e0"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/developers_guide/faqs/": {
+        "title": "FAQs",
+        "sha256": "b5ff45b5bc06ec3a6b5a1e8d4d9202e4fae27ec97956e67257ce9f9e9c4445ec"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/developers_guide/field-guide/": {
+        "title": "Field Guide",
+        "sha256": "3034ffaebaea482948a61217b7a86fcd86cfc33d80f7ca4ed84e3cec1a8692bd"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/developers_guide/fusion_specific/arguments/": {
+        "title": "Arguments",
+        "sha256": "e6ea647f040a2756e00bb5903193ed0fdc7ba189d742bcf1a32fc90a2acb3aa8"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/developers_guide/fusion_specific/callbacks/": {
+        "title": "Callbacks",
+        "sha256": "5fcdc0d8914448e4ea524e679116affdd734ee987ec2f445bfd624c57caf1ec6"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/developers_guide/fusion_specific/fusion-team-integration/": {
+        "title": "Fusion Team Integration",
+        "sha256": "08c2ad21b934f662603b0e2f25ebbcba3e785f02f299693fd4b3f7966640917c"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/developers_guide/fusion_specific/running-without-user-identity/": {
+        "title": "Running Without User Identity",
+        "sha256": "a621b09912997c538fa66b1dae2bd761255faa5dd37842e7dfe14b5b4422d60f"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/developers_guide/fusion_specific/typescript/": {
+        "title": "TypeScript",
+        "sha256": "55b28d58981527b1ae535f092f8f291c3a202b9663b209ea8626a1b73bebdf48"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/developers_guide/inventor_specific/ilogic-logging/": {
+        "title": "iLogic logging",
+        "sha256": "e03234e726dd0f5ba8ffced3f61bd80a68c3dcebf0220a8196b877551e79611d"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/developers_guide/overview/": {
+        "title": "Overview",
+        "sha256": "14b19caaf4c23fcfa452af465e10724377bd030fd0f5e03ded8dfb4aeb430283"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/developers_guide/rate-limits/da-rate-limits/": {
+        "title": "Automation API Rate Limits",
+        "sha256": "f6333a5714ce0c502423b414a34aeaaef4e8e15574019a944560d941caed5434"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/developers_guide/rate-limits/forge-rate-limits/": {
+        "title": "APS Rate Limits and Quotas",
+        "sha256": "84a86d3d0d4cf229eb235e3ac691237757d6abc348d1e0cd43ae235ced539aa7"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/developers_guide/reference-downloading/": {
+        "title": "Reference Downloading",
+        "sha256": "a7f1bbd4d5427f7deadce7e803b078ab6bb640b119107facde5baf716ede24b5"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/developers_guide/restrictions/": {
+        "title": "Restrictions",
+        "sha256": "5093f0cf493be5719eebf22f154fce5646c412f021aa3f20e964d5fc5c96259b"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/developers_guide/revit_specific/custom-fonts-support/": {
+        "title": "Custom Fonts Support",
+        "sha256": "6c70f148038c0e025e02f77aa186c8e19a008aff624f17ecca918dfc301eb2fd"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/developers_guide/revit_specific/handling-failures/": {
+        "title": "Handling Revit Failures",
+        "sha256": "a3c1521f4c2dc04f81293a16d321cbc62fa275e3c02c6524ca017eaace6dcb90"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/developers_guide/revit_specific/revit-cloud-model-integration/": {
+        "title": "Revit Cloud Model Integration",
+        "sha256": "cccbe9d3ed29708745f42a2bb6757a2c3ade043615394853ed3788d5988e245b"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/developers_guide/troubleshooting/": {
+        "title": "Troubleshooting",
+        "sha256": "c3e52fdabb260416b33c2b3069988be0fed8728934752fe339551cf6fea74820"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/developers_guide/websocket-api/": {
+        "title": "WebSockets for When Callbacks Aren't an Option",
+        "sha256": "27f5a8ccc705efb2569e5d1a919cca22962216069505c0e20956f26c7309594f"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/": {
+        "title": "REST API Reference",
+        "sha256": "ddd0e4917f112e0684aa1cc4088c46ddc5d7acd4f855257bde11017150cb7eba"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/activities-GET/": {
+        "title": "GET activities",
+        "sha256": "ebec157bac324e97b26a39ed2477de70fb2bcd6b591d588ad128bd4de4e0462b"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/activities-id-aliases-aliasId-DELETE/": {
+        "title": "DELETE activities/:id/aliases/:aliasId",
+        "sha256": "e0084dd61a53b668e04b6c8b7b82f2c74dcc160e435de0faefab0f649f7f9ae1"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/activities-id-aliases-aliasId-GET/": {
+        "title": "GET activities/:id/aliases/:aliasId",
+        "sha256": "99f2e768d74d020c529ac7b8ca279dedfdf4d62966e64f827a4634e344adf8ae"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/activities-id-aliases-aliasId-PATCH/": {
+        "title": "PATCH activities/:id/aliases/:aliasId",
+        "sha256": "f7904f64a159236b09e8f06687080736ae1be62d4ace5b2a3ee539df1916c403"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/activities-id-aliases-GET/": {
+        "title": "GET activities/:id/aliases",
+        "sha256": "fd7e0d5469552c6382481bb92da75c376d0680137a24b80985ede191a9099bb2"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/activities-id-aliases-POST/": {
+        "title": "POST activities/:id/aliases",
+        "sha256": "87356c665ff8e96bcf19740a3fbdf0fcc734c9ec31f477178b491000253b7f4c"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/activities-id-DELETE/": {
+        "title": "DELETE activities/:id",
+        "sha256": "15c8ba2ecb6324cac1f923625bd5d06626ec8df0f30bfaa985751c5477049996"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/activities-id-GET/": {
+        "title": "GET activities/:id",
+        "sha256": "a369f7050d115d3ad2eae19822e8954cf7e4e6d8c9ef8d732b80a4112ba372ff"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/activities-id-versions-GET/": {
+        "title": "GET activities/:id/versions",
+        "sha256": "9774f8524439969b0d296858e0049c6f435c2983431e5ee8c40cb7023de50d57"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/activities-id-versions-POST/": {
+        "title": "POST activities/:id/versions",
+        "sha256": "240a174e3480a3ad61c13a6a34e700b881729480d1c25fa2f499e7bccc0f2cf5"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/activities-id-versions-version-DELETE/": {
+        "title": "DELETE activities/:id/versions/:version",
+        "sha256": "ba7013535277f1b27124afa5ba737221b054d9020c5534ef54db96f0d1b06e26"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/activities-id-versions-version-GET/": {
+        "title": "GET activities/:id/versions/:version",
+        "sha256": "526c6ecb0efcfc1df3e243e6e6f2845cdc9a420e4d2a40e79e73e22d86ddb874"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/activities-POST/": {
+        "title": "POST activities",
+        "sha256": "3afa6d1d7c064d5740fb06888ff42389390c6307ce8cf518e07da4f5e0ebc196"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/appbundles-GET/": {
+        "title": "GET appbundles",
+        "sha256": "00aa0dbd6a7f136341ae7527c3a064343df307119657070227b5516a72a0f58f"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/appbundles-id-aliases-aliasId-DELETE/": {
+        "title": "DELETE appbundles/:id/aliases/:aliasId",
+        "sha256": "ba69167095c002b93e285e2650ed4432c17d9e8ef105f4e47aec9d44bdb1441f"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/appbundles-id-aliases-aliasId-GET/": {
+        "title": "GET appbundles/:id/aliases/:aliasId",
+        "sha256": "b958deeeafbdee02aeccd8e596e245cf5866888ef5178d03188c829f2c0614f7"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/appbundles-id-aliases-aliasId-PATCH/": {
+        "title": "PATCH appbundles/:id/aliases/:aliasId",
+        "sha256": "01421e5b85c78c0c706f08bb6948f6e1423425c5a613054b68adb927ed05c80d"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/appbundles-id-aliases-GET/": {
+        "title": "GET appbundles/:id/aliases",
+        "sha256": "1502dfae5992e6ed2fa35b9997e8e1bb89891feeac9accbfb5c2fd1a50e8d797"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/appbundles-id-aliases-POST/": {
+        "title": "POST appbundles/:id/aliases",
+        "sha256": "9f255922e9b7ae73c8ce10a4ef159194108519f6626c717d015417ca9e108875"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/appbundles-id-DELETE/": {
+        "title": "DELETE appbundles/:id",
+        "sha256": "297563428bb518cd7f79d23b16000bed0fc65766ad2e96527d5c120c17801e9f"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/appbundles-id-GET/": {
+        "title": "GET appbundles/:id",
+        "sha256": "cab2e0ff71a6da6bcdceb41c3501502ef3fe0a7d0db8089d5fe6a45099e40ebb"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/appbundles-id-versions-GET/": {
+        "title": "GET appbundles/:id/versions",
+        "sha256": "da6df667a9a44f44b57e28378623926a4c4805ce3e4ac046dc934588237e1760"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/appbundles-id-versions-POST/": {
+        "title": "POST appbundles/:id/versions",
+        "sha256": "acf7d1ebe4f9859b6c2c2ce9c9432632505bf4ea7bebd85f272526c6e624c5bb"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/appbundles-id-versions-version-DELETE/": {
+        "title": "DELETE appbundles/:id/versions/:version",
+        "sha256": "f4a62d0585d7bb7bf6cb880d821fd5af93be8bd4c709489f9ce335512ca07c0a"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/appbundles-id-versions-version-GET/": {
+        "title": "GET appbundles/:id/versions/:version",
+        "sha256": "36dad4dd6faca16221c0883029ba681bc3481d4d712b3b14958c12d56cc76f64"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/appbundles-POST/": {
+        "title": "POST appbundles",
+        "sha256": "7d8bb41cf259b8eb5aef61fad757071f6e129ae4366a430bb2700959b7b8ba94"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/engines-GET/": {
+        "title": "GET engines",
+        "sha256": "111503395b3774089b67722336ce691bdf02c127a1652c18dc3244ee55dfe340"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/engines-id-GET/": {
+        "title": "GET engines/:id",
+        "sha256": "feaa51d8e37cfd6b5b6301eb01ebde8dcb0eacf8dbfd78822eeacdee4d765899"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/forgeapps-id-DELETE/": {
+        "title": "DELETE forgeapps/:id",
+        "sha256": "f6adcd02b423f51d4ed642134fc5293a7e2a2c1a371643f88638730a97222049"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/forgeapps-id-GET/": {
+        "title": "GET forgeapps/:id",
+        "sha256": "a83e7df00e3d19f2d728a2c389d5f9f2cadb4b55bac1b43ee2ba99b92b43acce"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/forgeapps-id-PATCH/": {
+        "title": "PATCH forgeapps/:id",
+        "sha256": "f155b3e5f1a18154edeae3d41737b7bc9a2c8f1b1df363ca578b9dd12d1043b2"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/health-engine-GET/": {
+        "title": "GET health/:engine",
+        "sha256": "5bd1a5875f31d214518c560518330b259cd123f802f7598900ff3db06b9615d9"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/health-engine-stats-GET/": {
+        "title": "GET health/:engine/stats",
+        "sha256": "12e92921e1e909da8319919d7ea32f7cd8f43e88b4fd2aceb5cd1e716158dec7"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/servicelimits-owner-GET/": {
+        "title": "GET servicelimits/:owner",
+        "sha256": "8e9641f2d633fba811cd19297e76f027393dbc091d336b3bac0f6ce9f478166e"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/servicelimits-owner-PUT/": {
+        "title": "PUT servicelimits/:owner",
+        "sha256": "d853b53fa92008e9b9c3b67c2c3770c32e97cb0870be0ea0d6f80d095ff4d0e1"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/shares-GET/": {
+        "title": "GET shares",
+        "sha256": "4f5ccf50b3b7dc642dedcffd4d8028b1c29abe3bd3f9bc1839b78428c73ba528"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/workitems-batch-POST/": {
+        "title": "POST workitems/batch",
+        "sha256": "18cf807dddb5b526eab19ed4f116892181061d1e780002e7ccf999fb02c3189d"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/workitems-combine-POST/": {
+        "title": "POST workitems/combine",
+        "sha256": "9724e58c444598742fdcd984faf7795973bf32916097efe721ce42ab0f7c58c3"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/workitems-id-DELETE/": {
+        "title": "DELETE workitems/:id",
+        "sha256": "48c85992aa735d01141053ed5d35d5be6ada9c23a5d3ae2daa049f916a8d8989"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/workitems-id-GET/": {
+        "title": "GET workitems/:id",
+        "sha256": "0ffa6a2bb1d820c9ecdeda24aa3c9403fc5d7e391b556e0f0fcc22186f4bd1bc"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/workitems-POST/": {
+        "title": "POST workitems",
+        "sha256": "102e5cff68f6e38578c7e114d8c169e42fd36339cf2e8a6d197a6a11a5e0e6dd"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/workitems-startAfterTime-GET/": {
+        "title": "GET workitems?startAfterTime=:epochSecondsInUTC",
+        "sha256": "ae7365fa398783edee14cc9a22dbfe784531d3fb4792a979385c1183b4b3a911"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/reference/http/workitems-status-POST/": {
+        "title": "POST workitems/status",
+        "sha256": "4797cdfc2f684503be0f3e232ba186e2dd4fd5d2cf3e56b7789955b0f7fb76ca"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/tutorials/revit/about_this_tutorial/": {
+        "title": "About this Walkthrough",
+        "sha256": "ce0676dd04096cbe1ab03bdf1a0c1a2fe2fc39307b798462626e256be5705d28"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/tutorials/revit/step1-convert-addin/": {
+        "title": "Task 1 – Convert Revit Add-in",
+        "sha256": "b207177f4bab5e942383d497c415c4ace938c4518712e69764e3cbf123793521"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/tutorials/revit/step2-create-forge-app/": {
+        "title": "Task 2 – Obtain an Access Token",
+        "sha256": "ad24657bc9428403e8912327db8271b446688d4aa62267df6b5e405131ea376b"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/tutorials/revit/step3-create-nickname/": {
+        "title": "Task 3 – Create a Nickname",
+        "sha256": "d7223d9169a2d94dc65fb8b7f36b7362143704ffb1d2380e345788fc4ea70967"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/tutorials/revit/step4-publish-appbundle/": {
+        "title": "Task 4 – Upload an AppBundle",
+        "sha256": "4cd251e08362fb860e5693da764b66cf6bea52814d62dcac5fac03792605657d"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/tutorials/revit/step5-publish-activity/": {
+        "title": "Task 5 – Publish an Activity",
+        "sha256": "410d0c19c2ae1701848e90381bfaba9d973bea3d19a56146630d4ff0698dba3f"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/tutorials/revit/step6-prepare-cloud-storage/": {
+        "title": "Task 6 – Prepare Cloud Storage",
+        "sha256": "75d0ad45818e0b4adb44c87cf6970a09c8acd88e6faba98e9d12bc0bf82a93e4"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/tutorials/revit/step7-post-workitem/": {
+        "title": "Task 7 – Submit a WorkItem",
+        "sha256": "047af3fc2a3ab31e58ef22ac6f14c3ad45e495154ba34b9f66ba707fe8bd5c6d"
+      },
+      "https://aps.autodesk.com/en/docs/design-automation/v3/tutorials/revit/step8-download-results/": {
+        "title": "Task 8 - Download the Results",
+        "sha256": "c215718663c82b5c7cbeefaf3d75a58db983386be237ddd9b478209591b40fb9"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/developers_guide/App-types/App-types/": {
+        "title": "Overview",
+        "sha256": "2a669ad0416737e412c061f00c2bc7ce1d0a30357ebeaad7d92526b13ff5c961"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/developers_guide/App-types/Machine-to-machine/": {
+        "title": "Server-to-Server App",
+        "sha256": "ae82140185b0520ccb093544c42058f0fb6c3b00ea20b63febd52d7fb6c16103"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/developers_guide/App-types/native/": {
+        "title": "Desktop, Mobile & Single Page Web App",
+        "sha256": "258cd4347b4330d5ba843eefce056e5ca1a650fe884e20ca2a33a5dffc3b06ca"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/developers_guide/App-types/traditionalweb/": {
+        "title": "Traditional Web App",
+        "sha256": "c246af3545be63e9892f0d57cb741e27ded280721b2587abaa4961e5c49c3e4a"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/developers_guide/asymmetric-encryption/": {
+        "title": "Asymmetric Signing",
+        "sha256": "a28e502304ef2dd6de9bac1fc7f3f65e4f33fa3303204e4a23f10e51092b03f1"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/developers_guide/basics/": {
+        "title": "API Basics",
+        "sha256": "d41f30474d9cc60785c64f1c7929c2e952b0285818d053a7f788cfd46d056f7f"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/developers_guide/error_handling/": {
+        "title": "Error Handling",
+        "sha256": "8de78ea4d38318efa904808ffdffe2ff196cd11b2d46ac4b1edf590036fe5318"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/developers_guide/field-guide/": {
+        "title": "Field Guide",
+        "sha256": "c5fd57c8ce974a2ba51d92aad0b50cb94ecb740148aea964197b1a1f6c4290c3"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/developers_guide/overview/": {
+        "title": "Overview",
+        "sha256": "0874b8d90b0b5687b97337bafae780af46fc9c949899c4fffd3dcafba149a9f7"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/developers_guide/rate-limiting/forge-rate-limits/": {
+        "title": "APS Rate Limits and Quotas",
+        "sha256": "84a86d3d0d4cf229eb235e3ac691237757d6abc348d1e0cd43ae235ced539aa7"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/developers_guide/rate-limiting/oauth-rate-limits/": {
+        "title": "Authentication Rate Limits",
+        "sha256": "53b56bc9e012bb303150f2507aed2f1b0ca93d8bd4e0643d7fbcbb98c9dd7e70"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/developers_guide/scopes/": {
+        "title": "Scopes",
+        "sha256": "af33f27b39e8222e54e2092c3eeaf0347c8ac6cd4185cc2464fd53ab10ad969c"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/reference/dot-net-sdk/": {
+        "title": ".NET SDK Reference",
+        "sha256": "b48408a00fb49013d305bfecf5cf2cb1d5152d4bf17e9ac853beb64d442406f4"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/reference/dot-net-sdk/Autodesk.Authentication.Model/": {
+        "title": "Autodesk.Authentication.Model Namespace",
+        "sha256": "ac8f5b01b4f5b3ced758d0ac329ad4281efd5a081ea6888054a892458ca898f6"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/reference/dot-net-sdk/Autodesk.Authentication.Model/GrantType/": {
+        "title": "GrantType Enum",
+        "sha256": "eda39c177d4365d93b1f9425c0576889e89ccaaf23df284cda5b0fc66bcfc203"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/reference/dot-net-sdk/Autodesk.Authentication.Model/IntrospectToken/": {
+        "title": "IntrospectToken Class",
+        "sha256": "ebc81ee19abc4fb1afc85b402f5f13446d558eca1ea106fcff6052d886c64b59"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/reference/dot-net-sdk/Autodesk.Authentication.Model/Jwks/": {
+        "title": "Jwks Class",
+        "sha256": "c105582f49e9595fc8762c99ea16d29dd5b4700b379b746d65ce4cfa8789ccf0"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/reference/dot-net-sdk/Autodesk.Authentication.Model/JwksKey/": {
+        "title": "JwksKey Class",
+        "sha256": "48651c90090b29b8f0baa265478a2957712b370a9fec9a177238e3cfdc2ac214"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/reference/dot-net-sdk/Autodesk.Authentication.Model/OidcSpec/": {
+        "title": "OidcSpec Class",
+        "sha256": "a407518d47cec97f2abd69ff76cfdcbfcd61b3e974ae0a538bf98dbeb9693bcf"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/reference/dot-net-sdk/Autodesk.Authentication.Model/ResponseType/": {
+        "title": "ResponseType Enum",
+        "sha256": "dae709dec2a75ae2b6d619a83fa859c69d8fb38b9f9058b15b6d755aa68f06c2"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/reference/dot-net-sdk/Autodesk.Authentication.Model/Scopes/": {
+        "title": "Scopes Enum",
+        "sha256": "e1fd20e1ecab50ee2fd5094e73cf6c12c89251705cdde74b01d8dd06529215a0"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/reference/dot-net-sdk/Autodesk.Authentication.Model/ThreeLeggedToken/": {
+        "title": "ThreeLeggedToken Class",
+        "sha256": "aaf2a63a59f5fd43a50fb69363f199dfe1a71f67d705a47bf1e267f9eda2efd1"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/reference/dot-net-sdk/Autodesk.Authentication.Model/TokenTypeHint/": {
+        "title": "TokenTypeHint Enum",
+        "sha256": "7adabf820e7108daa8d3e39dfa9e035b79e473f1c5c3e7396fe8c49c79a22922"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/reference/dot-net-sdk/Autodesk.Authentication.Model/TwoLeggedToken/": {
+        "title": "TwoLeggedToken Class",
+        "sha256": "16d8f438cf2c190f5dbdefce355d3fffb677a445501736c39c19bf880533325c"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/reference/dot-net-sdk/Autodesk.Authentication.Model/UserInfo/": {
+        "title": "UserInfo Class",
+        "sha256": "fa867a72aaac7063cce61350d4c3484be06a216958036941332694bad7a8e661"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/reference/dot-net-sdk/Autodesk.Authentication.Model/UserInfoAddress/": {
+        "title": "UserInfoAddress Class",
+        "sha256": "58c3f85c3cec44c48f78643d5b2b8f45000602f917ec77e82a6f10de81c645fe"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/reference/dot-net-sdk/Autodesk.Authentication.Model/UserInfoSocialUserinfoList/": {
+        "title": "UserInfoSocialUserinfoList Class",
+        "sha256": "9d4dae88280e8d438200d5c239a8271257dacdb794a0a28596fad3d65c29f853"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/reference/dot-net-sdk/Autodesk.Authentication/": {
+        "title": "Autodesk.Authentication Namespace",
+        "sha256": "ed0c241a6aae3279fd7a0b527b3af032237a326a471b5991b21f1d98756fc83d"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/reference/dot-net-sdk/Autodesk.Authentication/AuthenticationApiException/": {
+        "title": "AuthenticationApiException Class",
+        "sha256": "8612f9a66d38bc40c9f4f0fa83b80bf7ae1e719eef6373a3e62d227f49d0aa9f"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/reference/dot-net-sdk/Autodesk.Authentication/AuthenticationClient/": {
+        "title": "AuthenticationClient Class",
+        "sha256": "e2d055d0450e436c601d02ea165c618dffb8aae39af7395c431637415a58b728"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/reference/dot-net-sdk/Autodesk.Authentication/ServiceApiException/": {
+        "title": "ServiceApiException Class",
+        "sha256": "ab00588ed75be0cd95f85c7543fc7709d744ccfc27e438f4f0e4a5ff34d772c6"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/reference/http/": {
+        "title": "REST API Reference",
+        "sha256": "c2ba1c7da6ad00a63d33d5083bc64ae67fd7eebfdde9cf9cab08c45f33807731"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/reference/http/asymmetrickeys-GET/": {
+        "title": "GET JWKS",
+        "sha256": "35d7cce1cc1391fe318f61011b03723722323dd34b3295538d6aaab7964b70aa"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/reference/http/authorize-GET/": {
+        "title": "GET authorize",
+        "sha256": "b8459188d13e89a3395f34d855d350cd0bffd08fdea6b6083ab5269b4b11703f"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/reference/http/gettoken-POST/": {
+        "title": "POST token",
+        "sha256": "02c0b8275c318280c139bd2aa1c0ce8eafa79a0d72d9d49b2a7093cd7442322a"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/reference/http/introspect-POST/": {
+        "title": "POST introspect",
+        "sha256": "6c377dfc4d7603a3c9f828dc7c3e717d92c28fd8c5247995c22b3b8d4dd351a4"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/reference/http/logout-GET/": {
+        "title": "GET logout",
+        "sha256": "f5d00d7bdcaa2abde83fd39c2fc38ba57806aef233b8fd8d7941a3d13117a24d"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/reference/http/openid-GET/": {
+        "title": "GET OIDC Specification",
+        "sha256": "abae3744ac106e3380afc75bf57ac1f42b53cad24b6301811aabd64373d2ed97"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/reference/http/revoke-POST/": {
+        "title": "POST revoke",
+        "sha256": "353b01ae10c05e6a4ab963e9b4a522905ab4a7ee7523fc34a0431211f19d9c42"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/reference/typescript-sdk/": {
+        "title": "TypeScript SDK Reference",
+        "sha256": "42831e8a25b981030dc73689e24a26458345620073ef188b744c35cb691642db"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/reference/typescript-sdk/classes/AuthenticationApiError/": {
+        "title": "AuthenticationApiError",
+        "sha256": "cb291cfd970a9a20738276fdcf34f205593bb77085b3c82057e9f36ed3f7a5ba"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/reference/typescript-sdk/classes/AuthenticationClient/": {
+        "title": "AuthenticationClient",
+        "sha256": "2a0e7b2469beb517095b26a7e23290ff3f3a2cd3c83b1e0e2498a040eed37a6a"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/reference/typescript-sdk/enumerations/GrantType/": {
+        "title": "GrantType",
+        "sha256": "e210c8234b11402be34ffa999d3075ec0d0915be89b75db502fd69c22210321f"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/reference/typescript-sdk/enumerations/ResponseType/": {
+        "title": "ResponseType",
+        "sha256": "f5dad05756615e7696c66a0aefca99f87e21237bd0fefdcc51278d5670f561f2"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/reference/typescript-sdk/enumerations/Scopes/": {
+        "title": "Scopes",
+        "sha256": "04cb5a86ddc84d6fc916d475705e2297e7801434301f90fe92a4fd02a1f0adbf"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/reference/typescript-sdk/enumerations/TokenTypeHint/": {
+        "title": "TokenTypeHint",
+        "sha256": "8d1984d1c8b487f5fc6eacc9436c9056ed5b851b30629d03f67778a9ef7372e6"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/reference/typescript-sdk/interfaces/IntrospectToken/": {
+        "title": "IntrospectToken",
+        "sha256": "7ec8d6b153eacea9e7cada042fda8391cfef1ba93da4a8efbfe417ce7d360987"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/reference/typescript-sdk/interfaces/Jwks/": {
+        "title": "Jwks",
+        "sha256": "77d939aec35877b518a4fbcda6f896e7229ceb0a63dd3146792a048f9d8b05ea"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/reference/typescript-sdk/interfaces/JwksKey/": {
+        "title": "JwksKey",
+        "sha256": "be2d5a195d896dd19c866e2fb25831b59045c2a97809b4764f6628a7b03fa1fa"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/reference/typescript-sdk/interfaces/OidcSpec/": {
+        "title": "OidcSpec",
+        "sha256": "828c1bac5514f99db8b0fbeb8f603c0b6a6169248d653db242146a6c69c2c862"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/reference/typescript-sdk/interfaces/RequestArgs/": {
+        "title": "RequestArgs",
+        "sha256": "913cdd3a78f25ad0452ecdec8cc720c7c855d4dc42824a93d4a4d00f63e26061"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/reference/typescript-sdk/interfaces/ThreeLeggedToken/": {
+        "title": "ThreeLeggedToken",
+        "sha256": "4ea688757f0eeed3aad9b424d1adf14683884d6c963125f283e06dc3b8d1655b"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/reference/typescript-sdk/interfaces/TwoLeggedToken/": {
+        "title": "TwoLeggedToken",
+        "sha256": "35f7f05280862e7ae123b01955762a53662d18f28092d5e1f7b1d6c9b0c12dd6"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/reference/typescript-sdk/interfaces/UserInfo/": {
+        "title": "UserInfo",
+        "sha256": "c58f492dae2de2ae033337a5a7bd256f8717b3c7718092059a3674af603e432e"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/reference/typescript-sdk/interfaces/UserInfoAddress/": {
+        "title": "UserInfoAddress",
+        "sha256": "2cfaa122c7cd2a2604e7b1c69c192f25d8bc733cdd308239bb4eaae8604fb3cc"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/reference/typescript-sdk/interfaces/UserInfoSocialUserinfoList/": {
+        "title": "UserInfoSocialUserinfoList",
+        "sha256": "78d262cdc30c08f99efd5d7de476780f872f35767206f0c601c012b9534c06b9"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/tutorials/code-challenge/": {
+        "title": "Generate the Code Challenge",
+        "sha256": "f1dd0391eb9c6b01ccb864e20d192d5cb14cb9f6cc81ba957a50dfabd04b3a3b"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/tutorials/create-app/": {
+        "title": "Create an App",
+        "sha256": "d13bc29ac0da7044100ed9ce83cc04f5f63096be15882a767e2ae9068d70a586"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/tutorials/get-2-legged-token/": {
+        "title": "Get a 2-Legged Token",
+        "sha256": "4024e296ef761948f3b9b8affe69e485ff15a5d6b13a892a2312757e109c111f"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/tutorials/get-3-legged-token-pkce/get-3-legged-token-pkce-private/": {
+        "title": "Get a 3-Legged Token with Authorization Code Grant (PKCE) for Private Clients",
+        "sha256": "16af11126d51006d9e64ca975837d1a187b5730072ece269ba6d4f774734b3be"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/tutorials/get-3-legged-token-pkce/get-3-legged-token-pkce/": {
+        "title": "Get a 3-Legged Token with Authorization Code Grant (PKCE) for Public Clients",
+        "sha256": "96d57ab1ecf6f97ddca8744d343a0972c109b7195796165924561d582caaeb69"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/tutorials/get-3-legged-token/": {
+        "title": "Get a 3-Legged Token with Authorization Code Grant",
+        "sha256": "f88b4b23dc91fb03cd4a0f9910cb88feffa3b3242533e184c283f57ee21f53f9"
+      },
+      "https://aps.autodesk.com/en/docs/oauth/v2/tutorials/get-ID-token/": {
+        "title": "Get an ID Token",
+        "sha256": "754dfa5157697da872fc3d0bcb962f70c272e0b589c434db78013d7439b57bfc"
+      }
+    },
+    "change_history": {
+      "https://aps.autodesk.com/en/docs/design-automation/v3/change_history/acad_release_notes/": [
+        {
+          "heading": "Release Date: 2025-03-30",
+          "sha256": "be2e2337f96592d5bd947669af676d6de1117a6066b16a1269d0a1c5589d713c"
+        },
+        {
+          "heading": "Release Date: 2024-03-30",
+          "sha256": "48418b72e886e27239af2621f593dcf62abbadeec589bba591a003fb5543f1fc"
+        },
+        {
+          "heading": "Release Date: 2023-07-28",
+          "sha256": "0c1e94c6f4250f84e6d5607bfd5375e343948668e9ebcf980967f3abdcac083e"
+        },
+        {
+          "heading": "Release Date: 2023-03-06",
+          "sha256": "13f03ac4d06760a348d1656e9a127d4c77e1f7b003b370dfe30fe67113bbc420"
+        },
+        {
+          "heading": "Release Date: 2021-06-17",
+          "sha256": "a5190c0752de87e978143d946f80d5c12da4033239894a514a47b379bea00ba5"
+        }
+      ],
+      "https://aps.autodesk.com/en/docs/design-automation/v3/change_history/changelog_v3/": [
+        {
+          "heading": "Release Date: 2026-08-10",
+          "sha256": "b33a73f98a4b5d394b3c18681e79add29dad7e33c70d72b6c9a2fb13ccaf4195"
+        },
+        {
+          "heading": "Release Date: 2025-06-30",
+          "sha256": "8517595b4aa51473a83eb8c9fb19dd6fa6c2d02691ee8cf2201aad07e9394962"
+        },
+        {
+          "heading": "Release Date: 2024-03-12",
+          "sha256": "72317cd747417994860da8393eb7397fe27db96fd8768b0f5df58e7a7f760bed"
+        },
+        {
+          "heading": "Release Date: 2021-03-15",
+          "sha256": "bc2135f94a407f944d68facb1c68b06a22658826fd9511cf6b1ade4ee0c18c49"
+        },
+        {
+          "heading": "Release Date: 2021-02-17",
+          "sha256": "ae44e0a8854383e3d05723af185c432d4817ebe77bf3d4ed00f0624225dd259d"
+        },
+        {
+          "heading": "Release Date: 2020-11-20",
+          "sha256": "e3e9d5c7677db50a75571ff80042ead1118e154ba2fafea1dadb89b59d4a1e43"
+        },
+        {
+          "heading": "Release Date: 2020-10-20",
+          "sha256": "0ced006605ae675ff459da49f575aa84f059f9084984d90c2eb7fc5e7491f39a"
+        },
+        {
+          "heading": "Release Date: 2020-10-01",
+          "sha256": "5e9578b72d477ec194659fd0bd981e39130e18b1c9610d89ad8178b0d8915980"
+        },
+        {
+          "heading": "Release Date: 2020-08-20",
+          "sha256": "abf605396966a65104960a666bd8d93b07f61c10f94c69722dc584d35020ffab"
+        },
+        {
+          "heading": "Release Date: 2019-10-28",
+          "sha256": "3cba5db8758798cd50136f686af3c162a56a4b3eab6e46cbca91eb3b2b1c034f"
+        },
+        {
+          "heading": "Release Date: 2018-10-01",
+          "sha256": "7dc7589b510ef4ffe6102c3bd03390bde07600933a4c7a78b33565d37d94f60b"
+        }
+      ],
+      "https://aps.autodesk.com/en/docs/design-automation/v3/change_history/inventor_release_notes/": [
+        {
+          "heading": "March 2026",
+          "sha256": "351540586049e8de8ccb584e3969c7a12eb9c97e6c11861e53e5b1a421294f32"
+        },
+        {
+          "heading": "February 2026",
+          "sha256": "2507ef98e43cfacd2da6721fa96c2a81119737f2fa73c74514af170daa4a847d"
+        },
+        {
+          "heading": "July 2025",
+          "sha256": "f29bdb034a88c5329c51a03c6f6f8ebefd644c61fa2a6d836e3cc16b0b0d077b"
+        },
+        {
+          "heading": "May 2025",
+          "sha256": "75e9371f5e5fac2e7786635841bfa3faaac9e9abe4ba6b4d6c1497ca732fc138"
+        },
+        {
+          "heading": "January 2025",
+          "sha256": "d77ab71c744d656a6a400bb609050afebb4b220e27a342aa500bacba8b79d373"
+        },
+        {
+          "heading": "April 2024",
+          "sha256": "bf1b114903b74d608c4f182868ceb1be2b3b3b64989d45f5876086e9898ca2c2"
+        },
+        {
+          "heading": "November 2023",
+          "sha256": "109ae0b816e90c17c414193f89ca7d7f6682687f2965636ab6825c2f0b5352ef"
+        },
+        {
+          "heading": "August 2023",
+          "sha256": "cc5263e992e1b48bf8fa6c084e5a258d4892455cdc3449c7838af46bcd5057df"
+        },
+        {
+          "heading": "July 2023",
+          "sha256": "40962af414447a21dd3de0362abd67b211d2fc9f8d701b84652f44869707bf67"
+        },
+        {
+          "heading": "May 2023",
+          "sha256": "a2273239c8a9e3267b9e74972fe502f7105ffe8ddb0011052f0946e25092b943"
+        },
+        {
+          "heading": "March 2023",
+          "sha256": "2cb125bafe784581c6cac361d30c82f5ad2f21f8985e9b0c80b2e9ec348f842b"
+        },
+        {
+          "heading": "January 2023",
+          "sha256": "7f2f3272fc6fe184c66517841b51e83a89c61f0b45e80264ba4145d1096044db"
+        },
+        {
+          "heading": "December 2022",
+          "sha256": "d68bd9d48116567a6b6e2d2b7ad8dda95f8c5a99655c836473bdfe697fd0c292"
+        },
+        {
+          "heading": "November 2022",
+          "sha256": "9cc98623528163a38f56f0097c1596427abc993d52ca728518b604e18599a7b2"
+        },
+        {
+          "heading": "September 2022",
+          "sha256": "f6f30f41f17c8f3d2b4b78137ebbe1e5e0e04521b7acb05f3211dbad1e78a71a"
+        },
+        {
+          "heading": "May 2022",
+          "sha256": "8614cf0feb2ba1c38af8bb4777548b3c25355457cb74b57faa891a6eedae74aa"
+        },
+        {
+          "heading": "August 2021",
+          "sha256": "ba6f0ad9be8a5d983619238d0e23302f6441ab48391866d89ff5faf306e6c8f6"
+        },
+        {
+          "heading": "August 2020",
+          "sha256": "e24281a49dda9a17b65d2203c6c3b10265c325dc1469d053fd17a932a88dab0d"
+        },
+        {
+          "heading": "February 2020",
+          "sha256": "b25eca0fff8fde809684a9c5f0a132e34408a7e9fd0c35d0141044e1b6c08053"
+        },
+        {
+          "heading": "June 2019",
+          "sha256": "df1549cadac6fb7894727a7fe1edb185468311efb8bdecb8afddfc676ef7bdc2"
+        }
+      ],
+      "https://aps.autodesk.com/en/docs/design-automation/v3/change_history/revit_release_notes/": [
+        {
+          "heading": "April 2026",
+          "sha256": "fe02660a73201be026a76b5da861750adf32803cbab040767214d20ce1b159aa"
+        },
+        {
+          "heading": "April 2025",
+          "sha256": "734bb4dd14c20c7d34ed3a38c35e59a924e92ecc1bdaef469d120923cdc93cee"
+        },
+        {
+          "heading": "April 2024",
+          "sha256": "ac355df08e2b23592f22098d516c4a422862191611fc83b69f7775f9733dd980"
+        },
+        {
+          "heading": "April 2023",
+          "sha256": "474293ef5890fd9fffe662b8c342dee18f0e644541d7a0650fd0ab5f6ec8ece9"
+        },
+        {
+          "heading": "March 2023",
+          "sha256": "3773c58199d2803a18616e985e53a163eb7a7a9b5e090bb1ffc22c6fbc9c9b09"
+        },
+        {
+          "heading": "September 2022",
+          "sha256": "97fb1b7ac29d085c83f254cecdd326665ed0c9d90a3ac4e4a1000e42f1f6549f"
+        },
+        {
+          "heading": "March 2022",
+          "sha256": "8b48256b862d4ae2588d857f899f99929e715cf99e62a4ee06d24dd4fd190c5e"
+        },
+        {
+          "heading": "September 2021",
+          "sha256": "07cae82ce981b2f7e1ad473b087435b0f872b2a4a05d7cc5e25fed5b3d204f72"
+        },
+        {
+          "heading": "July 2021",
+          "sha256": "4132869a603a5464d471c8b8a3cf7dd9933833d4187126510e2bc076dbd03ad2"
+        },
+        {
+          "heading": "May 2021",
+          "sha256": "b0732fc60b2316f5fb1a6e65db29626495533afcd14998bd0da5a26b7ef4b93d"
+        },
+        {
+          "heading": "April 2021",
+          "sha256": "88e7d24270206564339b076a617e705c825fc25f01dd319e502a4f0325fb417d"
+        },
+        {
+          "heading": "February 2021",
+          "sha256": "3b8e5206985ad4aa27428de075c47a4d534383c1244b63b87efb274402b68461"
+        },
+        {
+          "heading": "December 2020",
+          "sha256": "d580b9085a12e3090a821bf61f12becaef429d9fe7e39f8809988cf077a9c3ca"
+        },
+        {
+          "heading": "November 2020",
+          "sha256": "3bfa3af661b726e7ed25f405edd25f91acbdad11baf8647c0b59d91ed1f4ff73"
+        },
+        {
+          "heading": "October 2020",
+          "sha256": "2bbc7369ad8a84209bd514652076eb9b4ffd77b10eba40b58edda4514021a035"
+        },
+        {
+          "heading": "September 2020",
+          "sha256": "8fe85818bb1af544cdc11d47e86e6da8443c113ee54dcc13a98d033315e45c74"
+        },
+        {
+          "heading": "August 2020",
+          "sha256": "66beb225285734eb5e851f36b5559f552735c9ad0b660d7a2dcdf7b345c5bc1a"
+        },
+        {
+          "heading": "July 2020",
+          "sha256": "7d6c68cf1af61d928f28b0ee54e5dab9f29d2d14adb5f9e392dec2873651991f"
+        },
+        {
+          "heading": "May 2020",
+          "sha256": "4274cb7ce66342ca58cbee51f8571aee354c280b5f511c27472555ec28033735"
+        },
+        {
+          "heading": "April 2020",
+          "sha256": "752bcc487811cac132041fe7d2165ac1b0f850b741f702e97d24b228c14a4c0b"
+        },
+        {
+          "heading": "March 2020",
+          "sha256": "bdeb355ce7cfde2e0185920e9639be295bb201e5c059f7ce1af68ebfb2928e5d"
+        },
+        {
+          "heading": "February 2020",
+          "sha256": "37f7471b72719564312ed17dabe147275e6d2dfb476309b74be317eaf228d2d1"
+        },
+        {
+          "heading": "November 2019",
+          "sha256": "c552dbf92b0868788f1ff019b6879920ef928e2be87a595dc15007d26c2d09d8"
+        },
+        {
+          "heading": "August 2019",
+          "sha256": "8c7a23726680a10052dbef94dd31b69da280cbd10c057e157f4f05a6bc1cbeca"
+        },
+        {
+          "heading": "July 2019",
+          "sha256": "295972b25499c4d41f9fc073104b9f50f105fc152623d8dbbd0507d5a6ce907a"
+        },
+        {
+          "heading": "June 2019",
+          "sha256": "0be39c64bb2db0743376e6ea80432100d419d6049fb023cbaa499ebbf9a37969"
+        },
+        {
+          "heading": "May 2019",
+          "sha256": "6c420470ae5994ac7f2ac20e7a29cc4c3ccf6cb4b46c456f72db5349ddbd86c8"
+        },
+        {
+          "heading": "April 2019",
+          "sha256": "16c4c46727f7e885b42440fb9bb939d212d1b2e37372ed79c0ad5e2c93d4d506"
+        },
+        {
+          "heading": "March 2019",
+          "sha256": "cb9ac3bb75a0875d0e9c55bc921c78b72149043db0b55822587ddb7ae8c852ed"
+        },
+        {
+          "heading": "February 2019",
+          "sha256": "f2778ae6b1c0c524f8bc892b22910b21ce3c537c36608d73e44d9651d632fd97"
+        },
+        {
+          "heading": "January 2019",
+          "sha256": "84c961a0685f6a1d9476449bf3e066169199dbb563a00f48d4ea671646f60385"
+        }
+      ]
+    },
+    "revit_engines": [
+      {
+        "alias": "Autodesk.Revit.2019",
+        "initial_release": "March 30, 2018",
+        "deprecation": "March 29, 2022",
+        "removal": "September 29, 2025"
+      },
+      {
+        "alias": "Autodesk.Revit.2020",
+        "initial_release": "March 30, 2019",
+        "deprecation": "March 29, 2023",
+        "removal": "September 29, 2025"
+      },
+      {
+        "alias": "Autodesk.Revit.2021",
+        "initial_release": "March 30, 2020",
+        "deprecation": "March 29, 2024",
+        "removal": "March 29, 2026"
+      },
+      {
+        "alias": "Autodesk.Revit.2022",
+        "initial_release": "March 30, 2021",
+        "deprecation": "March 29, 2025",
+        "removal": "March 29, 2027"
+      },
+      {
+        "alias": "Autodesk.Revit.2023",
+        "initial_release": "March 30, 2022",
+        "deprecation": "March 29, 2026",
+        "removal": "March 29, 2028"
+      },
+      {
+        "alias": "Autodesk.Revit.2024",
+        "initial_release": "March 30, 2023",
+        "deprecation": "March 29, 2027",
+        "removal": "March 29, 2029"
+      },
+      {
+        "alias": "Autodesk.Revit.2025",
+        "initial_release": "April 5, 2024",
+        "deprecation": "April 5, 2028",
+        "removal": "April 5, 2030"
+      },
+      {
+        "alias": "Autodesk.Revit.2026",
+        "initial_release": "March 31, 2025",
+        "deprecation": "March 29, 2029",
+        "removal": "March 29, 2031"
+      },
+      {
+        "alias": "Autodesk.Revit.2027",
+        "initial_release": "March 31, 2026",
+        "deprecation": "March 29, 2030",
+        "removal": "March 29, 2032"
+      }
+    ]
+  }
+}

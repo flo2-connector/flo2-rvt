@@ -1,0 +1,12 @@
+{
+  "_source": "autodesk-platform-services/aps-sdk-openapi@d411c0851cfb078ff15ac442223b495b82e3a0b7 oss/oss.yaml completeSignedS3Upload 200 example",
+  "status": 200,
+  "body": {
+    "bucketKey": "apptestbucket",
+    "objectId": "urn:adsk.objects:os.object:apptestbucket/random_file.bin",
+    "objectKey": "random_file.bin",
+    "size": 12582912,
+    "contentType": "application/octet-stream",
+    "location": "https://developer.api.autodesk.com/oss/v2/buckets/apptestbucket/objects/random_file.bin"
+  }
+}

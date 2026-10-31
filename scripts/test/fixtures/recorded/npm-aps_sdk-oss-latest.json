@@ -1,0 +1,8 @@
+{
+  "_source": "GET https://registry.npmjs.org/@aps_sdk%2Foss/latest, recorded 2026-10-31 (fields flo2-rvt reads)",
+  "status": 200,
+  "body": {
+    "name": "@aps_sdk/oss",
+    "version": "1.3.3"
+  }
+}

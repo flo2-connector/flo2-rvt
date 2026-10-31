@@ -1,0 +1,33 @@
+{
+  "_source": "GET https://api.github.com/repos/autodesk-platform-services/aps-da-cli/compare/ffb6784dfa557c7a02812c0a31a411f54cae6d77...main, recorded 2026-10-31 (fields flo2-rvt reads)",
+  "status": 200,
+  "body": {
+    "status": "ahead",
+    "ahead_by": 2,
+    "behind_by": 0,
+    "html_url": "https://github.com/autodesk-platform-services/aps-da-cli/compare/ffb6784dfa557c7a02812c0a31a411f54cae6d77...main",
+    "total_commits": 2,
+    "commits": [
+      {
+        "sha": "e1059e97c649d4a263607504656a414aba7730d2",
+        "html_url": "https://github.com/autodesk-platform-services/aps-da-cli/commit/e1059e97c649d4a263607504656a414aba7730d2",
+        "commit": {
+          "message": "Add support for adsk3LeggedToken and scope3LO\n\nNow adsk3LeggedToken can be used in the config file for work item and provide value {{accessToken3LO}} for it to be auto-populated with the 3LO token.\nUsing scope3LO now you can provide scopes separately for the 3LO token (it's needed because some scopes are only available for 3LO and using them for 2LO would cause HTTP 400)",
+          "committer": {
+            "date": "2026-09-11T14:57:13Z"
+          }
+        }
+      },
+      {
+        "sha": "438f18ee667f77c28f998b13cb71d3c797349fa3",
+        "html_url": "https://github.com/autodesk-platform-services/aps-da-cli/commit/438f18ee667f77c28f998b13cb71d3c797349fa3",
+        "commit": {
+          "message": "Easier switching between config files\n\nYou can select the config file to be used by the Run And Debug options",
+          "committer": {
+            "date": "2026-09-21T15:00:23Z"
+          }
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "_source": "aps.autodesk.com/en/docs/design-automation/v3/reference/http/engines-id-GET/ (the reference page's example response; the tests reuse its shape for the Revit ids, with made-up values)",
+  "status": 200,
+  "body": { "productVersion": "23.00", "description": "Inventor 2019 RTM", "version": 31, "id": "Autodesk.Inventor+23" }
+}

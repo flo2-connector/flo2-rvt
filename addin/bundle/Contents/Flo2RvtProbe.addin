@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Adapted from Autodesk's RevitMcpTools.addin in aps-sample-revit-mcp-tools-bundle
+  (github.com/autodesk-platform-services/aps-sample-revit-mcp-tools-bundle, commit
+  13d02b1464d0a22839fff9d3ce41b84180268c1a). Copyright (c) 2026 Autodesk, Inc.
+  MIT License; see THIRD_PARTY_NOTICES.md. Changes: names, class and a new AddInId.
+  Type must be DBApplication: the Automation Service has no Revit UI.
+-->
+<RevitAddIns>
+  <AddIn Type="DBApplication">
+    <Name>flo2-rvt probe</Name>
+    <Assembly>.\Flo2RvtProbe.dll</Assembly>
+    <AddInId>7C2B1F64-3D0E-4C1A-9A57-2B6E0F4D8E31</AddInId>
+    <FullClassName>Flo2Rvt.Addin.ProbeApp</FullClassName>
+    <Description>Opens a Revit model read-only and reports what it holds.</Description>
+    <VendorId>flo2</VendorId>
+    <VendorDescription>flo2-connector, github.com/flo2-connector/flo2-rvt</VendorDescription>
+  </AddIn>
+</RevitAddIns>
