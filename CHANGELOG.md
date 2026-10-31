@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.0 (unreleased)
+
+The edit job: real Revit 2024 applies a change list to a model and saves the result as a new model. Contract v1 (v0 plus the edit; nothing of v0 changed).
+
+- **Server**: `rvt_edit_start` (`file`, `change_list`, `max_minutes`). The change list is checked against the one schema, read from its file through zod's `fromJSONSchema`, and the limits the add-in holds (512 KiB canonical, 20,000 GlobalIds, Revit's model extent), uploaded beside the model as `changes.json` in its canonical form (keys sorted, no whitespace), and named in the start result by its SHA-256. The WorkItem names `<nickname>.Flo2RvtEdit+prod`; the job record says which job it is, so `rvt_job_status` lists an edit's outputs (`report.json`, `model.rvt`, `sheets.pdf`, `model.ifc`; an optional one not written is left off) and summarizes its report (outcome, changes applied, applied in part, rolled back, not applied, elements deleted, model saved), after a restart too. A job record written before this version reads as a probe's.
+- **Add-in**: the `edit` job beside `probe`, chosen by the working folder (`changes.json` means the edit). The three change kinds, with their semantics stated in the README (what "on a level" is, how a GlobalId maps to an element as Revit's IFC exporter maps them, what moves with a level); each change in its own transaction, a failed one rolled back alone; warnings dismissed and recorded, errors rolling the change back; what Revit deleted, modified and added on its own recorded per change; the edited model exported (IFC, sheets) and saved once as a new `model.rvt`, a new central model with its worksets when the input is workshared; `report.json` last. A new compile-time reference, `Nice3point.Revit.Api.RevitAPIIFC` 2024.3.60, for a level's storey GlobalId.
+- **Logic tests**: `addin/tests`, on .NET 10, for the add-in's pure logic (GlobalIds, lengths, the change-list check on the shared cases in `schema/test/change-lists.json`, outcomes, `report.json`'s shape).
+- **CI guard**: `scripts/addin-save-guard.ts` takes over from v0's grep: the probe still commits and saves nothing, and only `Edit/ChangeRunner.cs` commits and only `Edit/SaveResult.cs` saves, once.
+- **Registration**: one AppBundle version for both jobs, the probe Activity's new version, and the edit Activity with its `prod` alias.
+- **Schema**: the same version 0 and the same lists; its descriptions now state each change kind's exact meaning.
+
 ## 0.1.0 (unreleased)
 
 The first version: a read-only probe.

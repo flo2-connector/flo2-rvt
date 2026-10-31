@@ -2,7 +2,8 @@
 // touch no network. Each answer is a RECORDED Autodesk response (fixtures/
 // autodesk/*.json, each naming where it was recorded), with only the ids and
 // the signed URLs swapped for this server's own. It keeps what was uploaded in
-// memory and "runs" the add-in by writing the outputs a probe would.
+// memory and "runs" the add-in by writing the outputs the WorkItem's job would: a
+// probe's three, or an edit's four.
 
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -17,6 +18,7 @@ export function recorded(name: string): { status: number; body: unknown } {
 }
 
 export const SAMPLE_REPORT = readFileSync(new URL('sample-report.json', FIXTURES));
+export const SAMPLE_EDIT_REPORT = readFileSync(new URL('sample-edit-report.json', FIXTURES));
 /** Made-up bytes standing for the public sample model; a test never needs a real .rvt. */
 export const SAMPLE_INPUT = Buffer.alloc(70_000, 'rac_basic_sample_project.rvt stand-in bytes ');
 export const SAMPLE_INPUT_SHA256 = createHash('sha256').update(SAMPLE_INPUT).digest('hex');
@@ -50,8 +52,8 @@ export interface MockOptions {
   statuses?: string[];
   /** Fail the first PUT of this part number with 403, as an expired signed URL does. */
   expireFirstPutOfPart?: number;
-  /** Outputs the "add-in" writes on success (default all three). */
-  writes?: Array<'report.json' | 'sheets.pdf' | 'model.ifc'>;
+  /** Outputs the "add-in" writes on success (default all the job makes). */
+  writes?: Array<'report.json' | 'sheets.pdf' | 'model.ifc' | 'model.rvt'>;
 }
 
 export class MockAps {
@@ -303,13 +305,15 @@ export class MockAps {
 
   /** What the add-in would leave: the outputs, written where the WorkItem said to put them. */
   private runAddin(): void {
-    const wi = this.workItems.at(-1) as { arguments: Record<string, { url: string }> } | undefined;
+    const wi = this.workItems.at(-1) as { activityId: string; arguments: Record<string, { url: string }> } | undefined;
     if (!wi) return;
-    const writes = this.opts.writes ?? ['report.json', 'sheets.pdf', 'model.ifc'];
+    const edit = wi.activityId.includes('.Flo2RvtEdit+');
+    const writes = this.opts.writes ?? (edit ? ['report.json', 'model.rvt', 'sheets.pdf', 'model.ifc'] : ['report.json', 'sheets.pdf', 'model.ifc']);
     const content: Record<string, [string, Buffer, string]> = {
-      report: ['report.json', SAMPLE_REPORT, 'application/json'],
+      report: ['report.json', edit ? SAMPLE_EDIT_REPORT : SAMPLE_REPORT, 'application/json'],
       sheets: ['sheets.pdf', Buffer.from('%PDF-1.7 made-up\n'), 'application/pdf'],
       ifc: ['model.ifc', Buffer.from('ISO-10303-21; made-up\n'), 'application/x-step'],
+      ...(edit ? { result: ['model.rvt', Buffer.alloc(40_000, 'edited model stand-in bytes '), 'application/octet-stream'] as [string, Buffer, string] } : {}),
     };
     for (const [param, [name, bytes, type]] of Object.entries(content)) {
       if (!writes.includes(name as 'report.json')) continue;

@@ -48,6 +48,8 @@ Commit `3e85dafcec0cc0898ff0dae0069670300f58435f`, `skills/aps-docs-portal/SKILL
 
 ### Flows followed, no code copied
 
+- Autodesk/revit-ifc, branch `Release_24.x.x` at commit `887c3d3e654f5a61b0ee54c5504ffafbbe52b827` (LGPL-2.1, Copyright (C) Autodesk, Inc.): how Revit's IFC exporter derives an element's and a storey's GlobalId (`Source/Revit.IFC.Export/Utility/GUIDUtil.cs`, `GUIDOptions.cs`, `Toolkit/IFCInstanceExporter.cs`), read to state the mapping in `addin/src/Edit/ElementIndex.cs` and to check `addin/src/Edit/Logic/IfcGuid.cs`, which is written from the IFC encoding itself. No code of it is copied.
+
 - autodesk-platform-services/aps-design-automation-nodejs, commit `49bef9f20d41af96d86a7d0c45b1667dc042ed3a` (its `package.json` declares MIT): create an AppBundle or Activity, or add a version on a 409, then patch the alias or create it on a 404; WorkItem arguments as OSS object URNs with the token in `headers`.
 - autodesk-platform-services/aps-revit-automation-cli, commit `dcfdf26e4c2540e2d4f45dd6d2117b979795e0f6`, MIT License, Copyright (c) 2026 Autodesk Platform Services: the same flow, and a Revit command line with no `/i` when the add-in opens the model itself.
 - autodesk-platform-services/aps-da-acad-c3d-skill, commit `42b1e64d1fd5861b4e8af6418662a7534e763e83`, MIT License, Copyright (c) 2026 Autodesk, Inc.: the heartbeat guidance and the URL-encoding of OSS object URNs (`references/da-guardrails.md`).
@@ -64,6 +66,7 @@ Commit `3e85dafcec0cc0898ff0dae0069670300f58435f`, `skills/aps-docs-portal/SKILL
 The AppBundle zip holds only flo2-rvt's own `Flo2RvtProbe.dll` and its two manifest files. These packages are compile-time references and are never copied into it; the Revit engine provides the assemblies at run time:
 
 - `Nice3point.Revit.Api.RevitAPI` 2024.3.60 (github.com/Nice3point/RevitApi): MIT-licensed packaging of Autodesk's `RevitAPI.dll` reference assembly, which remains Autodesk's.
+- `Nice3point.Revit.Api.RevitAPIIFC` 2024.3.60 (the same): Autodesk's `RevitAPIIFC.dll` reference assembly, likewise.
 - `Autodesk.Forge.DesignAutomation.Revit` 2024.0.2: Autodesk's DesignAutomationBridge, "Autodesk Content" under the Autodesk Web Services API Terms of Service, per the package's own licence file.
 - `Microsoft.NETFramework.ReferenceAssemblies.net48` 1.0.3: Microsoft, MIT License.
 

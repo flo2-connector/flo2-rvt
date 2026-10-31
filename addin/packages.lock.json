@@ -32,6 +32,12 @@
         "resolved": "2024.3.60",
         "contentHash": "IDHZB92H15O/2WZyjNph+pDD8tUBgcqWVI8P1v8PRfrXKEUX7dUU9zS3LfgDP2fEmjcERubdz2xveogS0x+AGg=="
       },
+      "Nice3point.Revit.Api.RevitAPIIFC": {
+        "type": "Direct",
+        "requested": "[2024.3.60, )",
+        "resolved": "2024.3.60",
+        "contentHash": "XmWezaUKMvpcZSjs17lMsdgQuqk3sI7+Ooj1s8UYKb0KhEiTee2+mcxKC1X9UpIvcpPdgmBTmao15kpLR8uOFA=="
+      },
       "Microsoft.CSharp": {
         "type": "Transitive",
         "resolved": "4.5.0",

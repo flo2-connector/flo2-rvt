@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { BUCKET_KEY_RULE, COMMAND_LINE, JOB_SCOPES, activityIdFor, bucketKeyFor, isJobId, newJobId, objectKey } from '../src/names.ts';
+import { BUCKET_KEY_RULE, COMMAND_LINE, JOBS, JOB_SCOPES, activityIdFor, bucketKeyFor, isJobId, newJobId, objectKey } from '../src/names.ts';
 import { expiresAtMs } from '../src/contract.ts';
 import { scrub } from '../src/log.ts';
 
@@ -25,8 +25,12 @@ test('job ids are v4 uuids, and object keys hang under them', () => {
   assert.throws(() => objectKey('../x', 'report.json'));
 });
 
-test('the activity is <nickname>.Flo2RvtProbe+prod', () => {
+test('the activities are <nickname>.Flo2RvtProbe+prod and <nickname>.Flo2RvtEdit+prod, over one AppBundle', () => {
   assert.equal(activityIdFor('SdkTester'), 'SdkTester.Flo2RvtProbe+prod');
+  assert.equal(activityIdFor('SdkTester', 'probe'), 'SdkTester.Flo2RvtProbe+prod');
+  assert.equal(activityIdFor('SdkTester', 'edit'), 'SdkTester.Flo2RvtEdit+prod');
+  assert.equal(JOBS.edit.outputs.find((o) => o.name === 'model.rvt')?.required, false, 'a list none of whose changes was kept saves no model');
+  assert.equal(JOBS.edit.outputs.find((o) => o.name === 'report.json')?.required, true);
 });
 
 test('the command line runs revitcoreconsole with the AppBundle and no /i', () => {

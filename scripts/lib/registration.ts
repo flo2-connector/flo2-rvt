@@ -10,7 +10,12 @@
 //   POST  <uploadParameters.endpointURL>                 the zip, as a form: every formData field, then `file` last
 //   PATCH /da/us-east/v3/appbundles/{id}/aliases/prod    point prod at the new version (404 when there is no alias yet)
 //   POST  /da/us-east/v3/appbundles/{id}/aliases         create prod
-//   (the same four for /activities)
+//   (the same four for /activities, once for each: Flo2RvtProbe, then Flo2RvtEdit)
+//
+// ONE AppBundle, Flo2RvtProbe (the id it was first registered under), carries both jobs;
+// the add-in runs the edit when its Activity hands it changes.json (addin/src/Edit/Logic/
+// JobSelection.cs). A new version of it moves BOTH Activities onto the new add-in, since each
+// names it by its prod alias; the probe Activity's own body does not change.
 //   PUT   /da/us-east/v3/servicelimits/me                set frontendLimits.limitMonthlyProcessingTimeInHours
 //   GET   /da/us-east/v3/servicelimits/me                read it back
 //   GET   /da/us-east/v3/engines, /engines/{id}          the engines, for `flo2-rvt engines`
@@ -32,7 +37,20 @@ import { readFileSync } from 'node:fs';
 import { basename } from 'node:path';
 import { ApsError, apsFetch, apsJson, type ApsContext } from '../../server/src/aps/http.ts';
 import { DA_PATH, getNickname } from '../../server/src/aps/da.ts';
-import { ALIAS, COMMAND_LINE, ENGINE, INPUT_NAME, INPUT_PARAMETER, OUTPUTS, PROBE_NAME } from '../../server/src/names.ts';
+import {
+  ALIAS,
+  APPBUNDLE_NAME,
+  CHANGES_NAME,
+  CHANGES_PARAMETER,
+  COMMAND_LINE,
+  EDIT_NAME,
+  EDIT_OUTPUTS,
+  ENGINE,
+  INPUT_NAME,
+  INPUT_PARAMETER,
+  OUTPUTS,
+  PROBE_NAME,
+} from '../../server/src/names.ts';
 
 export const REGISTRATION_SCOPES = ['code:all'];
 
@@ -53,17 +71,47 @@ export function activityBody(nickname: string): Record<string, unknown> {
     commandLine: [COMMAND_LINE],
     parameters,
     engine: ENGINE,
-    appbundles: [`${nickname}.${PROBE_NAME}+${ALIAS}`],
+    appbundles: [`${nickname}.${APPBUNDLE_NAME}+${ALIAS}`],
     description: 'flo2-rvt read-only probe: report.json, sheets.pdf and model.ifc from a Revit 2024 model.',
   };
 }
 
-async function createOrVersion(ctx: ApsContext, kind: 'appbundles' | 'activities', body: Record<string, unknown>): Promise<Versioned & { created: boolean }> {
+/**
+ * The Activity the edit runs: the model and the change list in, the report and the NEW model
+ * out. The change list is required, so a WorkItem without it fails before Revit starts; the
+ * new model is optional, since a list none of whose changes was kept saves none.
+ */
+export function editActivityBody(nickname: string): Record<string, unknown> {
+  const parameters: Record<string, unknown> = {
+    [INPUT_PARAMETER]: { verb: 'get', localName: INPUT_NAME, required: true, description: 'The Revit model to edit. It is read and never saved: the result is a new model.' },
+    [CHANGES_PARAMETER]: { verb: 'get', localName: CHANGES_NAME, required: true, description: "The change list, in flo2-rvt's fixed vocabulary (schema/change-list.schema.json)." },
+  };
+  for (const out of EDIT_OUTPUTS) {
+    parameters[out.parameter] = { verb: 'put', localName: out.name, required: out.required, description: out.description };
+  }
+  return {
+    commandLine: [COMMAND_LINE],
+    parameters,
+    engine: ENGINE,
+    appbundles: [`${nickname}.${APPBUNDLE_NAME}+${ALIAS}`],
+    description: 'flo2-rvt edit: a change list applied to a Revit 2024 model, saved as a new model.rvt, with report.json, sheets.pdf and model.ifc.',
+  };
+}
+
+/** Every Activity flo2-rvt registers, in order, with its body. */
+export function activities(nickname: string): Array<{ id: string; body: Record<string, unknown> }> {
+  return [
+    { id: PROBE_NAME, body: activityBody(nickname) },
+    { id: EDIT_NAME, body: editActivityBody(nickname) },
+  ];
+}
+
+async function createOrVersion(ctx: ApsContext, kind: 'appbundles' | 'activities', id: string, body: Record<string, unknown>): Promise<Versioned & { created: boolean }> {
   const res = await apsFetch(ctx, {
     operation: `DA ${kind} POST`,
     method: 'POST',
     path: `${DA_PATH}/${kind}`,
-    json: { id: PROBE_NAME, ...body },
+    json: { id, ...body },
     accept: [200, 409],
   });
   if (res.status === 200) return { ...((await res.json()) as Versioned), created: true };
@@ -71,7 +119,7 @@ async function createOrVersion(ctx: ApsContext, kind: 'appbundles' | 'activities
   const { body: v } = await apsJson<Versioned>(ctx, {
     operation: `DA ${kind}/{id}/versions POST`,
     method: 'POST',
-    path: `${DA_PATH}/${kind}/${PROBE_NAME}/versions`,
+    path: `${DA_PATH}/${kind}/${encodeURIComponent(id)}/versions`,
     json: body,
   });
   if (!v || typeof v.version !== 'number') throw new ApsError(`DA ${kind}/{id}/versions POST`, 200, 'the answer carried no version');
@@ -79,11 +127,11 @@ async function createOrVersion(ctx: ApsContext, kind: 'appbundles' | 'activities
 }
 
 /** Point the alias at a version: PATCH it, or create it when it does not exist yet. */
-export async function setAlias(ctx: ApsContext, kind: 'appbundles' | 'activities', version: number): Promise<'moved' | 'created'> {
+export async function setAlias(ctx: ApsContext, kind: 'appbundles' | 'activities', id: string, version: number): Promise<'moved' | 'created'> {
   const res = await apsFetch(ctx, {
     operation: `DA ${kind}/{id}/aliases/{alias} PATCH`,
     method: 'PATCH',
-    path: `${DA_PATH}/${kind}/${PROBE_NAME}/aliases/${ALIAS}`,
+    path: `${DA_PATH}/${kind}/${encodeURIComponent(id)}/aliases/${ALIAS}`,
     json: { version },
     accept: [200, 404],
   });
@@ -92,7 +140,7 @@ export async function setAlias(ctx: ApsContext, kind: 'appbundles' | 'activities
   const created = await apsFetch(ctx, {
     operation: `DA ${kind}/{id}/aliases POST`,
     method: 'POST',
-    path: `${DA_PATH}/${kind}/${PROBE_NAME}/aliases`,
+    path: `${DA_PATH}/${kind}/${encodeURIComponent(id)}/aliases`,
     json: { id: ALIAS, version },
   });
   await created.body?.cancel();
@@ -192,8 +240,8 @@ export interface RegistrationResult {
   nickname: string;
   ownerHow: Owner['how'];
   ownerNote?: string;
-  appBundle: { version: number; created: boolean; alias: 'moved' | 'created' };
-  activity: { id: string; version: number; created: boolean; alias: 'moved' | 'created' };
+  appBundle: { id: string; version: number; created: boolean; alias: 'moved' | 'created' };
+  activities: Array<{ id: string; version: number; created: boolean; alias: 'moved' | 'created' }>;
   monthlyHours: { requested: number; reported: number | undefined };
 }
 
@@ -202,16 +250,20 @@ export async function register(ctx: ApsContext, zipPath: string, monthlyHours: n
   const settled = await ensureNickname(ctx, clientId, wantedNickname);
   const nickname = settled.owner;
 
-  const bundle = await createOrVersion(ctx, 'appbundles', {
+  const bundle = await createOrVersion(ctx, 'appbundles', APPBUNDLE_NAME, {
     engine: ENGINE,
-    description: 'flo2-rvt read-only probe for Revit 2024',
+    description: 'flo2-rvt probe and edit jobs for Revit 2024',
   });
   if (!bundle.uploadParameters) throw new ApsError('DA appbundles POST', 200, 'the answer carried no upload form');
   await uploadAppBundle(ctx, bundle.uploadParameters, zipPath);
-  const bundleAlias = await setAlias(ctx, 'appbundles', bundle.version);
+  const bundleAlias = await setAlias(ctx, 'appbundles', APPBUNDLE_NAME, bundle.version);
 
-  const activity = await createOrVersion(ctx, 'activities', activityBody(nickname));
-  const activityAlias = await setAlias(ctx, 'activities', activity.version);
+  const registered: RegistrationResult['activities'] = [];
+  for (const a of activities(nickname)) {
+    const activity = await createOrVersion(ctx, 'activities', a.id, a.body);
+    const alias = await setAlias(ctx, 'activities', a.id, activity.version);
+    registered.push({ id: `${nickname}.${a.id}+${ALIAS}`, version: activity.version, created: activity.created, alias });
+  }
 
   await apsFetch(ctx, {
     operation: 'DA servicelimits PUT',
@@ -228,8 +280,8 @@ export async function register(ctx: ApsContext, zipPath: string, monthlyHours: n
   const result: RegistrationResult = {
     nickname,
     ownerHow: settled.how,
-    appBundle: { version: bundle.version, created: bundle.created, alias: bundleAlias },
-    activity: { id: `${nickname}.${PROBE_NAME}+${ALIAS}`, version: activity.version, created: activity.created, alias: activityAlias },
+    appBundle: { id: APPBUNDLE_NAME, version: bundle.version, created: bundle.created, alias: bundleAlias },
+    activities: registered,
     monthlyHours: { requested: monthlyHours, reported: limits?.frontendLimits?.limitMonthlyProcessingTimeInHours },
   };
   if (settled.note) result.ownerNote = settled.note;

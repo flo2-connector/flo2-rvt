@@ -1,54 +1,78 @@
-// The one change-list schema: it accepts the three v0 change kinds, refuses
-// what it should, and both sides' generated types are current.
+// The one change-list schema: it accepts the three v0 change kinds, refuses what it
+// should, the server's own reading of it (zod's fromJSONSchema of the same file) agrees
+// with a JSON Schema validator (ajv) on every case, the edit job's limits hold on top of
+// it, and both sides' generated types are current. The cases are schema/test/change-lists.json,
+// which the add-in's tests (addin/tests) read too.
 
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { test } from 'node:test';
+import { describe, test } from 'node:test';
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import { csharpFor, schemaSha256, typescriptFor } from '../../scripts/gen-types.ts';
-import type { ChangeList } from '../src/types/change-list.ts';
+import { ChangeListShape, MAX_CHANGE_LIST_BYTES, MAX_REFERENCES, canonicalJson, checkChangeList, feetOf, sha256Hex } from '../src/change-list.ts';
 
 const schemaBytes = readFileSync(new URL('../../schema/change-list.schema.json', import.meta.url));
 const schema = JSON.parse(schemaBytes.toString('utf8')) as Record<string, unknown>;
 const validate = new Ajv2020({ allErrors: true, strict: true }).compile(schema);
 
-const GID = '2O2Fr$t4X7Zf8NOew3FLOH';
+type Case = { why: string; schema: boolean; accepted: boolean; list: unknown };
+const corpus = JSON.parse(readFileSync(new URL('../../schema/test/change-lists.json', import.meta.url), 'utf8')) as { cases: Case[] };
 
-const good: ChangeList = {
-  version: 0,
-  list_id: 'sample-1',
-  description: 'Made-up changes to the public sample model.',
-  changes: [
-    { kind: 'delete_elements_on_level', id: 'c1', level: { level_name: 'Level 2' } },
-    { kind: 'delete_elements_by_global_id', elements: [{ global_id: GID }, { global_id: '0K7w7JJcz3ShP$Rd0sfOmL' }] },
-    { kind: 'set_level_elevation', level: { level_name: 'Roof' }, elevation: { value: 6096, unit: 'mm' }, relative_to: 'project_origin' },
-    { kind: 'set_level_elevation', level: { global_id: GID }, elevation: { value: -9.333, unit: 'ft' }, relative_to: 'elevation_base' },
-  ],
-};
-
-test('the three v0 change kinds are accepted', () => {
-  assert.ok(validate(good), JSON.stringify(validate.errors));
+describe('the shared cases (schema/test/change-lists.json)', () => {
+  for (const c of corpus.cases) {
+    test(`${c.accepted ? 'accepted' : c.schema ? 'in the schema, past a limit' : 'refused'}: ${c.why}`, () => {
+      assert.equal(validate(c.list), c.schema, `ajv: ${JSON.stringify(validate.errors)}`);
+      assert.equal(ChangeListShape.safeParse(c.list).success, c.schema, 'zod, from the same schema file, agrees with ajv');
+      const checked = checkChangeList(c.list);
+      assert.equal(checked.ok, c.accepted, checked.ok ? '' : checked.errors.join('; '));
+    });
+  }
 });
 
-const bad: Array<[string, unknown]> = [
-  ['no version', { changes: good.changes }],
-  ['a later version', { ...good, version: 1 }],
-  ['no changes', { version: 0, changes: [] }],
-  ['an unknown kind', { version: 0, changes: [{ kind: 'move_wall', level: { level_name: 'Level 1' } }] }],
-  ['a GlobalId of the wrong length', { version: 0, changes: [{ kind: 'delete_elements_by_global_id', elements: [{ global_id: 'abc' }] }] }],
-  ['a level named both ways', { version: 0, changes: [{ kind: 'delete_elements_on_level', level: { level_name: 'Level 1', global_id: GID } }] }],
-  ['a unit outside the set', { version: 0, changes: [{ kind: 'set_level_elevation', level: { level_name: 'Level 1' }, elevation: { value: 1, unit: 'yd' }, relative_to: 'project_origin' }] }],
-  ['an elevation with no datum', { version: 0, changes: [{ kind: 'set_level_elevation', level: { level_name: 'Level 1' }, elevation: { value: 1, unit: 'm' } }] }],
-  ['a field the schema does not name', { ...good, script: 'doc.Delete(...)' }],
-  ['a field on a change the schema does not name', { version: 0, changes: [{ kind: 'delete_elements_on_level', level: { level_name: 'Level 1' }, csharp: 'x' }] }],
-  ['the same element twice', { version: 0, changes: [{ kind: 'delete_elements_by_global_id', elements: [{ global_id: GID }, { global_id: GID }] }] }],
-];
+const GID = '2O2Fr$t4X7Zf8NOew3FLOH';
+const gid = (n: number) => `0${n.toString(36).padStart(21, '0')}`;
 
-for (const [why, value] of bad) {
-  test(`refused: ${why}`, () => {
-    assert.equal(validate(value), false);
-  });
-}
+test('a list naming more than 20,000 elements in all is refused', () => {
+  const half = Array.from({ length: 10_000 }, (_, i) => ({ global_id: gid(i) }));
+  const other = Array.from({ length: 10_000 }, (_, i) => ({ global_id: gid(20_000 + i) }));
+  const fits = { version: 0, changes: [{ kind: 'delete_elements_by_global_id', elements: half }, { kind: 'delete_elements_by_global_id', elements: [{ global_id: GID }] }] };
+  const ok = checkChangeList(fits);
+  assert.ok(ok.ok, ok.ok ? '' : ok.errors.join('; '));
+  assert.equal(ok.ok && ok.references, 10_001);
+  const over = { version: 0, changes: [{ kind: 'delete_elements_by_global_id', elements: half }, { kind: 'delete_elements_by_global_id', elements: other }, { kind: 'delete_elements_by_global_id', elements: [{ global_id: GID }] }] };
+  assert.equal(validate(over), true, 'each change is within the schema');
+  const refused = checkChangeList(over);
+  assert.equal(refused.ok, false);
+  assert.match(refused.ok ? '' : refused.errors.join(' '), new RegExp(`names 20001 elements; the most one list may name is ${MAX_REFERENCES}`));
+});
+
+test('a list past 512 KiB in its canonical form is refused, even within the element count', () => {
+  const elements = (from: number) => Array.from({ length: 10_000 }, (_, i) => ({ global_id: gid(from + i) }));
+  const list = { version: 0, changes: [{ kind: 'delete_elements_by_global_id', elements: elements(0) }, { kind: 'delete_elements_by_global_id', elements: elements(10_000) }] };
+  const checked = checkChangeList(list);
+  assert.equal(checked.ok, false);
+  const why = checked.ok ? '' : checked.errors.join(' ');
+  assert.match(why, new RegExp(`the most is ${MAX_CHANGE_LIST_BYTES}`));
+  assert.doesNotMatch(why, /elements; the most/, '20,000 is within the count');
+});
+
+test('the canonical form sorts every key and drops whitespace, so both sides hash the same bytes', () => {
+  const a = { version: 0, changes: [{ level: { level_name: 'Roof' }, kind: 'delete_elements_on_level', id: 'c1' }] };
+  const b = JSON.parse('{ "changes": [ { "id": "c1", "kind": "delete_elements_on_level", "level": { "level_name": "Roof" } } ], "version": 0 }');
+  assert.equal(canonicalJson(a), '{"changes":[{"id":"c1","kind":"delete_elements_on_level","level":{"level_name":"Roof"}}],"version":0}');
+  assert.equal(canonicalJson(a), canonicalJson(b));
+  const checked = checkChangeList(b);
+  assert.ok(checked.ok);
+  assert.equal(checked.ok && checked.sha256, sha256Hex(canonicalJson(a)));
+  assert.equal(canonicalJson({ s: 'é "q" \\  ' }), '{"s":"é \\"q\\" \\\\  "}', "JSON.stringify's escaping, both sides");
+});
+
+test('lengths convert to feet as the add-in converts them (1 ft = 304.8 mm exactly)', () => {
+  assert.equal(feetOf({ value: 304.8, unit: 'mm' }), 1);
+  assert.equal(feetOf({ value: 3.048, unit: 'm' }), 10);
+  assert.equal(feetOf({ value: 18, unit: 'in' }), 1.5);
+  assert.equal(feetOf({ value: -9.333, unit: 'ft' }), -9.333);
+});
 
 test('the TypeScript types are generated from the schema as it is now', async () => {
   const sha = schemaSha256(schemaBytes);

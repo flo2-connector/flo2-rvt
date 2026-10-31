@@ -1,14 +1,28 @@
 # flo2-rvt
 
-flo2-rvt lets an agent working through [flo2.io](https://flo2.io) have real Revit, in Autodesk's cloud, read a person's Revit model (`.rvt`) and, in later versions, change it through a fixed vocabulary of changes. It is an MCP server written in TypeScript that drives Autodesk Platform Services' **Automation API** (Design Automation v3) on the person's **own** Autodesk app, with a short-lived token flo2.io hands it for each job.
+flo2-rvt lets an agent working through [flo2.io](https://flo2.io) have real Revit, in Autodesk's cloud, read a person's Revit model (`.rvt`) and change it through a fixed vocabulary of changes. It is an MCP server written in TypeScript that drives Autodesk Platform Services' **Automation API** (Design Automation v3) on the person's **own** Autodesk app, with a short-lived token flo2.io hands it for each job.
 
-**v0 is a read-only probe.** Real Revit 2024 opens the model and changes nothing. It returns three files, which flo2.io saves into the person's design as new files:
+It runs two jobs, both paid by processing time on the person's app, both confirmed by the person on flo2.io first:
+
+- **The probe** (v0) reads the model and changes nothing.
+- **The edit** (v1) applies a change list to the model and saves the result as a **new** `.rvt`. The person's model is never changed. The edit's output `.rvt` can be the next edit's input, so changes stack.
+
+**The probe.** Real Revit 2024 opens the model and changes nothing. It returns three files, which flo2.io saves into the person's design as new files:
 
 | File | What it holds |
 | --- | --- |
 | `report.json` | The levels with their elevations in feet and millimetres, the sheets by number and name, the linked files (Revit links and CAD links or imports), element counts by category, the Revit release the file was saved in and the engine's version and build, and the warnings stored in the model. |
 | `sheets.pdf` | Every printable sheet, in sheet-number order, in one PDF. Absent when the model has none. |
 | `model.ifc` | Revit's own IFC export: IFC4 Design Transfer View, with base quantities. |
+
+**The edit.** Real Revit 2024 opens the model, applies the change list in order, and returns up to four files, which flo2.io saves as new files beside the model:
+
+| File | What it holds |
+| --- | --- |
+| `report.json` | Per change: what it named and matched, what it deleted, what Revit deleted, changed or added on its own, the messages Revit raised, what it could not do, and whether it was applied, applied in part, rolled back or not applied. Then the levels after the edit, how the model was saved, and the model's stored warnings. Always written. |
+| `model.rvt` | The edited model, a **new** file: a new central model, with its worksets, when the input is workshared. Absent when no change was kept. |
+| `sheets.pdf` | The edited model's printable sheets in one PDF. Absent when it has none, or no change was kept. |
+| `model.ifc` | Revit's own IFC export of the edited model, with the probe's options. Absent when no change was kept. |
 
 flo2-rvt's design lives in reflow2, design `6ab9996ca4bdbc45` (reached through the hub); the settled choices behind it are in flo2's design.
 
@@ -21,11 +35,13 @@ agent ──tools/call──▶ flo2.io gateway ──127.0.0.1:8740, bearer─�
                           ◀──── signed URLs of the outputs ────────────┘
 ```
 
-1. `rvt_probe_start`: flo2-rvt makes (or finds) the person's transient bucket, streams the `.rvt` from flo2.io's short-lived download link into it through signed S3 upload URLs, checks the bytes against the size and SHA-256 flo2.io stated (no match, no job), and submits a WorkItem with `limitProcessingTimeSec`. Autodesk's Revit reads the input and writes the outputs into the same bucket with the same token.
+1. `rvt_probe_start` or `rvt_edit_start`: flo2-rvt makes (or finds) the person's transient bucket, streams the `.rvt` from flo2.io's short-lived download link into it through signed S3 upload URLs, checks the bytes against the size and SHA-256 flo2.io stated (no match, no job), uploads an edit's change list beside it, and submits a WorkItem with `limitProcessingTimeSec`. Autodesk's Revit reads the inputs and writes the outputs into the same bucket with the same token.
 2. `rvt_job_status`, polled: Design Automation's own state, passed through. On success, the status result carries signed download URLs of the outputs for the gateway, which downloads them, saves them add-only, and strips them before the agent sees the result.
 3. Autodesk deletes everything in a transient bucket after 24 hours.
 
-## The contract with flo2.io's gateway (v0)
+## The contract with flo2.io's gateway (v1)
+
+v1 is v0 with the edit job added: one more tool, `rvt_edit_start`, its outputs, and an edit's report summary on `rvt_job_status`. Nothing in v0 changed, so a v0 gateway still works for the probe.
 
 ### Transport
 
@@ -39,9 +55,12 @@ agent ──tools/call──▶ flo2.io gateway ──127.0.0.1:8740, bearer─�
 | Tool | Arguments | Result (`structuredContent`, also as JSON text) |
 | --- | --- | --- |
 | `rvt_probe_start` | `file`: string, the design file's name or id; `max_minutes`?: integer 1..30, default 15 | `{ job_id, state: "submitted", engine: "Autodesk.Revit+2024" }` |
-| `rvt_job_status` | `job_id`: string | `{ job_id, state, processing_seconds?, outputs?: [{ name, size }], report_summary?: { levels, sheets, links }, error? }` |
+| `rvt_edit_start` | `file`, as above; `change_list`: a change list ([below](#the-change-list)); `max_minutes`?, as above | `{ job_id, state: "submitted", engine: "Autodesk.Revit+2024", change_list_sha256 }` |
+| `rvt_job_status` | `job_id`: string | `{ job_id, state, processing_seconds?, outputs?: [{ name, size }], report_summary?, error? }`. A probe's `report_summary` is `{ levels, sheets, links }`; an edit's is `{ outcome, changes, applied, applied_in_part, rolled_back, not_applied, elements_deleted, model_saved }`. |
 
-`state` is Design Automation's own status, passed through: `pending`, `inprogress`, `success`, `cancelled`, `failedLimitDataSize`, `failedLimitProcessingTime`, `failedDownload`, `failedInstructions`, `failedUpload`, `failedUploadOptional`, and any it adds. `processing_seconds` runs from the start of the input download to the end of the output upload, as Autodesk counts its limit, rounded up. Both tools carry annotations: a `title`, `readOnlyHint: false`, `openWorldHint: true` (and `destructiveHint: false`; `idempotentHint` false for start, true for status).
+`state` is Design Automation's own status, passed through: `pending`, `inprogress`, `success`, `cancelled`, `failedLimitDataSize`, `failedLimitProcessingTime`, `failedDownload`, `failedInstructions`, `failedUpload`, `failedUploadOptional`, and any it adds. `processing_seconds` runs from the start of the input download to the end of the output upload, as Autodesk counts its limit, rounded up. Every tool carries annotations: a `title`, `readOnlyHint: false`, `openWorldHint: true` (and `destructiveHint: false`, since no job changes the person's file; `idempotentHint` false for the starts, true for status).
+
+`change_list_sha256` is the SHA-256 of the change list in its canonical form (every object's keys sorted, no whitespace): the exact bytes flo2-rvt uploads as `changes.json`, which the add-in reads and names again in `report.json`. flo2.io computes the same form, so it can check that what runs is what the person approved.
 
 ### Hidden context
 
@@ -58,7 +77,7 @@ The gateway sets `params._meta["flo2.io/job"]` on every `tools/call`:
 ```
 
 - A call without it, or with it malformed, is refused (a tool error the agent reads). The agent's arguments are untrusted and bounded; everything that decides what happens at Autodesk comes from this context.
-- `input` is required on `rvt_probe_start` only. The file must be a `.rvt`.
+- `input` is required on `rvt_probe_start` and `rvt_edit_start`. The file must be a `.rvt`.
 - `expires_at` may be an ISO-8601 time, or seconds (or milliseconds) since the epoch.
 - **The token must outlive the job.** Autodesk's Revit stores the outputs with the same token when the job ends, so `rvt_probe_start` refuses a token valid for less than the job's time limit plus 600 s. A freshly minted two-legged token (3,599 s) covers the longest job (1,800 s).
 - The time limit is the lower of `max_minutes × 60` and `limits.max_processing_sec`.
@@ -68,7 +87,7 @@ The gateway sets `params._meta["flo2.io/job"]` on every `tools/call`:
 
 When a job reaches `success`, the status result carries:
 
-- `_meta["flo2.io/outputs"] = [{ name, signed_url, expires_at, size, content_type }]`, one per output that exists (`report.json` `application/json`, `sheets.pdf` `application/pdf`, `model.ifc` `application/x-step`). The URLs stay usable for 15 minutes.
+- `_meta["flo2.io/outputs"] = [{ name, signed_url, expires_at, size, content_type }]`, one per output that exists (`report.json` `application/json`, `sheets.pdf` `application/pdf`, `model.ifc` `application/x-step`, and an edit's `model.rvt` `application/octet-stream`). An optional output the job did not write is left off the list. The URLs stay usable for 15 minutes.
 - `_meta["flo2.io/usage"] = { processing_seconds, workitem_id }`.
 
 `failedUploadOptional` (an optional output could not be stored) carries the same two keys for the outputs that were stored.
@@ -77,8 +96,8 @@ When a job reaches `success`, the status result carries:
 
 - `job_id`: a v4 uuid flo2-rvt mints before the upload.
 - Bucket key: `flo2rvt-` + the lowercased client id, reduced to OSS's `[-_.a-z0-9]` and cut to fit 128 characters, + `-t`. Transient (24 h).
-- Objects: `<job_id>/input.rvt`, `<job_id>/report.json`, `<job_id>/sheets.pdf`, `<job_id>/model.ifc`, and **`<job_id>/workitem.json`**, a small job record (the WorkItem id, the activity, the time limit, when it was submitted). The WorkItem id only exists after the inputs and outputs are named, so it cannot be encoded in the `job_id`; the record is how a status call after a restart, with the `job_id` and a fresh token alone, finds the WorkItem. An in-memory cache saves the read while the process lives.
-- Activity: `<nickname>.Flo2RvtProbe+prod`, where the nickname is what `GET /forgeapps/me` answers: the app's nickname, or its client id when it has none.
+- Objects: `<job_id>/input.rvt`, an edit's `<job_id>/changes.json`, `<job_id>/report.json`, `<job_id>/sheets.pdf`, `<job_id>/model.ifc`, an edit's `<job_id>/model.rvt`, and **`<job_id>/workitem.json`**, a small job record (the WorkItem id, the activity, the job, an edit's `change_list_sha256`, the time limit, when it was submitted). The WorkItem id only exists after the inputs and outputs are named, so it cannot be encoded in the `job_id`; the record is how a status call after a restart, with the `job_id` and a fresh token alone, finds the WorkItem and knows which job's outputs to list (a record without `job` is a probe's). An in-memory cache saves the read while the process lives.
+- Activities: `<nickname>.Flo2RvtProbe+prod` and `<nickname>.Flo2RvtEdit+prod`, where the nickname is what `GET /forgeapps/me` answers: the app's nickname, or its client id when it has none. Both run the one AppBundle, `<nickname>.Flo2RvtProbe+prod`.
 
 ### Token scopes the gateway requests
 
@@ -96,19 +115,75 @@ bucket:create bucket:read data:create data:write data:read code:all
 
 ## The change list
 
-`schema/change-list.schema.json` is the one JSON Schema of the change list an agent will hand an edit job: version 0, the element reference (an IFC GlobalId, or a level by name or by its storey's GlobalId), and the first three change kinds: `delete_elements_on_level`, `delete_elements_by_global_id` and `set_level_elevation`. The schema accepts them; **no edit job runs them in v0.** `npm run gen` builds both sides' types from it: `server/src/types/change-list.ts` and `addin/Generated/ChangeList.g.cs`. The add-in's build refuses C# types generated from another version of the schema.
+`schema/change-list.schema.json` is the one JSON Schema of the change list an agent hands the edit job: version 0, the element reference (an IFC GlobalId, or a level by name or by its storey's GlobalId), and three change kinds: `delete_elements_on_level`, `delete_elements_by_global_id` and `set_level_elevation`. `npm run gen` builds both sides' types from it: `server/src/types/change-list.ts` and `addin/Generated/ChangeList.g.cs`. The add-in's build refuses C# types generated from another version of the schema.
+
+```json
+{
+  "version": 0,
+  "list_id": "sample-1",
+  "description": "Take out the basement and lower the roof.",
+  "changes": [
+    { "kind": "delete_elements_on_level", "id": "c1", "level": { "level_name": "Level B1" } },
+    { "kind": "delete_elements_by_global_id", "id": "c2", "elements": [{ "global_id": "2O2Fr$t4X7Zf8NOew3FLOH" }] },
+    { "kind": "set_level_elevation", "id": "c3", "level": { "level_name": "Roof" },
+      "elevation": { "value": 6096, "unit": "mm" }, "relative_to": "project_origin" }
+  ]
+}
+```
+
+It is checked three times before Revit acts on it, each time against the same rules: by flo2.io's gateway (before the person is asked), by the server (`server/src/change-list.ts`, which reads the schema file itself through zod's `fromJSONSchema`), and by the add-in (`addin/src/Edit/Logic/ChangeListCheck.cs`, which walks the JSON with closed key sets, so a key the add-in would not read is refused rather than skipped). On top of the schema all three hold the same limits: at most 512 KiB in canonical form, at most 20,000 GlobalIds in all, and no elevation beyond Revit's model extent (20 miles from the internal origin). `schema/test/change-lists.json` holds the cases and the verdicts every side must reach; the server's and the add-in's tests both read it.
+
+### What each change kind does
+
+Changes run in order, **each in its own Revit transaction**. Lengths are converted to Revit's foot exactly (1 ft = 304.8 mm).
+
+**A level** is named by `level_name`, matched exactly (case and spaces count), or by `global_id`, the GlobalId of the `IfcBuildingStorey` Revit's exporter writes for it (see below). A level that is not found makes the change `not_applied`, and the report lists the model's levels.
+
+**`delete_elements_on_level`** deletes every **model element on the level**, and keeps the level. An element is on level L when it is a model element and either its Revit level is L (`Element.LevelId`) or one of its base or reference level parameters is L: a wall's base constraint, a column's base level, a level-based family's level, a beam's or brace's reference level, a floor's level, a footprint roof's base level, a stair's or railing's base level, a duct's or pipe's reference level, a room's level, a group's level, a part's base level (`addin/src/Edit/LevelRules.cs`).
+- *A model element*: not a type, not drawn in one view only (annotation, detail items), in a category of Revit's Model kind, and not a level, grid, reference plane, base point, Revit link or CAD import, view, or part of a sketch.
+- *Hosted elements go with their host*: a door or window in a deleted wall is deleted by Revit with it (Revit's `Document.Delete` deletes "any elements that are totally dependent upon" the ones named, and pinned elements "with no warnings"). The report lists them under `deleted_by_revit`.
+- *A member of a group* is never deleted alone: it goes with its group, which is on L by the same rule.
+- *Elements that only reach the level from below are kept*: a wall whose top constraint is L, a column whose top level is L, a stair whose top level is L. So are views, sheets, schedules and tags of elements that are kept, and the level itself. A schedule-only level (a beam's "Schedule Level") is not read.
+- Elements Revit says cannot be deleted (`DocumentValidation.CanDeleteElement`) are listed under `could_not`, and the rest are deleted: the change is then `applied_in_part`.
+
+**`delete_elements_by_global_id`** deletes the elements its GlobalIds name. A GlobalId that names no element is listed under `not_found`; one whose element an earlier change already deleted, under `already_gone` (done, not missing); one that names a level, a type, a view, a link, a group member or anything else that is not a model element, or that two elements carry, under `could_not` with the reason. What is hosted in a deleted element goes with it, as above.
+
+**`set_level_elevation`** sets the level's elevation, `relative_to` either `project_origin` (Revit's `Level.ProjectElevation`) or `elevation_base` (Revit's `Level.Elevation`, measured from the level type's Elevation Base: the project base point or the survey point). Revit can set only `Elevation`; a target from the project origin moves it by the same amount, since the two differ by a fixed offset. **What is attached to the level moves with it, by Revit's own regeneration**: elements whose base or reference level it is keep their offset from it (the report counts them as `attached`), elements whose top is constrained to it change height (`top_constrained`), and hosted elements follow their hosts. The report gives the level's elevation before and after, both ways, in feet and millimetres, and every element Revit modified. A level already at that elevation is `not_applied`.
+
+### How an IFC GlobalId maps to a Revit element
+
+As Autodesk's open-source IFC exporter for Revit maps them ([revit-ifc](https://github.com/Autodesk/revit-ifc), branch `Release_24.x.x` at commit `887c3d3e`, `GUIDUtil.cs`), with its default options (the probe's and the edit's exports use them):
+- **An element's GlobalId** is its `IfcGUID` parameter (`BuiltInParameter.IFC_GUID`; `IFC_TYPE_GUID` for a type) when that holds a valid IFC GUID and the element is not a curtain wall; otherwise Revit's export id for it, `ExportUtils.GetExportId(document, id)`, compressed to IFC's 22-character form (`addin/src/Edit/Logic/IfcGuid.cs`). An `IfcGUID` value is set when the model was imported from IFC or exported with "store the IFC GUID" on.
+- **A level's storey GlobalId** is `ExporterIFCUtils.CreateAlternateGUID(level)`.
+- The add-in indexes every element this way **before** any change runs. A GlobalId matches the element that has it as its exported GlobalId first; failing that, an element whose export id or `IfcGUID` value it is (an IFC exported with other settings); two elements either way is refused as ambiguous (Revit copies the `IfcGUID` parameter with a copied element, and the exporter then gives the copy a fresh GlobalId, in an order the add-in cannot know).
+- What the exporter writes that is not an element (openings, the parts of a split wall, a curtain wall's sub-elements, the project, site and building) matches nothing, and is reported as not found.
+
+### A failed change rolls back alone
+
+Revit's failure processing is answered by the add-in, never by a person: every message is recorded in `revit_messages`. **A warning is dismissed and the change is kept. An error rolls the whole change back**, with no default resolution chosen on anyone's behalf (Revit's resolutions for errors are edits of their own, such as "delete the element", that the list did not ask for); so does an exception from the Revit API. Then the job goes on to the next change. Each change's `status` is `applied`, `applied_in_part`, `rolled_back` or `not_applied`; the list's `outcome` is `all_applied`, `partly_applied`, `none_applied`, or `refused` when the list itself could not be read. The model is exported and saved when at least one change was kept, and not otherwise.
+
+This was chosen over stopping at the first failure because a list is approved as a set of independent edits, each reported on its own, and the input is never changed: a later change that depended on a failed one says so itself (its level or elements are not found). Changes that must stand or fall together go in a list of their own, whose `outcome` then says whether all of them were applied.
+
+### How the result is saved
+
+The job box opens a workshared input **detached from its central, with its worksets preserved** (the probe's `report.json` showed `is_workshared: true, opened_detached: true` for such a model). The edit then saves it once, as a new file, `model.rvt` (`addin/src/Edit/SaveResult.cs`):
+- **Workshared input: saved as a new central model**, with `WorksharingSaveAsOptions.SaveAsCentral = true`, then `WorksharingUtils.RelinquishOwnership` of everything, and the report lists each user workset and who Revit says owns it after the save.
+- **Not workshared: saved as a plain file**, with no worksharing options.
+
+Verified against Autodesk's documentation: Revit 2024's [`Document.SaveAs(String, SaveAsOptions)`](https://rvtdocs.com/2024/df74c7e1-a98a-7751-676a-e9b074566f62) refuses a document that "was opened detached" unless `WorksharingSaveAsOptions.SaveAsCentral` is true, and refuses worksharing options on a document that is not workshared; the 2024 API's own notes for `SaveAsCentral` say the same; Autodesk's post on [worksharing in Design Automation for Revit](https://aps.autodesk.com/blog/worksharing-model-support-revit-design-automation-0) (2020) gives the same recipe (save as central, relinquish), and says Design Automation opens workshared models detached with their worksets preserved. Assumed until the first live edit: that the save and the relinquish behave on Design Automation as they do in desktop Revit, and what the architect sees on opening it. A file-based central keeps its incremental backups and ownership in a backup folder beside it (the 2024 API's notes on `SaveAsOptions.MaximumBackups`), which is not part of the output; the architect opens `model.rvt` the way any workshared model received from outside the office is opened: detached, saved as their own new central.
 
 ## The add-in
 
 `addin/` is a Revit 2024 add-in for the Automation API (C#, .NET Framework 4.8): an `IExternalDBApplication` that answers `DesignAutomationBridge.DesignAutomationReadyEvent`, packaged as an AppBundle zip (`Flo2RvtProbe.bundle/PackageContents.xml`, `Contents/Flo2RvtProbe.addin`, `Contents/Flo2RvtProbe.dll`).
 
-- A small job registry (Autodesk's registered-tool pattern from aps-sample-revit-mcp-tools-bundle) holds one job, `probe`. Edit jobs will join it one change kind at a time.
-- The job box opens `input.rvt` from the working folder itself (detached from its central, all worksets open, when the file is workshared), runs the job, and **closes the model without saving**.
-- The probe reads the levels, sheets, links, element counts, versions and stored warnings; prints the sheets with `Document.Export` and `PDFExportOptions` (`Combine`); exports IFC with `IFCExportOptions` (`IFC4DTV`, `ExportBaseQuantities`); and writes `report.json` last, recording any export that failed. Each export runs inside a transaction that is **rolled back**: Revit requires an open transaction for IFC export. Nothing is ever committed; CI fails the build if `addin/src` holds a `Commit`, `Save`, `SaveAs` or `SynchronizeWithCentral` call.
+- A small job registry (Autodesk's registered-tool pattern from aps-sample-revit-mcp-tools-bundle) holds two jobs, `probe` and `edit`. The working folder says which runs: `changes.json`, the edit Activity's required input, means the edit (`addin/src/Edit/Logic/JobSelection.cs`). The probe Activity has no parameter that could put one there.
+- The job box opens `input.rvt` from the working folder itself (detached from its central, all worksets open, when the file is workshared), runs the job, and **closes the input without saving**. The edit writes its result as a new file before that, through its one save path.
+- The probe reads the levels, sheets, links, element counts, versions and stored warnings; prints the sheets with `Document.Export` and `PDFExportOptions` (`Combine`); exports IFC with `IFCExportOptions` (`IFC4DTV`, `ExportBaseQuantities`); and writes `report.json` last, recording any export that failed. Each export runs inside a transaction that is **rolled back**: Revit requires an open transaction for IFC export. The probe commits nothing.
+- The edit runs each change through `addin/src/Edit/ChangeRunner.cs`, the only file that commits a transaction, and saves through `addin/src/Edit/SaveResult.cs`, the only file that saves, with exactly one `SaveAs`. CI runs `scripts/addin-save-guard.ts` before the build: it fails if any other file commits, saves, synchronizes or relinquishes, if the save path holds more than one `SaveAs` or commits, or if the probe's files name the edit's.
 - A heartbeat writes to the job log every 20 seconds, so a long open or export is not taken for an idle job.
 - It builds against reference assemblies from NuGet, on any OS: `Nice3point.Revit.Api.RevitAPI` 2024.3.60 (MIT packaging of Autodesk's reference assembly), `Autodesk.Forge.DesignAutomation.Revit` 2024.0.2 (Autodesk's bridge) and `Microsoft.NETFramework.ReferenceAssemblies.net48`. None is shipped in the bundle; the engine provides them.
 
-It has not been run in Revit yet: CI proves it compiles and that the bundle has the expected layout. The first live probe is its first run.
+The probe ran live once, on 2026-10-31 (108 s). The edit has not run in Revit yet: CI proves it compiles, that the bundle has the expected layout, and that its pure logic passes `addin/tests`; the first live edit is its first run.
 
 ## Running the server
 
@@ -134,10 +209,12 @@ Node 22.18 or later runs the TypeScript directly. On flo2.io it runs as its own 
    APS_NICKNAME=my_flo2rvt_app APS_MONTHLY_HOURS=2 npx flo2-rvt register --bundle addin/dist/Flo2RvtProbe.bundle.zip
    ```
 
+   For a new add-in (such as 0.2.0, which adds the edit), run the same command with the new bundle: it adds a version of the AppBundle, a version of the probe Activity, creates the edit Activity (or a version of it), and moves every `prod` alias. The nickname and the cap are kept.
+
    In this order:
    1. **The nickname, first.** Autodesk lets an app take a nickname only while it has no AppBundle or Activity ([Task 3, Create a Nickname](https://aps.autodesk.com/en/docs/design-automation/v3/tutorials/revit/step3-create-nickname/)). On a fresh app it sets `APS_NICKNAME` (letters, digits and underscores; default `flo2rvt_` and the first twelve letters and digits of the client id, lowercased) with `PATCH /forgeapps/me`. Nicknames are global: a taken one stops the run before anything is created, and asks for another `APS_NICKNAME`. A nickname already set is kept. An app that already has data and no nickname carries on with its client id as the owner prefix: setting one then would need `DELETE /forgeapps/me`, which deletes everything on the app, and this command never calls it.
-   2. The AppBundle, uploaded as a new AppBundle or a new version of it, and its `prod` alias.
-   3. The `Flo2RvtProbe` Activity on the `Autodesk.Revit+2024` engine, named `<owner>.Flo2RvtProbe+prod`, and its `prod` alias.
+   2. The AppBundle, uploaded as a new AppBundle or a new version of it, and its `prod` alias. One AppBundle, `Flo2RvtProbe`, carries both jobs.
+   3. The `Flo2RvtProbe` and `Flo2RvtEdit` Activities on the `Autodesk.Revit+2024` engine, named `<owner>.Flo2RvtProbe+prod` and `<owner>.Flo2RvtEdit+prod`, each with its `prod` alias. The edit Activity takes the model (`rvtFile`, `input.rvt`) and the change list (`changes`, `changes.json`, required), and puts `report.json` (required), `model.rvt`, `sheets.pdf` and `model.ifc` (each optional).
    4. Autodesk's own monthly processing cap on the app (`frontendLimits.limitMonthlyProcessingTimeInHours`, `APS_MONTHLY_HOURS`, default 2), read back.
 
    It prints the owner prefix and how it was settled, each version and alias, and the cap Autodesk reports. flo2-rvt's server reads the same prefix from `GET /forgeapps/me` for every job.
@@ -148,7 +225,9 @@ Node 22.18 or later runs the TypeScript directly. On flo2.io it runs as its own 
 ```sh
 npm ci
 npm run lint && npm run typecheck && npm run gen:check && npm test
+node scripts/addin-save-guard.ts   # the add-in commits and saves only on the edit job's one path
 dotnet build addin -c Release      # the .NET SDK (10.0) builds the net48 add-in on Linux too
+dotnet run --project addin/tests/Flo2RvtLogic.Tests.csproj -c Release   # the add-in's pure logic, on .NET 10
 ```
 
 The tests cost nothing and touch no network: Autodesk is a loopback stand-in that answers with responses recorded from Autodesk's own services (`server/test/fixtures/autodesk/`, each naming its source), and the monthly check's tests replay recorded GitHub, NuGet, npm and documentation responses. Test data uses Autodesk's public sample model's name and made-up values.
@@ -166,7 +245,7 @@ This repository is public. It never names or holds a person's model, building, a
 
 ## Later
 
-- Edit jobs: the change list run by the add-in (deleting elements, setting a level's elevation), saving a **new** `.rvt`; Autodesk's aps-count-delete-walls and aps-auto-delete-walls samples are the model for the first kind.
+- More change kinds, one at a time as the loop needs them, each a schema version.
 - Activity signing ([aps-designautomation-signer](https://github.com/autodesk-platform-services/aps-designautomation-signer)), so that only payloads signed by flo2.io run. Not in v0: Autodesk requires the signature only for WorkItems submitted with a three-legged token, v0 submits with the app's own two-legged token under its own nickname, and signing needs a long-lived private key that flo2-rvt, which holds only a per-job token, must not hold.
 - Running standalone on a person's own machine with their own keys, shipped as a plugin, after the first live probe.
 

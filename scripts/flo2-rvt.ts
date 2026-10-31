@@ -8,10 +8,11 @@
 //       First settle the app's nickname: on an app with no data, set it
 //       (APS_NICKNAME, default flo2rvt_ and the start of the client id); keep one
 //       already set; on an app with data and no nickname, use the client id.
-//       Then upload the AppBundle, create or update the Activity, point both
-//       `prod` aliases at the new versions, and set Autodesk's monthly
-//       processing cap (APS_MONTHLY_HOURS, default 2). Run it once, and again
-//       for a new add-in. It never calls DELETE /forgeapps/me.
+//       Then upload the AppBundle (one, for both jobs), create or update the
+//       two Activities (Flo2RvtProbe and Flo2RvtEdit), point every `prod`
+//       alias at the new versions, and set Autodesk's monthly processing cap
+//       (APS_MONTHLY_HOURS, default 2). Run it once, and again for a new
+//       add-in. It never calls DELETE /forgeapps/me.
 //
 //   flo2-rvt engines
 //       List Design Automation's Revit engines, beside the lifecycle dates
@@ -100,10 +101,10 @@ export async function main(argv: string[], io: CliIo): Promise<number> {
     const how = { existing: 'already set', set: 'set now, before anything was created', client_id: 'none; the client id is the owner' }[r.ownerHow];
     io.out(`Owner: ${r.ownerHow === 'client_id' ? 'the client id' : r.nickname} (nickname ${how}).`);
     if (r.ownerNote) io.out(r.ownerNote);
-    io.out(`AppBundle Flo2RvtProbe: ${r.appBundle.created ? 'created' : 'new version'} ${r.appBundle.version}; alias prod ${r.appBundle.alias} to it.`);
-    io.out(`Activity ${r.activity.id}: ${r.activity.created ? 'created' : 'new version'} ${r.activity.version}; alias prod ${r.activity.alias} to it.`);
+    io.out(`AppBundle ${r.appBundle.id}: ${r.appBundle.created ? 'created' : 'new version'} ${r.appBundle.version}; alias prod ${r.appBundle.alias} to it.`);
+    for (const a of r.activities) io.out(`Activity ${a.id}: ${a.created ? 'created' : 'new version'} ${a.version}; alias prod ${a.alias} to it.`);
     io.out(`Monthly processing cap: asked for ${r.monthlyHours.requested} h; Autodesk now reports ${r.monthlyHours.reported ?? 'no value'} h.`);
-    io.out('Done. flo2.io can now start probes on this app.');
+    io.out('Done. flo2.io can now start probes and edits on this app.');
     return 0;
   }
   if (command === 'engines') {

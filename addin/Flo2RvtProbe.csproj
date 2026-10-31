@@ -9,6 +9,11 @@
 
     `dotnet build -c Release` also checks that the generated change-list types match
     ../schema/change-list.schema.json, and packs dist/Flo2RvtProbe.bundle.zip.
+
+    One AppBundle, two jobs: the read-only probe and the edit (src/Edit). It keeps the
+    name Flo2RvtProbe, the AppBundle id it was first registered under. The pure logic
+    (src/Edit/Logic, src/Edit/EditReport.cs, src/Probe/ProbeReport.cs) is also compiled
+    by tests/Flo2RvtLogic.Tests.csproj, on .NET 10, and run in CI.
   -->
 
   <PropertyGroup>
@@ -16,7 +21,7 @@
     <PlatformTarget>x64</PlatformTarget>
     <AssemblyName>Flo2RvtProbe</AssemblyName>
     <RootNamespace>Flo2Rvt.Addin</RootNamespace>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <LangVersion>7.3</LangVersion>
     <Nullable>disable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
@@ -34,6 +39,8 @@
   <ItemGroup>
     <!-- Revit 2024's RevitAPI.dll, compile-time only (MIT packaging; the assembly is Autodesk's). -->
     <PackageReference Include="Nice3point.Revit.Api.RevitAPI" Version="2024.3.60" PrivateAssets="all" ExcludeAssets="runtime" />
+    <!-- Revit 2024's RevitAPIIFC.dll, compile-time only, for ExporterIFCUtils.CreateAlternateGUID (a storey's IFC GlobalId). -->
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPIIFC" Version="2024.3.60" PrivateAssets="all" ExcludeAssets="runtime" />
     <!-- Autodesk's DesignAutomationBridge for the Revit 2024 engine, compile-time only. -->
     <PackageReference Include="Autodesk.Forge.DesignAutomation.Revit" Version="2024.0.2" PrivateAssets="all" ExcludeAssets="runtime" />
     <!-- .NET Framework 4.8 reference assemblies, so the add-in builds without Windows. -->
@@ -42,6 +49,14 @@
 
   <ItemGroup>
     <Reference Include="System.Runtime.Serialization" />
+    <Reference Include="System.Xml" />
+    <Reference Include="System.Xml.Linq" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The logic tests are their own project (net10.0), never part of the add-in. -->
+    <Compile Remove="tests/**" />
+    <None Remove="tests/**" />
   </ItemGroup>
 
   <ItemGroup>

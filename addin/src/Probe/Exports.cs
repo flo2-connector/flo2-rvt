@@ -1,4 +1,5 @@
-// sheets.pdf and model.ifc. Each export runs inside a transaction that is
+// sheets.pdf and model.ifc, for the probe and the edit job alike (the edit job exports
+// the model as its changes left it). Each export runs inside a transaction that is
 // ROLLED BACK, never committed: IFC export requires an open transaction (the
 // Revit API's own remark on Document.Export(String, String, IFCExportOptions):
 // "Exporting to IFC requires that document is modifiable, therefore there must
@@ -38,7 +39,7 @@ namespace Flo2Rvt.Addin.Probe
                 .ToList();
         }
 
-        public static ExportResult Pdf(Document doc, string folder, IList<ViewSheet> sheets)
+        public static ExportResult Pdf(Document doc, string folder, IList<ViewSheet> sheets, string job)
         {
             var result = new ExportResult();
             if (sheets.Count == 0)
@@ -48,7 +49,7 @@ namespace Flo2Rvt.Addin.Probe
             }
             var options = new PDFExportOptions { FileName = PdfName, Combine = true };
             IList<ElementId> ids = sheets.Select(s => s.Id).ToList();
-            using (var tx = new Transaction(doc, "flo2-rvt probe: PDF export (rolled back)"))
+            using (var tx = new Transaction(doc, "flo2-rvt " + job + ": PDF export (rolled back)"))
             {
                 tx.Start();
                 try
@@ -67,7 +68,7 @@ namespace Flo2Rvt.Addin.Probe
             return result;
         }
 
-        public static ExportResult Ifc(Document doc, string folder)
+        public static ExportResult Ifc(Document doc, string folder, string job)
         {
             var result = new ExportResult { IfcVersion = "IFC4DTV", BaseQuantities = true };
             var options = new IFCExportOptions
@@ -77,7 +78,7 @@ namespace Flo2Rvt.Addin.Probe
                 WallAndColumnSplitting = false,
             };
             bool ok;
-            using (var tx = new Transaction(doc, "flo2-rvt probe: IFC export (rolled back)"))
+            using (var tx = new Transaction(doc, "flo2-rvt " + job + ": IFC export (rolled back)"))
             {
                 tx.Start();
                 try

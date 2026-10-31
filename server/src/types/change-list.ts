@@ -1,4 +1,4 @@
-// GENERATED from schema/change-list.schema.json (sha256 5b0d486061fdb7f3bf14bf4be319c4257e7d21fc793718dfd01673894e8ff151) by scripts/gen-types.ts.
+// GENERATED from schema/change-list.schema.json (sha256 8b8ddf4668121c126c412c17708cea76c781b254ee4d8128a4a5e1bf9e8152dd) by scripts/gen-types.ts.
 // Do not edit: change the schema and run `npm run gen`.
 
 /**
@@ -23,7 +23,7 @@ export type ChangeId = string;
  */
 export type LevelReference = LevelNameReference | GlobalIdReference;
 /**
- * An IFC GlobalId: 22 characters of IFC's base-64 alphabet, as Revit's own IFC exporter writes it for the element.
+ * An IFC GlobalId: 22 characters of IFC's base-64 alphabet, as Revit's own IFC exporter writes it for the element: the element's IfcGUID parameter when it holds a valid one (never for a curtain wall), otherwise Revit's export id for the element (ExportUtils.GetExportId), compressed. For a level, the GlobalId of the IfcBuildingStorey Revit exports for it.
  *
  * This interface was referenced by `ChangeList`'s JSON-Schema
  * via the `definition` "IfcGlobalId".
@@ -31,7 +31,7 @@ export type LevelReference = LevelNameReference | GlobalIdReference;
 export type IfcGlobalId = string;
 
 /**
- * A list of changes for one Revit model, in flo2-rvt's fixed vocabulary. The agent writes only this data; one reviewed add-in maps each change kind to the Revit API. Version 0 defines the envelope, the element reference and the first three change kinds. The schema accepts them, but no edit job runs them in v0: the only job is the read-only probe.
+ * A list of changes for one Revit model, in flo2-rvt's fixed vocabulary. The agent writes only this data; one reviewed add-in maps each change kind to the Revit API. Version 0 defines the envelope, the element reference and three change kinds, which flo2-rvt's edit job runs in order, each in its own transaction, saving the result as a NEW .rvt and never changing the input.
  */
 export interface ChangeList {
   /**
@@ -59,7 +59,7 @@ export interface ChangeList {
   changes: [Change, ...Change[]];
 }
 /**
- * Delete every model element hosted on, or associated with, the level. The level itself is kept.
+ * Delete every model element whose level is this level: its Revit level (Element.LevelId), or its base or reference level (a wall's base constraint, a column's base level, a beam's reference level, a stair's or railing's base level, a duct's or pipe's reference level, a group's or a part's base level). Elements hosted in them (doors and windows in a deleted wall) are deleted by Revit with their host, and the report names them. Elements that only reach the level from below (a wall or column whose TOP is this level) are kept, as are views, sheets, annotation, links and imports, and the level itself. A member of a group goes with its group, never alone.
  *
  * This interface was referenced by `ChangeList`'s JSON-Schema
  * via the `definition` "DeleteElementsOnLevel".
@@ -70,7 +70,7 @@ export interface DeleteElementsOnLevel {
   level: LevelReference;
 }
 /**
- * A level named by its name in the Revit model, matched exactly.
+ * A level named by its name in the Revit model, matched exactly (case and spaces count).
  *
  * This interface was referenced by `ChangeList`'s JSON-Schema
  * via the `definition` "LevelNameReference".
@@ -88,7 +88,7 @@ export interface GlobalIdReference {
   global_id: IfcGlobalId;
 }
 /**
- * Delete the elements named by their IFC GlobalIds.
+ * Delete the elements named by their IFC GlobalIds. Each must name one model element; a level, a type, a view, a link or a member of a group is refused by name in the report, and a GlobalId that names no element is listed as not found. Revit deletes what is hosted in them with them.
  *
  * This interface was referenced by `ChangeList`'s JSON-Schema
  * via the `definition` "DeleteElementsByGlobalId".
@@ -103,7 +103,7 @@ export interface DeleteElementsByGlobalId {
   elements: [GlobalIdReference, ...GlobalIdReference[]];
 }
 /**
- * Set a level's elevation. Hosted elements follow their level, as they do in Revit.
+ * Set a level's elevation. What is on the level moves with it, as it does in Revit: elements whose base or reference level it is keep their offset from it, elements whose top is constrained to it change height, and hosted elements follow their hosts.
  *
  * This interface was referenced by `ChangeList`'s JSON-Schema
  * via the `definition` "SetLevelElevation".
@@ -119,7 +119,7 @@ export interface SetLevelElevation {
   relative_to: 'project_origin' | 'elevation_base';
 }
 /**
- * A length with its unit. The add-in converts it to Revit's internal feet.
+ * A length with its unit. The add-in converts it to Revit's internal feet (1 ft = 304.8 mm exactly).
  *
  * This interface was referenced by `ChangeList`'s JSON-Schema
  * via the `definition` "Length".

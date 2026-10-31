@@ -1,5 +1,8 @@
 // A registry of the jobs the add-in can run, and the one place a model is opened
-// and closed. A job never opens, saves or closes the document itself.
+// and closed. A job never opens or closes the document itself, and the input model is
+// never saved: it is closed without saving whatever the job did. The edit job writes its
+// result as a NEW file, through its one save path (Edit/SaveResult.cs), before the box
+// closes the input.
 //
 // Adapted from Autodesk's registered-tool pattern in aps-sample-revit-mcp-tools-bundle
 // (github.com/autodesk-platform-services/aps-sample-revit-mcp-tools-bundle, commit
@@ -7,7 +10,8 @@
 // RevitMcpToolBox.cs, RevitMcpToolBoxBuilder.cs). Copyright (c) 2026 Autodesk, Inc.
 // MIT License; see THIRD_PARTY_NOTICES.md. Changes: C# 7.3 for .NET Framework 4.8; the model is
 // a local .rvt in the working folder, not a cloud model; workshared files are opened detached;
-// and v0 closes every document without saving: no job may declare that it saves.
+// the job is chosen by the files the Activity handed over (Edit/Logic/JobSelection.cs); and the
+// input document is always closed without saving.
 
 using System;
 using System.Collections.Generic;
@@ -105,6 +109,14 @@ namespace Flo2Rvt.Addin.Jobs
             return new JobBoxBuilder(data);
         }
 
+        /// <summary>Run the job the working folder's files call for (Edit/Logic/JobSelection.cs).</summary>
+        public bool ExecuteForWorkingFolder()
+        {
+            string folder = Directory.GetCurrentDirectory();
+            bool hasChangeList = File.Exists(Path.Combine(folder, Flo2Rvt.Addin.Edit.Logic.JobSelection.ChangeListFileName));
+            return Execute(Flo2Rvt.Addin.Edit.Logic.JobSelection.For(hasChangeList));
+        }
+
         public bool Execute(string jobName)
         {
             Func<IFlo2RvtJob> factory;
@@ -113,6 +125,7 @@ namespace Flo2Rvt.Addin.Jobs
                 Console.WriteLine("[flo2-rvt] unknown job: " + jobName + "; known: " + string.Join(", ", registry.Keys));
                 return false;
             }
+            Console.WriteLine("[flo2-rvt] job: " + jobName);
 
             string folder = Directory.GetCurrentDirectory();
             string input = Path.Combine(folder, InputFileName);
@@ -152,9 +165,10 @@ namespace Flo2Rvt.Addin.Jobs
                 }
                 finally
                 {
-                    // v0 never saves: the model is closed and discarded whatever the job did.
+                    // The input is never saved: closed and discarded whatever the job did. (The
+                    // edit job's result, if any, is already written as model.rvt.)
                     doc.Close(false);
-                    Console.WriteLine("[flo2-rvt] model closed without saving");
+                    Console.WriteLine("[flo2-rvt] input model closed without saving");
                 }
             }
         }
