@@ -17,7 +17,7 @@ namespace Flo2Rvt.Addin.Edit.Logic
     {
         /// <summary>Committed, and everything the change named was found and done.</summary>
         public const string Applied = "applied";
-        /// <summary>Committed, but some of what it named was not found or could not be deleted (listed).</summary>
+        /// <summary>Committed, but some of what it named is still in the model: not found, could not be deleted, or left on the level (each listed).</summary>
         public const string AppliedInPart = "applied_in_part";
         /// <summary>Revit raised an error, or the API threw: the change's transaction was rolled back.</summary>
         public const string RolledBack = "rolled_back";
@@ -66,33 +66,74 @@ namespace Flo2Rvt.Addin.Edit.Logic
         public long Id;
         public string GlobalId;
         public string Category;
+        /// <summary>The element's Revit API class (Element.GetType().Name: Wall, FamilyInstance, SketchPlane, ...); null when Revit never showed the add-in the element.</summary>
+        public string RevitClass;
+        /// <summary>A model element (LevelRules.NotModel): what a person counts as the building. False for Revit's internal elements, annotation, datums, views and sketches.</summary>
+        public bool Model;
     }
 
-    /// <summary>A set of elements, counted whole and by category, with the first <see cref="Cap"/> of them listed.</summary>
+    /// <summary>
+    /// A set of elements, counted whole, as model elements apart from the others (so a headline
+    /// number never mixes the two), by category and by Revit class, with the first
+    /// <see cref="Cap"/> of them listed, model elements first.
+    /// </summary>
     public sealed class ElementTally
     {
         public const int Cap = 500;
+        public const string NoCategory = "(no category)";
+        public const string NoClass = "(not seen by the add-in)";
         private readonly Dictionary<string, int> byCategory = new Dictionary<string, int>(System.StringComparer.Ordinal);
+        private readonly Dictionary<string, int> byClass = new Dictionary<string, int>(System.StringComparer.Ordinal);
         private readonly HashSet<long> seen = new HashSet<long>();
-        public readonly List<ElementFacts> Listed = new List<ElementFacts>();
+        private readonly List<ElementFacts> all = new List<ElementFacts>();
         public int Total { get; private set; }
-        public bool Truncated { get { return Total > Listed.Count; } }
+        public int ModelElements { get; private set; }
+        public int OtherElements { get { return Total - ModelElements; } }
+        public bool Truncated { get { return Total > Cap; } }
+
+        /// <summary>The first <see cref="Cap"/>: the model elements in the order added, then the others.</summary>
+        public List<ElementFacts> Listed
+        {
+            get { return all.Where(e => e.Model).Concat(all.Where(e => !e.Model)).Take(Cap).ToList(); }
+        }
+
+        public bool Contains(long id)
+        {
+            return seen.Contains(id);
+        }
+
+        private static void Bump(Dictionary<string, int> counts, string key)
+        {
+            int n;
+            counts.TryGetValue(key, out n);
+            counts[key] = n + 1;
+        }
 
         public void Add(ElementFacts e)
         {
             if (!seen.Add(e.Id)) return;
             Total++;
-            string c = string.IsNullOrEmpty(e.Category) ? "(no category)" : e.Category;
-            int n;
-            byCategory.TryGetValue(c, out n);
-            byCategory[c] = n + 1;
-            if (Listed.Count < Cap) Listed.Add(e);
+            if (e.Model) ModelElements++;
+            Bump(byCategory, string.IsNullOrEmpty(e.Category) ? NoCategory : e.Category);
+            Bump(byClass, string.IsNullOrEmpty(e.RevitClass) ? NoClass : e.RevitClass);
+            all.Add(e);
+        }
+
+        private static IEnumerable<KeyValuePair<string, int>> Ordered(Dictionary<string, int> counts)
+        {
+            return counts.OrderByDescending(kv => kv.Value).ThenBy(kv => kv.Key, System.StringComparer.Ordinal);
         }
 
         /// <summary>Categories by count, most first, then by name.</summary>
         public IEnumerable<KeyValuePair<string, int>> ByCategory()
         {
-            return byCategory.OrderByDescending(kv => kv.Value).ThenBy(kv => kv.Key, System.StringComparer.Ordinal);
+            return Ordered(byCategory);
+        }
+
+        /// <summary>Revit classes by count, most first, then by name.</summary>
+        public IEnumerable<KeyValuePair<string, int>> ByClass()
+        {
+            return Ordered(byClass);
         }
     }
 }

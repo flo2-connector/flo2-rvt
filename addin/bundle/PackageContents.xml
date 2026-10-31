@@ -13,7 +13,7 @@
                          SeriesMin="R2024"
                          SeriesMax="R2024" />
     <ComponentEntry AppName="Flo2RvtProbe"
-                    Version="0.2.0"
+                    Version="0.3.0"
                     ModuleName="./Contents/Flo2RvtProbe.addin"
                     AppDescription="Opens a Revit model and either reports its levels, sheets, links and element counts read-only (the probe), or applies a change list and saves the result as a new model (the edit), each with a sheets PDF and an IFC export."
                     LoadOnCommandInvocation="False"

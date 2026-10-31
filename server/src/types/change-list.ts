@@ -1,4 +1,4 @@
-// GENERATED from schema/change-list.schema.json (sha256 8b8ddf4668121c126c412c17708cea76c781b254ee4d8128a4a5e1bf9e8152dd) by scripts/gen-types.ts.
+// GENERATED from schema/change-list.schema.json (sha256 cffb88ff1e0c7a17192d31b73372386882cc0160a13f741b727b58dec0b04687) by scripts/gen-types.ts.
 // Do not edit: change the schema and run `npm run gen`.
 
 /**
@@ -59,7 +59,7 @@ export interface ChangeList {
   changes: [Change, ...Change[]];
 }
 /**
- * Delete every model element whose level is this level: its Revit level (Element.LevelId), or its base or reference level (a wall's base constraint, a column's base level, a beam's reference level, a stair's or railing's base level, a duct's or pipe's reference level, a group's or a part's base level). Elements hosted in them (doors and windows in a deleted wall) are deleted by Revit with their host, and the report names them. Elements that only reach the level from below (a wall or column whose TOP is this level) are kept, as are views, sheets, annotation, links and imports, and the level itself. A member of a group goes with its group, never alone.
+ * Delete every model element whose level is this level: its Revit level (Element.LevelId), its base or reference level (a wall's base constraint, a column's base level, a beam's reference level, a stair's or railing's base level, a duct's or pipe's reference level, a group's or a part's base level), or its Schedule Level (a beam's or a face-hosted family's). Elements hosted in them (doors and windows in a deleted wall) are deleted by Revit with their host, and the report names them. Elements that only reach the level from below (a wall or column whose TOP is this level) are kept, as are views, sheets, annotation, links and imports, and the level itself. A member of a group goes with its group, never alone. Everything still tied to the level afterwards is listed in the report with why it was not taken: by its Revit settings, or because Revit's IFC export files it under the level's storey (an element with no level at all, by its height; one on a level that is not a building storey). An element with no level is listed, never deleted.
  *
  * This interface was referenced by `ChangeList`'s JSON-Schema
  * via the `definition` "DeleteElementsOnLevel".

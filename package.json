@@ -1,6 +1,6 @@
 {
   "name": "flo2-rvt",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "An MCP server that lets an agent working through flo2.io have real Revit, in Autodesk's cloud (APS Design Automation v3), read a person's .rvt model, and edit it into a new one through a fixed vocabulary of changes.",
   "license": "Apache-2.0",

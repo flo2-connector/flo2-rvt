@@ -23,7 +23,7 @@ import { JobService, Refusal } from './jobs.ts';
 import type { Logger } from './log.ts';
 
 export const SERVER_NAME = 'flo2-rvt';
-export const SERVER_VERSION = '0.2.0';
+export const SERVER_VERSION = '0.3.0';
 
 function text(message: string): CallToolResult {
   return { content: [{ type: 'text', text: message }], isError: true };
@@ -88,7 +88,7 @@ export function buildServer(jobs: JobService, logger: Logger): McpServer {
     {
       title: "Edit a Revit model in Autodesk's cloud, saved as a new model (paid)",
       description:
-        "Start an EDIT of a Revit model (.rvt) in the design. Real Revit 2024, in Autodesk's cloud (Design Automation), opens the model and applies a change list from flo2-rvt's fixed vocabulary, in order, each change in its own transaction: delete_elements_on_level (every model element whose base or reference level it is; what is hosted in them goes with them), delete_elements_by_global_id (elements named by their IFC GlobalId, as Revit's own IFC export writes them), and set_level_elevation (what is on the level moves with it). A change Revit raises an error for is rolled back alone and the others go on. The result is saved as a NEW model.rvt (a new central model when the input is workshared), with its IFC and sheets PDF, and report.json says what each change matched, deleted and could not do, what Revit deleted or changed on its own, and whether it was applied or rolled back. The input model is never changed. This starts a PAID job on the person's own Autodesk account, billed by processing time, which flo2.io confirms (showing the person the changes in plain words) and caps. It returns a job_id at once; poll rvt_job_status every minute or so until the state is success or a failure.",
+        "Start an EDIT of a Revit model (.rvt) in the design. Real Revit 2024, in Autodesk's cloud (Design Automation), opens the model and applies a change list from flo2-rvt's fixed vocabulary, in order, each change in its own transaction: delete_elements_on_level (every model element whose base, reference or Schedule Level it is; what is hosted in them goes with them; what is still tied to the level afterwards, such as a family placed on no level that the IFC export files under it, is listed with why, never deleted by a guess), delete_elements_by_global_id (elements named by their IFC GlobalId, as Revit's own IFC export writes them), and set_level_elevation (what is on the level moves with it). A change Revit raises an error for is rolled back alone and the others go on. The result is saved as a NEW model.rvt (a new central model when the input is workshared), with its IFC and sheets PDF, and report.json says what each change matched and deleted (each element by GlobalId, category and Revit class, model elements counted apart from Revit's internal ones), what Revit deleted with a host or changed on its own, what is still in the model (could not be deleted, or left on the level), and whether it was applied, applied in part or rolled back. The input model is never changed. This starts a PAID job on the person's own Autodesk account, billed by processing time, which flo2.io confirms (showing the person the changes in plain words) and caps. It returns a job_id at once; poll rvt_job_status every minute or so until the state is success or a failure.",
       inputSchema: EditStartArgs,
       outputSchema: EditStartResult,
       annotations: {
@@ -116,7 +116,7 @@ export function buildServer(jobs: JobService, logger: Logger): McpServer {
     {
       title: "Read a cloud-Revit job's status",
       description:
-        "Read where a cloud-Revit job stands, from the job_id rvt_probe_start or rvt_edit_start returned. The state is Autodesk's own: pending, inprogress, success, or a failure such as failedInstructions or failedLimitProcessingTime. On success it lists the results (a probe's report.json, sheets.pdf and model.ifc; an edit's report.json, model.rvt, sheets.pdf and model.ifc), which flo2.io saves into the design as new files, and a summary of the report (an edit's: its outcome, how many changes were applied, applied in part, rolled back or not applied, the elements deleted, and whether a new model was saved). Poll it about once a minute.",
+        "Read where a cloud-Revit job stands, from the job_id rvt_probe_start or rvt_edit_start returned. The state is Autodesk's own: pending, inprogress, success, or a failure such as failedInstructions or failedLimitProcessingTime. On success it lists the results (a probe's report.json, sheets.pdf and model.ifc; an edit's report.json, model.rvt, sheets.pdf and model.ifc), which flo2.io saves into the design as new files, and a summary of the report (an edit's: its outcome, how many changes were applied, applied in part, rolled back or not applied, the model elements deleted and the other elements apart, what was deleted with its host, the model elements left on a level, and whether a new model was saved). Poll it about once a minute.",
       inputSchema: JobStatusArgs,
       outputSchema: JobStatusResult,
       annotations: {
