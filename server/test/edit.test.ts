@@ -8,7 +8,9 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { after, before, describe, test } from 'node:test';
 import { canonicalJson } from '../src/change-list.ts';
-import { JobService } from '../src/jobs.ts';
+import { readFileSync } from 'node:fs';
+import { EditSummary } from '../src/contract.ts';
+import { JobService, editSummary } from '../src/jobs.ts';
 import { memoryLogger } from '../src/log.ts';
 import { APS_TOKEN, CLIENT_ID, jobMeta, rpc, startHarness, type Harness } from './helpers.ts';
 
@@ -139,7 +141,19 @@ describe('an edit from start to success', () => {
     const out = r.result?.structuredContent as Record<string, unknown>;
     assert.equal(out.state, 'success');
     assert.deepEqual((out.outputs as Array<{ name: string }>).map((o) => o.name), ['report.json', 'model.rvt', 'sheets.pdf', 'model.ifc']);
-    assert.deepEqual(out.report_summary, { outcome: 'partly_applied', changes: 3, applied: 1, applied_in_part: 1, rolled_back: 1, not_applied: 0, elements_deleted: 14, model_saved: true });
+    assert.deepEqual(out.report_summary, {
+      outcome: 'partly_applied',
+      changes: 3,
+      applied: 0,
+      applied_in_part: 2,
+      rolled_back: 1,
+      not_applied: 0,
+      elements_deleted: 14,
+      other_elements_deleted: 2,
+      deleted_with_host: 1,
+      left_on_level: 1,
+      model_saved: true,
+    });
     const outputs = r.result?._meta?.['flo2.io/outputs'] as Array<{ name: string; content_type: string; size: number; signed_url: string }>;
     assert.deepEqual(outputs.map((o) => [o.name, o.content_type]), [
       ['report.json', 'application/json'],
@@ -203,5 +217,24 @@ describe('a probe started before the edit job existed', () => {
     } finally {
       await h.close();
     }
+  });
+});
+
+describe("an edit's report summary", () => {
+  const fixture = (name: string) => JSON.parse(readFileSync(new URL(`fixtures/${name}`, import.meta.url), 'utf8')) as Record<string, unknown>;
+
+  test('from a version-2 report (add-in 0.3.0), counts model elements apart, and what went with its host and was left on a level', () => {
+    const s = editSummary(fixture('sample-edit-report.json'));
+    assert.equal(s.elements_deleted, 14, 'model elements only');
+    assert.equal(s.other_elements_deleted, 2);
+    assert.equal(s.deleted_with_host, 1);
+    assert.equal(s.left_on_level, 1);
+    assert.ok(EditSummary.safeParse(s).success, 'in the contract');
+  });
+
+  test('from a version-1 report (add-in 0.2.0), reads as before, without the counts it did not keep', () => {
+    const s = editSummary(fixture('sample-edit-report-0.2.0.json'));
+    assert.deepEqual(s, { outcome: 'partly_applied', changes: 3, applied: 1, applied_in_part: 1, rolled_back: 1, not_applied: 0, elements_deleted: 14, model_saved: true });
+    assert.ok(EditSummary.safeParse(s).success, 'in the contract');
   });
 });

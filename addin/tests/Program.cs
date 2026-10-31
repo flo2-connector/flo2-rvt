@@ -1,8 +1,11 @@
 // The add-in's pure logic, tested without Revit: GlobalIds as Revit's IFC exporter writes
 // them, lengths in feet, the change-list check (on the cases the server's tests read too,
 // schema/test/change-lists.json), which job a working folder calls for, how changes and
-// lists are judged, and report.json's shape (round-tripped through the add-in's own
-// contract, against the made-up report the server's tests serve).
+// lists are judged, how a committed delete is reconciled with what its transaction deleted
+// (on the first live edit's c3 among others) and the report's invariants, the storey Revit's
+// IFC exporter files an element under, why an element is left on a level, model elements
+// counted apart from the others, and report.json's shape (round-tripped through the add-in's
+// own contract, against the made-up report the server's tests serve).
 
 using System;
 using System.Collections.Generic;
@@ -228,6 +231,15 @@ namespace Flo2Rvt.Addin.Tests
                 Eq(3, read.Changes.Count, "changes");
                 Eq("rolled_back", read.Changes[2].Status, "a rolled-back change");
                 Eq("central", read.Exports.ModelRvt.SavedAs, "saved as a central");
+                Eq(2, read.Version, "report version 2");
+                Eq(1, read.Changes[0].LeftOnLevel.ModelElements, "left_on_level");
+                Eq(1, read.Changes[0].DeletedWithHost.Total, "deleted_with_host");
+                Eq("Wall", read.Changes[0].Deleted.Elements[0].RevitClass, "revit_class read back");
+                foreach (ChangeReport c in read.Changes)
+                {
+                    List<string> broken = ReportCheck.Violations(c);
+                    Is(broken.Count == 0, "the sample keeps the report's invariants: " + string.Join("; ", broken));
+                }
             });
 
             // ─── the first live edit (2026-10-31, Autodesk's sample model), change c3
@@ -237,10 +249,219 @@ namespace Flo2Rvt.Addin.Tests
                 List<string> broken = ReportCheck.Violations(r);
                 Is(broken.Count == 0, broken.Count + " invariant(s) broken, the first: " + string.Join("; ", broken.Take(3)));
             });
+            Test("the first live edit's c3: the 44 Revit would not delete alone went with their host; none is in could_not, and it reads applied", () =>
+            {
+                ChangeReport r = LiveC3(root);
+                Is(r.CouldNot == null, "could_not is empty");
+                Eq(44, r.DeletedWithHost.Total, "deleted_with_host");
+                Eq(ChangeStatus.Applied, r.Status, "status");
+                Eq(null, r.Why, "why");
+                // And the report 0.2.0 wrote for it breaks the invariant: what the test above guards.
+                var asWritten = LiveC3(root);
+                asWritten.CouldNot = asWritten.DeletedWithHost.Elements.Select(e => new CouldNot { ElementId = e.ElementId, GlobalId = e.GlobalId, Why = "Revit says it cannot be deleted" }).ToList();
+                asWritten.DeletedWithHost = null;
+                asWritten.Status = ChangeStatus.AppliedInPart;
+                Eq(44, ReportCheck.Violations(asWritten).Count, "0.2.0's report: 44 elements both could_not and deleted");
+            });
+
+            // ─── reconciling a committed delete with the model after it
+            Test("an element refused before the transaction is deleted_with_host when the transaction deleted it, and could_not when it is still there", () =>
+            {
+                var facts = new DeleteFacts
+                {
+                    Kind = ChangeKinds.DeleteElementsOnLevel,
+                    PreChecked = { Refusal(11, "Curtain Wall Mullions"), Refusal(12, "Structural Foundations") },
+                    Deleted = new HashSet<long> { 1, 2, 11 },
+                };
+                DeleteOutcome o = Reconcile.Committed(facts);
+                Eq(1, o.DeletedWithHost.Total, "with its host");
+                Is(o.DeletedWithHost.Contains(11), "the mullion");
+                Eq(1, o.CouldNot.Count, "still there");
+                Eq(12L, o.CouldNot[0].ElementId, "the foundation");
+                Eq(ChangeStatus.AppliedInPart, o.Status, "something named is still in the model");
+                Is(o.Why.Contains("1 element(s) on the level that Revit would not delete are still in the model (could_not)"), o.Why);
+                var r = new ChangeReport { Id = "c1", Kind = facts.Kind, Deleted = ReportedElements.From(Tally(1, 2, 11)) };
+                o.ApplyTo(r);
+                Eq(0, ReportCheck.Violations(r).Count, "keeps the invariants");
+            });
+            Test("a delete on a level reads applied_in_part when a model element is left on the level, and applied when only other elements are", () =>
+            {
+                var models = LeftOnLevelRules.Collect(new[] { Candidate(5, true, s => s.StoreyBy = LeftOnLevelRules.StoreyByHeight) }, "Level 2");
+                DeleteOutcome o = Reconcile.Committed(new DeleteFacts { Kind = ChangeKinds.DeleteElementsOnLevel, Deleted = new HashSet<long> { 1 }, Left = models });
+                Eq(ChangeStatus.AppliedInPart, o.Status, "a wardrobe left");
+                Is(o.Why.Contains("1 model element(s) still tied to the level were not taken"), o.Why);
+                var views = LeftOnLevelRules.Collect(new[] { Candidate(6, false, s => { s.NotModelWhy = "it is a view"; s.RevitSettings.Add("Element.LevelId"); }) }, "Level 2");
+                o = Reconcile.Committed(new DeleteFacts { Kind = ChangeKinds.DeleteElementsOnLevel, Deleted = new HashSet<long> { 1 }, Left = views });
+                Eq(ChangeStatus.Applied, o.Status, "only the level's view is left");
+                Eq(null, o.Why, "nothing undone");
+                var r = new ChangeReport { Id = "c1", Kind = ChangeKinds.DeleteElementsOnLevel, Deleted = ReportedElements.From(Tally(1)) };
+                o.ApplyTo(r);
+                Eq(1, r.LeftOnLevel.OtherElements, "the view is listed");
+                Eq(0, ReportCheck.Violations(r).Count, "keeps the invariants");
+            });
+            Test("a delete on a level whose leftovers could not be read never reads applied", () =>
+            {
+                DeleteOutcome o = Reconcile.Committed(new DeleteFacts { Kind = ChangeKinds.DeleteElementsOnLevel, Deleted = new HashSet<long> { 1 }, LeftUnread = "InvalidOperationException: x" });
+                Eq(ChangeStatus.AppliedInPart, o.Status, "not known to have left nothing");
+                Is(o.Why.Contains("could not be read (InvalidOperationException: x)"), o.Why);
+                var r = new ChangeReport { Id = "c1", Kind = ChangeKinds.DeleteElementsOnLevel, Deleted = ReportedElements.From(Tally(1)) };
+                o.ApplyTo(r);
+                Eq(0, ReportCheck.Violations(r).Count, "keeps the invariants");
+            });
+            Test("a delete by GlobalId reconciles the same way, and not_found still reads applied_in_part", () =>
+            {
+                DeleteOutcome o = Reconcile.Committed(new DeleteFacts { Kind = ChangeKinds.DeleteElementsByGlobalId, PreChecked = { Refusal(21, "Curtain Panels") }, Deleted = new HashSet<long> { 20, 21 } });
+                Eq(ChangeStatus.Applied, o.Status, "the curtain wall and its panel, both named");
+                Eq(1, o.DeletedWithHost.Total, "the panel went with its wall");
+                o = Reconcile.Committed(new DeleteFacts { Kind = ChangeKinds.DeleteElementsByGlobalId, Deleted = new HashSet<long> { 20 }, NotFound = 1 });
+                Eq(ChangeStatus.AppliedInPart, o.Status, "a GlobalId named no element");
+                Is(o.Why.StartsWith("1 GlobalId(s) name no element"), o.Why);
+            });
+            Test("the report check names an element both left and deleted, and a status that disagrees with what is left", () =>
+            {
+                var r = new ChangeReport { Id = "c9", Kind = ChangeKinds.DeleteElementsOnLevel, Status = ChangeStatus.Applied, Deleted = ReportedElements.From(Tally(1, 2)) };
+                r.LeftOnLevel = LeftOnLevelRules.Collect(new[] { Candidate(2, true, s => s.StoreyBy = LeftOnLevelRules.StoreyByHeight) }, "Level 2");
+                List<string> broken = ReportCheck.Violations(r);
+                Is(broken.Any(b => b.Contains("element 2 is both in left_on_level and deleted")), string.Join("; ", broken));
+                Is(broken.Any(b => b.Contains("reads applied though 1 of what it named is left undone")), string.Join("; ", broken));
+            });
+
+            // ─── the storey Revit's IFC exporter files an element under (revit-ifc 887c3d3e)
+            // Levels in feet: Level 1 at 0, Level 2 at 10, "Level 2 slab" at 10.5 (not a building
+            // storey), Roof at 20, and "T.O. Footing" at -2 (not a building storey, below them all).
+            var levels = Storeys.Of(new[]
+            {
+                new LevelFacts { Id = 300, Name = "Roof", ProjectElevationFt = 20, BuildingStorey = true },
+                new LevelFacts { Id = 200, Name = "Level 2", ProjectElevationFt = 10, BuildingStorey = true },
+                new LevelFacts { Id = 210, Name = "Level 2 slab", ProjectElevationFt = 10.5, BuildingStorey = false },
+                new LevelFacts { Id = 100, Name = "Level 1", ProjectElevationFt = 0, BuildingStorey = true },
+                new LevelFacts { Id = 50, Name = "T.O. Footing", ProjectElevationFt = -2, BuildingStorey = false },
+            });
+            double tenCm = Storeys.LevelExtensionFt;
+            Test("an element with no level is filed by the height of its lowest point, from 10 cm below a storey to 10 cm below the next", () =>
+            {
+                Eq(200L, levels.StoreysAtHeight(10.0).Single(), "at Level 2");
+                Eq(200L, levels.StoreysAtHeight(10.0 - tenCm + 0.001).Single(), "just inside 10 cm below Level 2");
+                Eq(100L, levels.StoreysAtHeight(10.0 - tenCm - 0.001).Single(), "just past 10 cm below Level 2: Level 1");
+                Eq(200L, levels.StoreysAtHeight(19.0).Single(), "below the roof");
+                Eq(300L, levels.StoreysAtHeight(500.0).Single(), "the highest storey is open above");
+                bool lowest;
+                Eq(100L, levels.StoreysAtHeight(-50.0, out lowest).Single(), "below every storey: the lowest");
+                Is(lowest, "by the lowest-storey fallback");
+                Eq(100L, levels.StoreysAtHeight(null, out lowest).Single(), "no bounding box: the lowest");
+                Is(lowest, "by the fallback too");
+                levels.StoreysAtHeight(3.0, out lowest);
+                Is(!lowest, "inside a span is not the fallback");
+            });
+            Test("an element on a level that is not a building storey is filed under the storey below it; one below every storey, under the lowest", () =>
+            {
+                Eq(200L, levels.StoreyOfLevel(210).Value, "Level 2 slab -> Level 2");
+                Eq(200L, levels.StoreyOfLevel(200).Value, "a storey is its own");
+                Eq(100L, levels.StoreyOfLevel(50).Value, "T.O. Footing -> the lowest storey");
+                Is(levels.IsStorey(200) && !levels.IsStorey(210), "which levels are storeys");
+                Is(!levels.StoreysAtHeight(10.6).Contains(210), "a level that is not a storey never has a span of its own");
+            });
+            Test("storeys at one elevation share a span, and an element in it may be filed under either", () =>
+            {
+                var twins = Storeys.Of(new[]
+                {
+                    new LevelFacts { Id = 1, Name = "A", ProjectElevationFt = 0, BuildingStorey = true },
+                    new LevelFacts { Id = 2, Name = "B", ProjectElevationFt = 0, BuildingStorey = true },
+                    new LevelFacts { Id = 3, Name = "C", ProjectElevationFt = 12, BuildingStorey = true },
+                });
+                List<long> at = twins.StoreysAtHeight(5.0);
+                Eq(2, at.Count, "both");
+                Is(at.Contains(1) && at.Contains(2), "A and B");
+                Eq(0, Storeys.Of(new[] { new LevelFacts { Id = 9, Name = "Ref", BuildingStorey = false } }).StoreysAtHeight(1.0).Count, "no storey at all: the site");
+            });
+
+            // ─── what a delete on a level left, and why
+            Test("each element left on the level says why it was not taken", () =>
+            {
+                Func<LeftCandidate, LeftElement> judge = c => LeftOnLevelRules.Judge(c, "Level 2");
+                LeftElement wardrobe = judge(Candidate(1, true, s => s.StoreyBy = LeftOnLevelRules.StoreyByHeight));
+                Eq(LeftOnLevelRules.ReasonNoRevitLevel, wardrobe.Reason, "no level, filed by height");
+                Is(wardrobe.Why.Contains("has no Revit level") && wardrobe.Why.Contains("never by a guess"), wardrobe.Why);
+                Is(wardrobe.TiedBy.SequenceEqual(new[] { LeftOnLevelRules.TiedByIfcStorey }), "tied by the IFC storey alone");
+                Eq(LeftOnLevelRules.ReasonNoRevitLevel, judge(Candidate(2, true, s => s.StoreyBy = LeftOnLevelRules.StoreyLowest)).Reason, "no level, the lowest storey");
+                LeftElement slab = judge(Candidate(3, true, s => { s.StoreyBy = LeftOnLevelRules.StoreyNonStoreyLevel; s.StoreyVia = "Level 2 slab"; }));
+                Eq(LeftOnLevelRules.ReasonNonStoreyLevel, slab.Reason, "on a level that is not a storey");
+                Is(slab.Why.Contains("\"Level 2 slab\", is not a building storey"), slab.Why);
+                LeftElement member = judge(Candidate(4, true, s => { s.GroupId = 77; s.RevitSettings.Add("FAMILY_LEVEL_PARAM"); }));
+                Eq(LeftOnLevelRules.ReasonGroupMember, member.Reason, "a member of a group on another level");
+                Is(member.Why.Contains("group 77"), member.Why);
+                LeftElement view = judge(Candidate(5, false, s => { s.NotModelWhy = "it is a view"; s.RevitSettings.Add("Element.LevelId"); }));
+                Eq(LeftOnLevelRules.ReasonNotAModelElement, view.Reason, "a view of the level");
+                Is(!view.ModelElement && view.Why.Contains("it is a view"), view.Why);
+                LeftElement hosted = judge(Candidate(6, true, s => { s.RevitSettings.Add("FamilyInstance.Host"); s.StoreyBy = LeftOnLevelRules.StoreyBaseLevel; }));
+                Eq(LeftOnLevelRules.ReasonSettingNotTaken, hosted.Reason, "a setting the rule does not read");
+                Is(hosted.TiedBy.SequenceEqual(new[] { "FamilyInstance.Host", LeftOnLevelRules.TiedByIfcStorey }), string.Join(",", hosted.TiedBy));
+                LeftElement stuck = judge(Candidate(7, true, s => { s.Targeted = true; s.RevitSettings.Add("Element.LevelId"); }));
+                Eq(LeftOnLevelRules.ReasonNotDeleted, stuck.Reason, "asked for, still there");
+                Eq(LeftOnLevelRules.ReasonContainerParameter, judge(Candidate(8, true, s => { s.StoreyBy = LeftOnLevelRules.StoreyContainerParameter; s.StoreyVia = "Level 2"; })).Reason, "its IfcSpatialContainer parameter");
+            });
+            Test("left_on_level lists model elements first, counts them apart from the others, and by reason", () =>
+            {
+                var cs = new List<LeftCandidate>();
+                for (int i = 0; i < 520; i++) cs.Add(Candidate(1000 + i, false, s => { s.NotModelWhy = "it is part of a sketch"; s.RevitSettings.Add("Element.LevelId"); }));
+                cs.Add(Candidate(1, true, s => s.StoreyBy = LeftOnLevelRules.StoreyByHeight));
+                cs.Add(Candidate(1, true, s => s.StoreyBy = LeftOnLevelRules.StoreyByHeight));
+                LeftOnLevel left = LeftOnLevelRules.Collect(cs, "Level 2");
+                Eq(521, left.Total, "each once");
+                Eq(1, left.ModelElements, "model");
+                Eq(520, left.OtherElements, "other");
+                Is(left.Truncated, "past 500");
+                Eq(ElementTally.Cap, left.Elements.Count, "listed");
+                Eq(1L, left.Elements[0].ElementId, "the model element first");
+                Eq(LeftOnLevelRules.ReasonNotAModelElement, left.ByReason[0].Reason, "most first");
+                Eq(null, LeftOnLevelRules.Collect(new LeftCandidate[0], "Level 2"), "nothing left: no list");
+            });
+
+            // ─── model elements apart from the others
+            Test("a set and the totals count model elements apart from Revit's internal ones, and every element carries its Revit class", () =>
+            {
+                var t = new ElementTally();
+                t.Add(new ElementFacts { Id = 1, Category = null, RevitClass = "SketchPlane", Model = false });
+                t.Add(new ElementFacts { Id = 2, Category = "Walls", RevitClass = "Wall", Model = true, GlobalId = "2O2Fr$t4X7Zf8NOew3FLOH" });
+                t.Add(new ElementFacts { Id = 3, Category = null, RevitClass = null, Model = false });
+                ReportedElements s = ReportedElements.From(t);
+                Eq(3, s.Total, "total");
+                Eq(1, s.ModelElements, "model");
+                Eq(2, s.OtherElements, "other");
+                Eq(2L, s.Elements[0].ElementId, "model elements first");
+                Eq("Wall", s.Elements[0].RevitClass, "class");
+                Is(s.Elements[0].ModelElement && !s.Elements[1].ModelElement, "model_element");
+                Is(s.ByClass.Any(c => c.RevitClass == "SketchPlane" && c.Count == 1), "by class");
+                Is(s.ByClass.Any(c => c.RevitClass == ElementTally.NoClass), "an element the add-in never saw is counted as such");
+                var totals = new Totals();
+                totals.Count(new ChangeReport { Status = ChangeStatus.Applied, Deleted = s, DeletedByRevit = s, DeletedWithHost = ReportedElements.From(Tally(9)) });
+                Eq(1, totals.ElementsDeleted, "elements_deleted counts model elements");
+                Eq(2, totals.OtherElementsDeleted, "the others apart");
+                Eq(1, totals.ElementsDeletedWithHost, "with their host");
+            });
 
             Console.WriteLine();
             Console.WriteLine(passed + " passed, " + failed.Count + " failed");
             return failed.Count == 0 ? 0 : 1;
+        }
+
+        private static CouldNot Refusal(long id, string category)
+        {
+            return new CouldNot { ElementId = id, Category = category, RevitClass = "FamilyInstance", Model = true, Why = "Revit says it cannot be deleted on its own" };
+        }
+
+        private static ElementTally Tally(params long[] ids)
+        {
+            var t = new ElementTally();
+            foreach (long id in ids) t.Add(new ElementFacts { Id = id, Model = true, RevitClass = "Wall", Category = "Walls" });
+            return t;
+        }
+
+        private static LeftCandidate Candidate(long id, bool model, Action<LeftCandidate> set)
+        {
+            var c = new LeftCandidate { Element = new ElementFacts { Id = id, Model = model, RevitClass = model ? "FamilyInstance" : "View", Category = model ? "Furniture" : "Views" } };
+            set(c);
+            return c;
         }
 
         /// <summary>
@@ -264,7 +485,7 @@ namespace Flo2Rvt.Addin.Tests
                 var deleted = new ElementTally();
                 foreach (JsonElement e in f.GetProperty("deleted").EnumerateArray()) deleted.Add(facts(e));
                 var preChecked = f.GetProperty("could_not").EnumerateArray()
-                    .Select(e => new CouldNot { ElementId = facts(e).Id, GlobalId = facts(e).GlobalId, Why = "Revit says it cannot be deleted" })
+                    .Select(e => new CouldNot { ElementId = facts(e).Id, GlobalId = facts(e).GlobalId, Model = true, Why = "Revit says it cannot be deleted" })
                     .ToList();
                 var r = new ChangeReport { Index = 2, Id = "c3", Kind = ChangeKinds.DeleteElementsOnLevel, Committed = true };
                 r.Matched = ReportedElements.From(matched);

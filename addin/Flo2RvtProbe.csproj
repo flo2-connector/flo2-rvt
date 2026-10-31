@@ -21,7 +21,7 @@
     <PlatformTarget>x64</PlatformTarget>
     <AssemblyName>Flo2RvtProbe</AssemblyName>
     <RootNamespace>Flo2Rvt.Addin</RootNamespace>
-    <Version>0.2.0</Version>
+    <Version>0.3.0</Version>
     <LangVersion>7.3</LangVersion>
     <Nullable>disable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>

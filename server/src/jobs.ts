@@ -101,12 +101,17 @@ interface JobRecord {
   change_list_sha256?: string;
 }
 
-/** What an edit's report.json says came of its list (addin/src/Edit/EditReport.cs). */
+/**
+ * What an edit's report.json says came of its list (addin/src/Edit/EditReport.cs). A version-2
+ * report (add-in 0.3.0) counts model elements apart from the others, and what went with its host
+ * and what was left on a level; a version-1 report (0.2.0) is summarized as before, without them.
+ */
 export function editSummary(report: Record<string, unknown>): EditSummary {
   const totals = report.totals && typeof report.totals === 'object' ? (report.totals as Record<string, unknown>) : {};
   const n = (key: string) => (typeof totals[key] === 'number' && Number.isInteger(totals[key]) ? (totals[key] as number) : 0);
   const exportsOf = report.exports && typeof report.exports === 'object' ? (report.exports as Record<string, unknown>) : {};
   const rvt = exportsOf.model_rvt && typeof exportsOf.model_rvt === 'object' ? (exportsOf.model_rvt as Record<string, unknown>) : {};
+  const v2 = typeof report.version === 'number' && report.version >= 2;
   return {
     outcome: typeof report.outcome === 'string' && /^[a-z_]{1,40}$/.test(report.outcome) ? report.outcome : 'unknown',
     changes: n('changes'),
@@ -115,6 +120,7 @@ export function editSummary(report: Record<string, unknown>): EditSummary {
     rolled_back: n('rolled_back'),
     not_applied: n('not_applied'),
     elements_deleted: n('elements_deleted'),
+    ...(v2 ? { other_elements_deleted: n('other_elements_deleted'), deleted_with_host: n('elements_deleted_with_host'), left_on_level: n('elements_left_on_level') } : {}),
     model_saved: rvt.written === true,
   };
 }

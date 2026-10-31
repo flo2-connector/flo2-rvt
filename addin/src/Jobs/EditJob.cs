@@ -56,11 +56,14 @@ namespace Flo2Rvt.Addin.Jobs
             report.ChangeList.Description = list.List.Description;
             report.ChangeList.Changes = list.List.Changes.Count;
 
-            context.Heartbeat.Step("indexing the model's elements by IFC GlobalId");
+            context.Heartbeat.Step("indexing the model's elements by IFC GlobalId and Revit class");
             ElementIndex index = ElementIndex.Build(doc);
+            report.Edit.Index = index.Info;
             report.ElementCountTotalBefore = CountElements(doc);
-            Console.WriteLine("[flo2-rvt] indexed " + index.Count + " elements");
+            Console.WriteLine("[flo2-rvt] indexed " + index.Count + " elements (" + index.Info.Unlisted + " not listed by Revit's collectors, found by id in " + index.Info.Seconds + " s)");
 
+            // What the job could not do, and any invariant a change's report breaks (Logic/ReportCheck.cs).
+            var probeWarnings = new List<string>();
             for (int i = 0; i < list.List.Changes.Count; i++)
             {
                 Change change = list.List.Changes[i];
@@ -70,12 +73,12 @@ namespace Flo2Rvt.Addin.Jobs
                 report.Totals.Count(r);
                 if (r.Status == ChangeStatus.RolledBack) report.Edit.TransactionsRolledBack++;
                 if (r.Committed) report.Edit.TransactionsCommitted++;
+                foreach (string broken in ReportCheck.Violations(r)) probeWarnings.Add("the report check found: " + broken);
                 Console.WriteLine("[flo2-rvt] change " + (i + 1) + ": " + r.Status + (r.Why != null ? " (" + r.Why + ")" : ""));
             }
             var statuses = report.Changes.Select(c => c.Status).ToList();
             report.Outcome = ListOutcome.Of(statuses);
 
-            var probeWarnings = new List<string>();
             if (ListOutcome.SavesAModel(statuses))
             {
                 context.Heartbeat.Step("exporting model.ifc of the edited model");
@@ -211,18 +214,8 @@ namespace Flo2Rvt.Addin.Jobs
         private static ElementTally Tally(Document doc, ElementIndex index, IEnumerable<long> ids)
         {
             var t = new ElementTally();
-            foreach (long id in ids)
-            {
-                var eid = new ElementId(id);
-                ElementFacts facts = index.Facts(eid);
-                if (facts.Category == null)
-                {
-                    // Not in the index built before the changes: an element Revit added since.
-                    Element e = doc.GetElement(eid);
-                    if (e != null && e.Category != null) facts.Category = e.Category.Name;
-                }
-                t.Add(facts);
-            }
+            // As the index recorded it before the changes; an element Revit added since, as it is now.
+            foreach (long id in ids) t.Add(index.Facts(doc, new ElementId(id)));
             return t;
         }
 
@@ -263,21 +256,57 @@ namespace Flo2Rvt.Addin.Jobs
             foreach (Element e in on)
             {
                 if (DocumentValidation.CanDeleteElement(doc, e.Id)) targets.Add(e.Id);
-                else couldNot.Add(new CouldNot { ElementId = e.Id.Value, GlobalId = index.Facts(e.Id).GlobalId, Category = e.Category != null ? e.Category.Name : null, Why = "Revit says it cannot be deleted" });
+                else couldNot.Add(Refused(doc, index, e.Id, null, "Revit says it cannot be deleted on its own"));
             }
             r.Matched = ReportedElements.From(Tally(doc, index, targets.Select(id => id.Value)));
             if (couldNot.Count > 0) r.CouldNot = couldNot;
+            var targeted = new HashSet<long>(targets.Select(id => id.Value));
+            var refused = new HashSet<long>(couldNot.Select(c => c.ElementId));
             if (targets.Count == 0)
             {
+                // Nothing to delete; still say what is tied to the level, as the model is.
+                string unread;
+                r.LeftOnLevel = ReadLeft(doc, index, level, refused, targeted, out unread);
+                r.LeftOnLevelUnread = unread;
                 r.Status = ChangeStatus.NotApplied;
-                r.Why = on.Count == 0 ? "no model element is on level \"" + level.Name + "\"" : "Revit says none of the elements on level \"" + level.Name + "\" can be deleted";
+                r.Why = (on.Count == 0 ? "no model element is on level \"" + level.Name + "\" by its Revit settings" : "Revit says none of the elements on level \"" + level.Name + "\" can be deleted on its own")
+                    + (r.LeftOnLevel != null && r.LeftOnLevel.ModelElements > 0 ? "; " + r.LeftOnLevel.ModelElements + " model element(s) still tied to it are listed with why (left_on_level)" : "");
                 return;
             }
             ICollection<ElementId> deleted = null;
             RunResult run = ChangeRunner.Run(doc, context.Data.RevitApp, "delete the elements on level " + level.Name, d => { deleted = d.Delete(targets); });
             if (run.Committed && deleted != null) foreach (ElementId id in deleted) run.Deleted.Add(id.Value);
             Record(doc, r, index, run, targets.Select(id => id.Value).ToList());
-            if (run.Committed) Reconcile.Committed(new DeleteFacts { Kind = change.Kind, PreChecked = couldNot, Deleted = run.Deleted }).ApplyTo(r);
+            if (!run.Committed) return;
+            // Reconciled with the model after the transaction: what Revit would not delete alone
+            // but deleted with its host is done; what is still tied to the level is listed.
+            var stillRefused = new HashSet<long>(refused.Where(id => !run.Deleted.Contains(id)));
+            context.Heartbeat.Step("reading what is still tied to level " + level.Name);
+            string leftUnread;
+            LeftOnLevel left = ReadLeft(doc, index, level, stillRefused, targeted, out leftUnread);
+            Reconcile.Committed(new DeleteFacts { Kind = change.Kind, PreChecked = couldNot, Deleted = run.Deleted, Left = left, LeftUnread = leftUnread }).ApplyTo(r);
+        }
+
+        /// <summary>Leftovers.Read, never throwing: the change may already be committed, and a failure to read what is left must not make it read as not applied.</summary>
+        private static LeftOnLevel ReadLeft(Document doc, ElementIndex index, Level level, ISet<long> skip, ISet<long> targeted, out string unread)
+        {
+            unread = null;
+            try
+            {
+                return Leftovers.Read(doc, index, level, skip, targeted);
+            }
+            catch (Exception ex)
+            {
+                unread = ex.GetType().Name + ": " + ex.Message;
+                return null;
+            }
+        }
+
+        /// <summary>An element the change names and will not ask Revit to delete, named as the report names elements.</summary>
+        private static CouldNot Refused(Document doc, ElementIndex index, ElementId id, string globalId, string why)
+        {
+            ElementFacts f = index.Facts(doc, id);
+            return new CouldNot { ElementId = id.Value, GlobalId = globalId ?? f.GlobalId, Category = f.Category, RevitClass = f.RevitClass, Model = f.Model, Why = why };
         }
 
         private static void DeleteByGlobalId(JobContext context, ElementIndex index, Change change, ChangeReport r)
@@ -310,10 +339,10 @@ namespace Flo2Rvt.Addin.Jobs
                     continue;
                 }
                 string why = LevelRules.NotAModelElement(e);
-                if (why == null && !DocumentValidation.CanDeleteElement(doc, id)) why = "Revit says it cannot be deleted";
+                if (why == null && !DocumentValidation.CanDeleteElement(doc, id)) why = "Revit says it cannot be deleted on its own";
                 if (why != null)
                 {
-                    couldNot.Add(new CouldNot { GlobalId = gid, ElementId = id.Value, Category = hit.Entry.Category, Why = why });
+                    couldNot.Add(Refused(doc, index, id, gid, why));
                     continue;
                 }
                 if (targeted.Add(id.Value)) targets.Add(id);

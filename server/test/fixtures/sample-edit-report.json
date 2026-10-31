@@ -1,15 +1,23 @@
 {
   "schema": "flo2-rvt/edit-report",
-  "version": 1,
-  "_note": "Made-up data in the shape the add-in writes (addin/src/Edit/EditReport.cs), standing for an edit of Autodesk's public sample model rac_basic_sample_project.rvt. No real model was read to make it.",
+  "version": 2,
+  "_note": "Made-up data in the shape the add-in writes (addin/src/Edit/EditReport.cs, report version 2, add-in 0.3.0), standing for an edit of Autodesk's public sample model rac_basic_sample_project.rvt. No real model was read to make it. sample-edit-report-0.2.0.json is the same edit as add-in 0.2.0 wrote it (version 1).",
   "edit": {
-    "addin_version": "0.2.0",
+    "addin_version": "0.3.0",
     "started_at": "2026-10-31T12:00:05.0000000Z",
     "finished_at": "2026-10-31T12:06:12.0000000Z",
     "transactions_committed": 2,
     "transactions_rolled_back": 1,
     "saved": true,
-    "on_failure": "rolls_back_alone"
+    "on_failure": "rolls_back_alone",
+    "index": {
+      "listed": 1408,
+      "unlisted": 4,
+      "probed_to": 8192,
+      "probe_complete": true,
+      "export_ids_unreadable": 0,
+      "seconds": 1.4
+    }
   },
   "engine": {
     "version_name": "Autodesk Revit 2024",
@@ -35,20 +43,27 @@
   "outcome": "partly_applied",
   "totals": {
     "changes": 3,
-    "applied": 1,
-    "applied_in_part": 1,
+    "applied": 0,
+    "applied_in_part": 2,
     "rolled_back": 1,
     "not_applied": 0,
     "elements_deleted": 14,
-    "elements_deleted_by_revit": 4,
-    "elements_modified_by_revit": 9
+    "other_elements_deleted": 2,
+    "elements_deleted_by_revit": 3,
+    "other_elements_deleted_by_revit": 2,
+    "elements_deleted_with_host": 1,
+    "elements_modified_by_revit": 9,
+    "other_elements_modified_by_revit": 0,
+    "elements_could_not": 0,
+    "elements_left_on_level": 1,
+    "other_elements_left_on_level": 1
   },
   "changes": [
     {
       "index": 0,
       "id": "c1",
       "kind": "delete_elements_on_level",
-      "status": "applied",
+      "status": "applied_in_part",
       "level": {
         "name": "Level 2",
         "element_id": 694,
@@ -57,6 +72,8 @@
       },
       "matched": {
         "total": 10,
+        "model_elements": 10,
+        "other_elements": 0,
         "by_category": [
           {
             "category": "Walls",
@@ -71,26 +88,114 @@
             "count": 2
           }
         ],
+        "by_class": [
+          {
+            "revit_class": "Wall",
+            "count": 6
+          },
+          {
+            "revit_class": "Floor",
+            "count": 2
+          },
+          {
+            "revit_class": "Room",
+            "count": 2
+          }
+        ],
         "elements": [
           {
             "element_id": 1000,
             "global_id": "00000000000000000003e8",
-            "category": "Walls"
+            "category": "Walls",
+            "revit_class": "Wall",
+            "model_element": true
           },
           {
             "element_id": 1001,
             "global_id": "00000000000000000003e9",
-            "category": "Walls"
+            "category": "Walls",
+            "revit_class": "Wall",
+            "model_element": true
           },
           {
             "element_id": 1002,
             "global_id": "00000000000000000003ea",
-            "category": "Walls"
+            "category": "Walls",
+            "revit_class": "Wall",
+            "model_element": true
+          }
+        ]
+      },
+      "deleted_with_host": {
+        "total": 1,
+        "model_elements": 1,
+        "other_elements": 0,
+        "by_category": [
+          {
+            "category": "Doors",
+            "count": 1
+          }
+        ],
+        "by_class": [
+          {
+            "revit_class": "FamilyInstance",
+            "count": 1
+          }
+        ],
+        "elements": [
+          {
+            "element_id": 2002,
+            "global_id": "00000000000000000007d2",
+            "category": "Doors",
+            "revit_class": "FamilyInstance",
+            "model_element": true
+          }
+        ]
+      },
+      "left_on_level": {
+        "total": 2,
+        "model_elements": 1,
+        "other_elements": 1,
+        "by_reason": [
+          {
+            "reason": "no_revit_level",
+            "count": 1
+          },
+          {
+            "reason": "not_a_model_element",
+            "count": 1
+          }
+        ],
+        "elements": [
+          {
+            "element_id": 7001,
+            "global_id": "0000000000000000001b59",
+            "category": "Furniture",
+            "revit_class": "FamilyInstance",
+            "model_element": true,
+            "tied_by": [
+              "ifc_storey"
+            ],
+            "reason": "no_revit_level",
+            "why": "it has no Revit level; Revit's IFC exporter files it under level \"Level 2\"'s storey by the height of its lowest point; the change deletes by Revit's own settings and never by a guess"
+          },
+          {
+            "element_id": 7100,
+            "category": "Views",
+            "revit_class": "ViewPlan",
+            "model_element": false,
+            "tied_by": [
+              "Element.LevelId"
+            ],
+            "reason": "not_a_model_element",
+            "why": "kept: it is a view; the change deletes model elements only"
           }
         ]
       },
       "deleted": {
-        "total": 13,
+        "total": 15,
+        "model_elements": 13,
+        "other_elements": 2,
         "by_category": [
           {
             "category": "Walls",
@@ -107,57 +212,136 @@
           {
             "category": "Rooms",
             "count": 2
+          },
+          {
+            "category": "(no category)",
+            "count": 2
+          }
+        ],
+        "by_class": [
+          {
+            "revit_class": "Wall",
+            "count": 6
+          },
+          {
+            "revit_class": "FamilyInstance",
+            "count": 3
+          },
+          {
+            "revit_class": "Floor",
+            "count": 2
+          },
+          {
+            "revit_class": "Room",
+            "count": 2
+          },
+          {
+            "revit_class": "SketchPlane",
+            "count": 2
           }
         ],
         "elements": [
           {
             "element_id": 1000,
             "global_id": "00000000000000000003e8",
-            "category": "Walls"
+            "category": "Walls",
+            "revit_class": "Wall",
+            "model_element": true
           },
           {
             "element_id": 1001,
             "global_id": "00000000000000000003e9",
-            "category": "Walls"
+            "category": "Walls",
+            "revit_class": "Wall",
+            "model_element": true
           },
           {
             "element_id": 1002,
             "global_id": "00000000000000000003ea",
-            "category": "Walls"
+            "category": "Walls",
+            "revit_class": "Wall",
+            "model_element": true
+          },
+          {
+            "element_id": 2002,
+            "global_id": "00000000000000000007d2",
+            "category": "Doors",
+            "revit_class": "FamilyInstance",
+            "model_element": true
+          },
+          {
+            "element_id": 2100,
+            "revit_class": "SketchPlane",
+            "model_element": false
           }
         ]
       },
       "deleted_by_revit": {
-        "total": 3,
+        "total": 5,
+        "model_elements": 3,
+        "other_elements": 2,
         "by_category": [
           {
             "category": "Doors",
             "count": 3
+          },
+          {
+            "category": "(no category)",
+            "count": 2
+          }
+        ],
+        "by_class": [
+          {
+            "revit_class": "FamilyInstance",
+            "count": 3
+          },
+          {
+            "revit_class": "SketchPlane",
+            "count": 2
           }
         ],
         "elements": [
           {
             "element_id": 2000,
             "global_id": "00000000000000000007d0",
-            "category": "Doors"
+            "category": "Doors",
+            "revit_class": "FamilyInstance",
+            "model_element": true
           },
           {
             "element_id": 2001,
             "global_id": "00000000000000000007d1",
-            "category": "Doors"
+            "category": "Doors",
+            "revit_class": "FamilyInstance",
+            "model_element": true
           },
           {
             "element_id": 2002,
             "global_id": "00000000000000000007d2",
-            "category": "Doors"
+            "category": "Doors",
+            "revit_class": "FamilyInstance",
+            "model_element": true
+          },
+          {
+            "element_id": 2100,
+            "revit_class": "SketchPlane",
+            "model_element": false
           }
         ]
       },
       "modified_by_revit": {
         "total": 9,
+        "model_elements": 9,
+        "other_elements": 0,
         "by_category": [
           {
             "category": "Walls",
+            "count": 9
+          }
+        ],
+        "by_class": [
+          {
+            "revit_class": "Wall",
             "count": 9
           }
         ],
@@ -165,7 +349,9 @@
           {
             "element_id": 3000,
             "global_id": "0000000000000000000bb8",
-            "category": "Walls"
+            "category": "Walls",
+            "revit_class": "Wall",
+            "model_element": true
           }
         ],
         "truncated": true
@@ -180,19 +366,28 @@
           ]
         }
       ],
-      "seconds": 4.2
+      "seconds": 4.2,
+      "why": "1 model element(s) still tied to the level were not taken, each listed with why (left_on_level)"
     },
     {
       "index": 1,
       "id": "c2",
       "kind": "delete_elements_by_global_id",
       "status": "applied_in_part",
-      "why": "1 GlobalId(s) not found, 0 element(s) not deletable by this change",
+      "why": "1 GlobalId(s) name no element (not_found)",
       "matched": {
         "total": 1,
+        "model_elements": 1,
+        "other_elements": 0,
         "by_category": [
           {
             "category": "Furniture",
+            "count": 1
+          }
+        ],
+        "by_class": [
+          {
+            "revit_class": "FamilyInstance",
             "count": 1
           }
         ],
@@ -200,7 +395,9 @@
           {
             "element_id": 5001,
             "global_id": "0000000000000000001389",
-            "category": "Furniture"
+            "category": "Furniture",
+            "revit_class": "FamilyInstance",
+            "model_element": true
           }
         ]
       },
@@ -209,9 +406,17 @@
       ],
       "deleted": {
         "total": 1,
+        "model_elements": 1,
+        "other_elements": 0,
         "by_category": [
           {
             "category": "Furniture",
+            "count": 1
+          }
+        ],
+        "by_class": [
+          {
+            "revit_class": "FamilyInstance",
             "count": 1
           }
         ],
@@ -219,7 +424,9 @@
           {
             "element_id": 5001,
             "global_id": "0000000000000000001389",
-            "category": "Furniture"
+            "category": "Furniture",
+            "revit_class": "FamilyInstance",
+            "model_element": true
           }
         ]
       },
@@ -256,9 +463,17 @@
       },
       "attached": {
         "total": 1,
+        "model_elements": 1,
+        "other_elements": 0,
         "by_category": [
           {
             "category": "Roofs",
+            "count": 1
+          }
+        ],
+        "by_class": [
+          {
+            "revit_class": "FootPrintRoof",
             "count": 1
           }
         ],
@@ -266,15 +481,25 @@
           {
             "element_id": 6001,
             "global_id": "0000000000000000001771",
-            "category": "Roofs"
+            "category": "Roofs",
+            "revit_class": "FootPrintRoof",
+            "model_element": true
           }
         ]
       },
       "top_constrained": {
         "total": 4,
+        "model_elements": 4,
+        "other_elements": 0,
         "by_category": [
           {
             "category": "Walls",
+            "count": 4
+          }
+        ],
+        "by_class": [
+          {
+            "revit_class": "Wall",
             "count": 4
           }
         ],
@@ -282,7 +507,9 @@
           {
             "element_id": 3000,
             "global_id": "0000000000000000000bb8",
-            "category": "Walls"
+            "category": "Walls",
+            "revit_class": "Wall",
+            "model_element": true
           }
         ],
         "truncated": true
@@ -330,7 +557,7 @@
     }
   ],
   "element_count_total_before": 1412,
-  "element_count_total_after": 1398,
+  "element_count_total_after": 1396,
   "exports": {
     "model_rvt": {
       "written": true,

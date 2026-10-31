@@ -1,4 +1,4 @@
-// The gateway ↔ flo2-rvt contract, v1 (v0 plus the edit job), as types and validators. Everything the
+// The gateway ↔ flo2-rvt contract, v2 (v1, and more of an edit's report in its summary), as types and validators. Everything the
 // agent sends is untrusted and bounded here; everything that decides what
 // flo2-rvt does with Autodesk (the token, the client id, the input file and the
 // time limit) comes only from the hidden context the gateway sets.
@@ -7,8 +7,13 @@ import * as z from 'zod/v4';
 import { ChangeListShape } from './change-list.ts';
 import { ENGINE } from './names.ts';
 
-/** The contract's version: 1 adds rvt_edit_start beside v0's two tools; nothing of v0 changed. */
-export const CONTRACT_VERSION = 1;
+/**
+ * The contract's version: 1 added rvt_edit_start beside v0's two tools; 2 adds to an edit's
+ * report_summary what a report from add-in 0.3.0 counts apart (other_elements_deleted,
+ * deleted_with_host, left_on_level), and elements_deleted counts model elements only for such a
+ * report. Nothing else changed: a v1 gateway, which passes the summary through, still works.
+ */
+export const CONTRACT_VERSION = 2;
 
 /** The `_meta` keys of the contract. */
 export const META_JOB = 'flo2.io/job';
@@ -102,7 +107,12 @@ export const ProbeSummary = z.object({
   links: z.number().int(),
 });
 
-/** An edit's report, counted: what came of the list, and whether a new model was saved. */
+/**
+ * An edit's report, counted: what came of the list, and whether a new model was saved. From a
+ * version-2 report (add-in 0.3.0), elements_deleted counts MODEL elements, and the three counts
+ * after it are there; a version-1 report (0.2.0) counted every element in elements_deleted,
+ * Revit's internal ones too, and has none of the three.
+ */
 export const EditSummary = z.object({
   outcome: z.string(),
   changes: z.number().int(),
@@ -111,6 +121,12 @@ export const EditSummary = z.object({
   rolled_back: z.number().int(),
   not_applied: z.number().int(),
   elements_deleted: z.number().int(),
+  /** Revit's internal elements, annotation and datums the kept changes deleted, counted apart. */
+  other_elements_deleted: z.number().int().optional(),
+  /** Elements a change named that Revit would not delete alone and deleted with their host. */
+  deleted_with_host: z.number().int().optional(),
+  /** Model elements still tied to a level a delete_elements_on_level emptied, each listed with why in report.json. */
+  left_on_level: z.number().int().optional(),
   model_saved: z.boolean(),
 });
 export type EditSummary = z.infer<typeof EditSummary>;

@@ -21,6 +21,15 @@
 // What the exporter makes that is not an element (an opening's IfcOpeningElement, the parts
 // of a split wall or a curtain wall's sub-elements, IfcProject, IfcSite, IfcBuilding) matches
 // nothing here: such a GlobalId is reported as not found.
+//
+// ⭐ EVERY ELEMENT, BY CLASS. The index also records each element's Revit API class
+// (Element.GetType().Name) and whether it is a model element (LevelRules.NotModel), so the
+// report can name an element a change deletes, and count model elements apart from Revit's
+// internal ones. Revit's collectors do not list every element: flo2-rvt 0.2.0's first live edit
+// saw set_level_elevation delete 15 elements no collector had listed (the report could give
+// them no category, no GlobalId, nothing). So after the collectors, the index asks Revit for
+// every element id up to the highest one listed, plus a margin (Document.GetElement), and
+// records what it finds as unlisted; the report's edit.index says how many, and how far it got.
 
 using System;
 using System.Collections.Generic;
@@ -41,7 +50,17 @@ namespace Flo2Rvt.Addin.Edit
             public string Category;
             public bool IsType;
             public bool IsLevel;
+            /// <summary>Element.GetType().Name.</summary>
+            public string RevitClass;
+            /// <summary>A model element (LevelRules.NotModel).</summary>
+            public bool IsModel;
+            /// <summary>Listed by Revit's collectors; false when found only by asking for its id.</summary>
+            public bool Listed;
         }
+
+        /// <summary>The most the id probe may take, and how far past the highest listed id it asks.</summary>
+        public const double ProbeSecondsLimit = 60;
+        public const long ProbeMargin = 4096;
 
         public struct Resolution
         {
@@ -59,12 +78,54 @@ namespace Flo2Rvt.Addin.Edit
 
         public int Count { get { return byId.Count; } }
         public int Unreadable { get; private set; }
+        public IndexInfo Info { get; private set; }
 
         public static ElementIndex Build(Document doc)
         {
+            var watch = System.Diagnostics.Stopwatch.StartNew();
             var index = new ElementIndex();
-            foreach (Element e in new FilteredElementCollector(doc).WhereElementIsNotElementType()) index.Add(doc, e, false);
-            foreach (Element e in new FilteredElementCollector(doc).WhereElementIsElementType()) index.Add(doc, e, true);
+            long highest = 0;
+            foreach (Element e in new FilteredElementCollector(doc).WhereElementIsNotElementType())
+            {
+                index.Add(doc, e, false, true);
+                if (e.Id.Value > highest) highest = e.Id.Value;
+            }
+            foreach (Element e in new FilteredElementCollector(doc).WhereElementIsElementType())
+            {
+                index.Add(doc, e, true, true);
+                if (e.Id.Value > highest) highest = e.Id.Value;
+            }
+            int listed = index.byId.Count;
+            long to = highest + ProbeMargin;
+            long id = 1;
+            bool complete = true;
+            for (; id <= to; id++)
+            {
+                if ((id & 0xFFFF) == 0 && watch.Elapsed.TotalSeconds > ProbeSecondsLimit)
+                {
+                    complete = false;
+                    break;
+                }
+                if (index.byId.ContainsKey(id)) continue;
+                try
+                {
+                    Element e = doc.GetElement(new ElementId(id));
+                    if (e != null) index.Add(doc, e, e is ElementType, false);
+                }
+                catch (Exception)
+                {
+                    index.Unreadable++;
+                }
+            }
+            index.Info = new IndexInfo
+            {
+                Listed = listed,
+                Unlisted = index.byId.Count - listed,
+                ProbedTo = complete ? to : id - 1,
+                ProbeComplete = complete,
+                ExportIdsUnreadable = index.Unreadable,
+                Seconds = Math.Round(watch.Elapsed.TotalSeconds, 1),
+            };
             return index;
         }
 
@@ -83,7 +144,7 @@ namespace Flo2Rvt.Addin.Edit
             list.Add(new KeyValuePair<Entry, string>(e, source));
         }
 
-        private void Add(Document doc, Element e, bool isType)
+        private void Add(Document doc, Element e, bool isType, bool listed)
         {
             string exportGid = null;
             try
@@ -107,6 +168,9 @@ namespace Flo2Rvt.Addin.Edit
                 Category = e.Category != null ? e.Category.Name : null,
                 IsType = isType,
                 IsLevel = level != null,
+                RevitClass = e.GetType().Name,
+                IsModel = LevelRules.NotModel(e) == null,
+                Listed = listed,
             };
             if (level != null)
             {
@@ -144,10 +208,33 @@ namespace Flo2Rvt.Addin.Edit
             return byId.TryGetValue(id.Value, out e) ? e : null;
         }
 
-        public ElementFacts Facts(ElementId id)
+        /// <summary>The element as the report names it, as it was before any change ran; for one the index never saw (Revit added it since), as it is now; with only its id when it is in neither.</summary>
+        public ElementFacts Facts(Document doc, ElementId id)
         {
             Entry e = Of(id);
-            return new ElementFacts { Id = id.Value, GlobalId = e != null ? e.GlobalId : null, Category = e != null ? e.Category : null };
+            if (e != null) return new ElementFacts { Id = id.Value, GlobalId = e.GlobalId, Category = e.Category, RevitClass = e.RevitClass, Model = e.IsModel };
+            Element live = doc.GetElement(id);
+            if (live == null) return new ElementFacts { Id = id.Value };
+            string gid = null;
+            try
+            {
+                Parameter p = live.get_Parameter(live is ElementType ? BuiltInParameter.IFC_TYPE_GUID : BuiltInParameter.IFC_GUID);
+                string param = p != null && p.StorageType == StorageType.String ? p.AsString() : null;
+                var wall = live as Wall;
+                gid = IfcGuid.IsValid(param) && !(wall != null && wall.CurtainGrid != null) ? param : IfcGuid.FromGuid(ExportUtils.GetExportId(doc, id));
+            }
+            catch (Exception)
+            {
+                gid = null;
+            }
+            return new ElementFacts
+            {
+                Id = id.Value,
+                GlobalId = gid,
+                Category = live.Category != null ? live.Category.Name : null,
+                RevitClass = live.GetType().Name,
+                Model = LevelRules.NotModel(live) == null,
+            };
         }
 
         public Resolution Resolve(string globalId)

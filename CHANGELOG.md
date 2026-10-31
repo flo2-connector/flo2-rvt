@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.0 (unreleased)
+
+The edit report, reconciled with the model after each change. flo2-rvt 0.2.0's first live edit (2026-10-31, Autodesk's sample model) said 44 elements could not be deleted that Revit had deleted with their curtain walls (and so read `applied_in_part`), left three elements on the emptied Level 2 that it did not name, and named 15 deleted internal elements by nothing at all. Report version 2; contract v2; the change-list schema stays version 0.
+
+- **Reconciled**: what a delete refused before its transaction (`DocumentValidation.CanDeleteElement`) is judged against what the transaction deleted. Deleted with its host, it moves to the new `deleted_with_host`; only what is still in the model stays in `could_not`. The status and `why` follow from what is really left (`addin/src/Edit/Logic/Reconcile.cs`), for both delete kinds.
+- **`left_on_level`**, for `delete_elements_on_level`, read from the model after the transaction: every element still tied to the level, with what ties it and why it was not taken: by its Revit settings, or by the storey Revit's own IFC exporter files it under (an element with no Revit level, by its height; one on a level that is not a building storey), the exporter's rule taken from Autodesk's revit-ifc at the commit the GlobalId mapping cites (`addin/src/Edit/Logic/Storeys.cs`, `addin/src/Edit/Leftovers.cs`). Nothing is deleted by a guess. The change reads `applied_in_part` only when a model element is left.
+- **Schedule Level is taken**: `delete_elements_on_level` deletes a family instance whose Schedule Level (`INSTANCE_SCHEDULE_ONLY_LEVEL_PARAM`) is the level, as a person reading "everything on Level 2" means it. The schema's description, the README and the server's tool description say so.
+- **Every element by its Revit class**: the element index records each element's class (`Element.GetType().Name`) and whether it is a model element before any change runs, and now also finds, by id, the elements Revit's collectors do not list (`edit.index` says how many). Every element in the report carries `revit_class` and `model_element`; every set counts `model_elements` apart from `other_elements`, with `by_class`; in `totals`, `elements_deleted` (and the other element counts) count model elements, with `other_*` counts beside them, and `elements_deleted_with_host`, `elements_could_not`, `elements_left_on_level`.
+- **Invariants checked**: `addin/src/Edit/Logic/ReportCheck.cs` (no element both still in the model and deleted; a status that agrees with what is left; counts that add up). The edit job checks every change before it writes the report and records a break as a job warning; `addin/tests` runs the first live edit's c3 through the add-in's logic (`addin/tests/fixtures/live-edit-2026-10-31-c3.json`, element ids and GlobalIds only), a test that failed on 0.2.0.
+- **Server**: the edit's report summary adds `other_elements_deleted`, `deleted_with_host` and `left_on_level`, and reads a 0.2.0 report as before (contract v2: nothing else changed).
+
 ## 0.2.0 (unreleased)
 
 The edit job: real Revit 2024 applies a change list to a model and saves the result as a new model. Contract v1 (v0 plus the edit; nothing of v0 changed).
