@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The add-in's pure logic, tested on any OS: the files below hold no Revit type, so they
+    compile here on .NET 10 exactly as they compile into the net48 add-in. No package is
+    referenced; the runner is Program.cs, and `dotnet run` exits 1 when a test fails.
+    CI runs it from the repository root, as the README's Development section shows.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>7.3</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <RootNamespace>Flo2Rvt.Addin.Tests</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="../src/Edit/Logic/*.cs" Link="Logic/%(Filename)%(Extension)" />
+    <Compile Include="../src/Edit/EditReport.cs" Link="Edit/EditReport.cs" />
+    <Compile Include="../src/Probe/ProbeReport.cs" Link="Probe/ProbeReport.cs" />
+    <Compile Include="../Generated/ChangeList.g.cs" Link="Generated/ChangeList.g.cs" />
+  </ItemGroup>
+
+</Project>

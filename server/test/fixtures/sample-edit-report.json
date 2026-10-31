@@ -1,0 +1,372 @@
+{
+  "schema": "flo2-rvt/edit-report",
+  "version": 1,
+  "_note": "Made-up data in the shape the add-in writes (addin/src/Edit/EditReport.cs), standing for an edit of Autodesk's public sample model rac_basic_sample_project.rvt. No real model was read to make it.",
+  "edit": {
+    "addin_version": "0.2.0",
+    "started_at": "2026-10-31T12:00:05.0000000Z",
+    "finished_at": "2026-10-31T12:06:12.0000000Z",
+    "transactions_committed": 2,
+    "transactions_rolled_back": 1,
+    "saved": true,
+    "on_failure": "rolls_back_alone"
+  },
+  "engine": {
+    "version_name": "Autodesk Revit 2024",
+    "version_number": "2024",
+    "sub_version_number": "2024.2",
+    "build": "24.2.0.63"
+  },
+  "file": {
+    "format": "2024",
+    "is_workshared": true,
+    "is_central": false,
+    "saved_in_current_version": true,
+    "saved_in_later_version": false,
+    "opened_detached": true
+  },
+  "change_list": {
+    "list_id": "sample-1",
+    "description": "Made-up changes to the public sample model.",
+    "sha256": "5f0c6f8e0f6f2b0c1c1e6a0b9b8f1e2d3c4b5a69788796a5b4c3d2e1f0a9b8c7",
+    "bytes": 412,
+    "changes": 3
+  },
+  "outcome": "partly_applied",
+  "totals": {
+    "changes": 3,
+    "applied": 1,
+    "applied_in_part": 1,
+    "rolled_back": 1,
+    "not_applied": 0,
+    "elements_deleted": 14,
+    "elements_deleted_by_revit": 4,
+    "elements_modified_by_revit": 9
+  },
+  "changes": [
+    {
+      "index": 0,
+      "id": "c1",
+      "kind": "delete_elements_on_level",
+      "status": "applied",
+      "level": {
+        "name": "Level 2",
+        "element_id": 694,
+        "global_id": "3cUkl32yn9qRSPvBJVyWYp",
+        "matched_by": "level_name"
+      },
+      "matched": {
+        "total": 10,
+        "by_category": [
+          {
+            "category": "Walls",
+            "count": 6
+          },
+          {
+            "category": "Floors",
+            "count": 2
+          },
+          {
+            "category": "Rooms",
+            "count": 2
+          }
+        ],
+        "elements": [
+          {
+            "element_id": 1000,
+            "global_id": "00000000000000000003e8",
+            "category": "Walls"
+          },
+          {
+            "element_id": 1001,
+            "global_id": "00000000000000000003e9",
+            "category": "Walls"
+          },
+          {
+            "element_id": 1002,
+            "global_id": "00000000000000000003ea",
+            "category": "Walls"
+          }
+        ]
+      },
+      "deleted": {
+        "total": 13,
+        "by_category": [
+          {
+            "category": "Walls",
+            "count": 6
+          },
+          {
+            "category": "Doors",
+            "count": 3
+          },
+          {
+            "category": "Floors",
+            "count": 2
+          },
+          {
+            "category": "Rooms",
+            "count": 2
+          }
+        ],
+        "elements": [
+          {
+            "element_id": 1000,
+            "global_id": "00000000000000000003e8",
+            "category": "Walls"
+          },
+          {
+            "element_id": 1001,
+            "global_id": "00000000000000000003e9",
+            "category": "Walls"
+          },
+          {
+            "element_id": 1002,
+            "global_id": "00000000000000000003ea",
+            "category": "Walls"
+          }
+        ]
+      },
+      "deleted_by_revit": {
+        "total": 3,
+        "by_category": [
+          {
+            "category": "Doors",
+            "count": 3
+          }
+        ],
+        "elements": [
+          {
+            "element_id": 2000,
+            "global_id": "00000000000000000007d0",
+            "category": "Doors"
+          },
+          {
+            "element_id": 2001,
+            "global_id": "00000000000000000007d1",
+            "category": "Doors"
+          },
+          {
+            "element_id": 2002,
+            "global_id": "00000000000000000007d2",
+            "category": "Doors"
+          }
+        ]
+      },
+      "modified_by_revit": {
+        "total": 9,
+        "by_category": [
+          {
+            "category": "Walls",
+            "count": 9
+          }
+        ],
+        "elements": [
+          {
+            "element_id": 3000,
+            "global_id": "0000000000000000000bb8",
+            "category": "Walls"
+          }
+        ],
+        "truncated": true
+      },
+      "revit_messages": [
+        {
+          "severity": "Warning",
+          "text": "Room is not in a properly enclosed region",
+          "handled": "dismissed",
+          "element_ids": [
+            4001
+          ]
+        }
+      ],
+      "seconds": 4.2
+    },
+    {
+      "index": 1,
+      "id": "c2",
+      "kind": "delete_elements_by_global_id",
+      "status": "applied_in_part",
+      "why": "1 GlobalId(s) not found, 0 element(s) not deletable by this change",
+      "matched": {
+        "total": 1,
+        "by_category": [
+          {
+            "category": "Furniture",
+            "count": 1
+          }
+        ],
+        "elements": [
+          {
+            "element_id": 5001,
+            "global_id": "0000000000000000001389",
+            "category": "Furniture"
+          }
+        ]
+      },
+      "not_found": [
+        "2O2Fr$t4X7Zf8NOew3FLOH"
+      ],
+      "deleted": {
+        "total": 1,
+        "by_category": [
+          {
+            "category": "Furniture",
+            "count": 1
+          }
+        ],
+        "elements": [
+          {
+            "element_id": 5001,
+            "global_id": "0000000000000000001389",
+            "category": "Furniture"
+          }
+        ]
+      },
+      "seconds": 0.6
+    },
+    {
+      "index": 2,
+      "id": "c3",
+      "kind": "set_level_elevation",
+      "status": "rolled_back",
+      "why": "Revit raised an error: Can't make Extrusion.",
+      "level": {
+        "name": "Roof",
+        "element_id": 30734,
+        "global_id": "1hOSvn6df7F8_7GcBWlRGQ",
+        "matched_by": "level_name"
+      },
+      "elevation": {
+        "relative_to": "project_origin",
+        "requested_ft": -5,
+        "requested_mm": -1524,
+        "before": {
+          "elevation_ft": 20,
+          "elevation_mm": 6096,
+          "project_elevation_ft": 20,
+          "project_elevation_mm": 6096
+        },
+        "after": {
+          "elevation_ft": 20,
+          "elevation_mm": 6096,
+          "project_elevation_ft": 20,
+          "project_elevation_mm": 6096
+        }
+      },
+      "attached": {
+        "total": 1,
+        "by_category": [
+          {
+            "category": "Roofs",
+            "count": 1
+          }
+        ],
+        "elements": [
+          {
+            "element_id": 6001,
+            "global_id": "0000000000000000001771",
+            "category": "Roofs"
+          }
+        ]
+      },
+      "top_constrained": {
+        "total": 4,
+        "by_category": [
+          {
+            "category": "Walls",
+            "count": 4
+          }
+        ],
+        "elements": [
+          {
+            "element_id": 3000,
+            "global_id": "0000000000000000000bb8",
+            "category": "Walls"
+          }
+        ],
+        "truncated": true
+      },
+      "revit_messages": [
+        {
+          "severity": "Error",
+          "text": "Can't make Extrusion.",
+          "handled": "rolled_back",
+          "element_ids": [
+            6001
+          ]
+        }
+      ],
+      "seconds": 2.9
+    }
+  ],
+  "levels_after": [
+    {
+      "name": "Level 1",
+      "elevation_ft": 0,
+      "elevation_mm": 0,
+      "project_elevation_ft": 0,
+      "project_elevation_mm": 0,
+      "element_id": 311,
+      "unique_id": "00000000-0000-0000-0000-000000000001-00000137"
+    },
+    {
+      "name": "Level 2",
+      "elevation_ft": 10,
+      "elevation_mm": 3048,
+      "project_elevation_ft": 10,
+      "project_elevation_mm": 3048,
+      "element_id": 694,
+      "unique_id": "00000000-0000-0000-0000-000000000001-000002b6"
+    },
+    {
+      "name": "Roof",
+      "elevation_ft": 20,
+      "elevation_mm": 6096,
+      "project_elevation_ft": 20,
+      "project_elevation_mm": 6096,
+      "element_id": 30734,
+      "unique_id": "00000000-0000-0000-0000-000000000001-0000780e"
+    }
+  ],
+  "element_count_total_before": 1412,
+  "element_count_total_after": 1398,
+  "exports": {
+    "model_rvt": {
+      "written": true,
+      "saved_as": "central",
+      "bytes": 18874368,
+      "worksets": [
+        {
+          "name": "Shared Levels and Grids",
+          "owner": ""
+        },
+        {
+          "name": "Workset1",
+          "owner": ""
+        }
+      ],
+      "relinquished": {
+        "elements": 0,
+        "worksets": 2
+      }
+    },
+    "sheets_pdf": {
+      "written": true,
+      "sheets": 4
+    },
+    "model_ifc": {
+      "written": true,
+      "ifc_version": "IFC4DTV",
+      "base_quantities": true
+    }
+  },
+  "warnings": [
+    {
+      "source": "revit",
+      "text": "Room is not in a properly enclosed region",
+      "count": 2
+    }
+  ],
+  "warnings_total": 2
+}

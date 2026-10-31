@@ -1,0 +1,682 @@
+{
+  "_note": "Change lists and the verdicts both sides must reach: `schema` is the JSON Schema's (ajv, zod's fromJSONSchema); `accepted` is the edit job's, the schema plus the limits the server and the add-in both hold (server/src/change-list.ts, addin/src/Edit/Logic/ChangeListCheck.cs). Read by server/test/schema.test.ts and addin/tests. Made-up names and GlobalIds.",
+  "cases": [
+    {
+      "why": "the three v0 change kinds",
+      "schema": true,
+      "accepted": true,
+      "list": {
+        "version": 0,
+        "list_id": "sample-1",
+        "description": "Made-up changes to a public sample model.",
+        "changes": [
+          {
+            "kind": "delete_elements_on_level",
+            "id": "c1",
+            "level": {
+              "level_name": "Level B1"
+            }
+          },
+          {
+            "kind": "delete_elements_by_global_id",
+            "elements": [
+              {
+                "global_id": "2O2Fr$t4X7Zf8NOew3FLOH"
+              },
+              {
+                "global_id": "0K7w7JJcz3ShP$Rd0sfOmL"
+              }
+            ]
+          },
+          {
+            "kind": "set_level_elevation",
+            "level": {
+              "level_name": "Roof"
+            },
+            "elevation": {
+              "value": 6096,
+              "unit": "mm"
+            },
+            "relative_to": "project_origin"
+          },
+          {
+            "kind": "set_level_elevation",
+            "level": {
+              "global_id": "3cUkl32yn9qRSPvBJVyWYp"
+            },
+            "elevation": {
+              "value": -9.333,
+              "unit": "ft"
+            },
+            "relative_to": "elevation_base"
+          }
+        ]
+      }
+    },
+    {
+      "why": "a $schema pointer, a level named in another script",
+      "schema": true,
+      "accepted": true,
+      "list": {
+        "$schema": "https://github.com/flo2-connector/flo2-rvt/blob/main/schema/change-list.schema.json",
+        "version": 0,
+        "changes": [
+          {
+            "kind": "delete_elements_on_level",
+            "level": {
+              "level_name": "Niveau 2 étage — 层"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "lengths in each unit",
+      "schema": true,
+      "accepted": true,
+      "list": {
+        "version": 0,
+        "changes": [
+          {
+            "kind": "set_level_elevation",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "elevation": {
+              "value": -2844.8,
+              "unit": "mm"
+            },
+            "relative_to": "project_origin"
+          },
+          {
+            "kind": "set_level_elevation",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "elevation": {
+              "value": 3.048,
+              "unit": "m"
+            },
+            "relative_to": "project_origin"
+          },
+          {
+            "kind": "set_level_elevation",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "elevation": {
+              "value": 10,
+              "unit": "ft"
+            },
+            "relative_to": "project_origin"
+          },
+          {
+            "kind": "set_level_elevation",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "elevation": {
+              "value": -112,
+              "unit": "in"
+            },
+            "relative_to": "project_origin"
+          }
+        ]
+      }
+    },
+    {
+      "why": "an elevation beyond Revit's model extent",
+      "schema": true,
+      "accepted": false,
+      "list": {
+        "version": 0,
+        "changes": [
+          {
+            "kind": "set_level_elevation",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "elevation": {
+              "value": 200000,
+              "unit": "ft"
+            },
+            "relative_to": "project_origin"
+          }
+        ]
+      }
+    },
+    {
+      "why": "an elevation in metres beyond the extent",
+      "schema": true,
+      "accepted": false,
+      "list": {
+        "version": 0,
+        "changes": [
+          {
+            "kind": "set_level_elevation",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "elevation": {
+              "value": 40000,
+              "unit": "m"
+            },
+            "relative_to": "elevation_base"
+          }
+        ]
+      }
+    },
+    {
+      "why": "no version",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "changes": [
+          {
+            "kind": "delete_elements_on_level",
+            "id": "c1",
+            "level": {
+              "level_name": "Level B1"
+            }
+          },
+          {
+            "kind": "delete_elements_by_global_id",
+            "elements": [
+              {
+                "global_id": "2O2Fr$t4X7Zf8NOew3FLOH"
+              },
+              {
+                "global_id": "0K7w7JJcz3ShP$Rd0sfOmL"
+              }
+            ]
+          },
+          {
+            "kind": "set_level_elevation",
+            "level": {
+              "level_name": "Roof"
+            },
+            "elevation": {
+              "value": 6096,
+              "unit": "mm"
+            },
+            "relative_to": "project_origin"
+          },
+          {
+            "kind": "set_level_elevation",
+            "level": {
+              "global_id": "3cUkl32yn9qRSPvBJVyWYp"
+            },
+            "elevation": {
+              "value": -9.333,
+              "unit": "ft"
+            },
+            "relative_to": "elevation_base"
+          }
+        ]
+      }
+    },
+    {
+      "why": "a later version",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 1,
+        "list_id": "sample-1",
+        "description": "Made-up changes to a public sample model.",
+        "changes": [
+          {
+            "kind": "delete_elements_on_level",
+            "id": "c1",
+            "level": {
+              "level_name": "Level B1"
+            }
+          },
+          {
+            "kind": "delete_elements_by_global_id",
+            "elements": [
+              {
+                "global_id": "2O2Fr$t4X7Zf8NOew3FLOH"
+              },
+              {
+                "global_id": "0K7w7JJcz3ShP$Rd0sfOmL"
+              }
+            ]
+          },
+          {
+            "kind": "set_level_elevation",
+            "level": {
+              "level_name": "Roof"
+            },
+            "elevation": {
+              "value": 6096,
+              "unit": "mm"
+            },
+            "relative_to": "project_origin"
+          },
+          {
+            "kind": "set_level_elevation",
+            "level": {
+              "global_id": "3cUkl32yn9qRSPvBJVyWYp"
+            },
+            "elevation": {
+              "value": -9.333,
+              "unit": "ft"
+            },
+            "relative_to": "elevation_base"
+          }
+        ]
+      }
+    },
+    {
+      "why": "no changes",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 0,
+        "changes": []
+      }
+    },
+    {
+      "why": "an unknown kind",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 0,
+        "changes": [
+          {
+            "kind": "move_wall",
+            "level": {
+              "level_name": "Level 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "a change with no kind",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 0,
+        "changes": [
+          {
+            "level": {
+              "level_name": "Level 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "a GlobalId of the wrong length",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 0,
+        "changes": [
+          {
+            "kind": "delete_elements_by_global_id",
+            "elements": [
+              {
+                "global_id": "abc"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "why": "a GlobalId with a character outside IFC's alphabet",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 0,
+        "changes": [
+          {
+            "kind": "delete_elements_by_global_id",
+            "elements": [
+              {
+                "global_id": "2O2Fr$t4X7Zf8NOew3FLO!"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "why": "a level named both ways",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 0,
+        "changes": [
+          {
+            "kind": "delete_elements_on_level",
+            "level": {
+              "level_name": "Level 1",
+              "global_id": "2O2Fr$t4X7Zf8NOew3FLOH"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "a level named neither way",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 0,
+        "changes": [
+          {
+            "kind": "delete_elements_on_level",
+            "level": {}
+          }
+        ]
+      }
+    },
+    {
+      "why": "an empty level name",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 0,
+        "changes": [
+          {
+            "kind": "delete_elements_on_level",
+            "level": {
+              "level_name": ""
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "a level name past 256 characters",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 0,
+        "changes": [
+          {
+            "kind": "delete_elements_on_level",
+            "level": {
+              "level_name": "LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "a unit outside the set",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 0,
+        "changes": [
+          {
+            "kind": "set_level_elevation",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "elevation": {
+              "value": 1,
+              "unit": "yd"
+            },
+            "relative_to": "project_origin"
+          }
+        ]
+      }
+    },
+    {
+      "why": "an elevation given as text",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 0,
+        "changes": [
+          {
+            "kind": "set_level_elevation",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "elevation": {
+              "value": "10",
+              "unit": "ft"
+            },
+            "relative_to": "project_origin"
+          }
+        ]
+      }
+    },
+    {
+      "why": "an elevation with no datum",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 0,
+        "changes": [
+          {
+            "kind": "set_level_elevation",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "elevation": {
+              "value": 1,
+              "unit": "m"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "a datum outside the set",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 0,
+        "changes": [
+          {
+            "kind": "set_level_elevation",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "elevation": {
+              "value": 1,
+              "unit": "m"
+            },
+            "relative_to": "survey_point"
+          }
+        ]
+      }
+    },
+    {
+      "why": "a field the schema does not name",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 0,
+        "list_id": "sample-1",
+        "description": "Made-up changes to a public sample model.",
+        "changes": [
+          {
+            "kind": "delete_elements_on_level",
+            "id": "c1",
+            "level": {
+              "level_name": "Level B1"
+            }
+          },
+          {
+            "kind": "delete_elements_by_global_id",
+            "elements": [
+              {
+                "global_id": "2O2Fr$t4X7Zf8NOew3FLOH"
+              },
+              {
+                "global_id": "0K7w7JJcz3ShP$Rd0sfOmL"
+              }
+            ]
+          },
+          {
+            "kind": "set_level_elevation",
+            "level": {
+              "level_name": "Roof"
+            },
+            "elevation": {
+              "value": 6096,
+              "unit": "mm"
+            },
+            "relative_to": "project_origin"
+          },
+          {
+            "kind": "set_level_elevation",
+            "level": {
+              "global_id": "3cUkl32yn9qRSPvBJVyWYp"
+            },
+            "elevation": {
+              "value": -9.333,
+              "unit": "ft"
+            },
+            "relative_to": "elevation_base"
+          }
+        ],
+        "script": "doc.Delete(...)"
+      }
+    },
+    {
+      "why": "a field on a change the schema does not name",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 0,
+        "changes": [
+          {
+            "kind": "delete_elements_on_level",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "csharp": "x"
+          }
+        ]
+      }
+    },
+    {
+      "why": "a field of another kind on a change",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 0,
+        "changes": [
+          {
+            "kind": "delete_elements_on_level",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "elevation": {
+              "value": 1,
+              "unit": "m"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "a field on a level the schema does not name",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 0,
+        "changes": [
+          {
+            "kind": "delete_elements_on_level",
+            "level": {
+              "level_name": "Level 1",
+              "case_sensitive": false
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "the same element twice",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 0,
+        "changes": [
+          {
+            "kind": "delete_elements_by_global_id",
+            "elements": [
+              {
+                "global_id": "2O2Fr$t4X7Zf8NOew3FLOH"
+              },
+              {
+                "global_id": "2O2Fr$t4X7Zf8NOew3FLOH"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "why": "no elements",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 0,
+        "changes": [
+          {
+            "kind": "delete_elements_by_global_id",
+            "elements": []
+          }
+        ]
+      }
+    },
+    {
+      "why": "a change id with a space",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 0,
+        "changes": [
+          {
+            "kind": "delete_elements_on_level",
+            "id": "change 1",
+            "level": {
+              "level_name": "Level 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "a list id past 64 characters",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 0,
+        "list_id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "changes": [
+          {
+            "kind": "delete_elements_on_level",
+            "level": {
+              "level_name": "Level 1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "a list that is not an object",
+      "schema": false,
+      "accepted": false,
+      "list": [
+        {
+          "kind": "delete_elements_on_level",
+          "level": {
+            "level_name": "Level 1"
+          }
+        }
+      ]
+    }
+  ]
+}

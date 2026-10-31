@@ -7,3 +7,5 @@ addin/dist/
 .env.*
 dependency-report-*.json
 autodesk-watch-*.md
+addin/tests/bin/
+addin/tests/obj/

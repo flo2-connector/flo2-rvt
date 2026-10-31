@@ -8,11 +8,11 @@
 -->
 <RevitAddIns>
   <AddIn Type="DBApplication">
-    <Name>flo2-rvt probe</Name>
+    <Name>flo2-rvt</Name>
     <Assembly>.\Flo2RvtProbe.dll</Assembly>
     <AddInId>7C2B1F64-3D0E-4C1A-9A57-2B6E0F4D8E31</AddInId>
     <FullClassName>Flo2Rvt.Addin.ProbeApp</FullClassName>
-    <Description>Opens a Revit model read-only and reports what it holds.</Description>
+    <Description>Opens a Revit model and reports what it holds (the probe), or applies a change list and saves the result as a new model (the edit).</Description>
     <VendorId>flo2</VendorId>
     <VendorDescription>flo2-connector, github.com/flo2-connector/flo2-rvt</VendorDescription>
   </AddIn>

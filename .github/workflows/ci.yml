@@ -38,16 +38,21 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "10.0.x"
-      # Reference assemblies only (Revit 2024 API, the Design Automation bridge, .NET 4.8), from NuGet.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      # Before anything is built: the probe commits nothing and never saves, and only the
+      # edit job's one path commits (Edit/ChangeRunner.cs) and saves (Edit/SaveResult.cs,
+      # one SaveAs, a new file). The rule, and its tests, are scripts/addin-save-guard.ts.
+      - name: The add-in commits and saves only on the edit job's one path
+        run: node scripts/addin-save-guard.ts
+      # Reference assemblies only (Revit 2024 API and IFC API, the Design Automation bridge, .NET 4.8), from NuGet.
       - run: dotnet restore addin/Flo2RvtProbe.csproj --locked-mode
       # Warnings are errors; the build also refuses change-list types generated from another schema.
       - run: dotnet build addin/Flo2RvtProbe.csproj -c Release --no-restore
-      - name: The probe commits no transaction and never saves
-        run: |
-          if grep -rnE '\.Commit\(|\.Save\(|\.SaveAs\(|SynchronizeWithCentral' addin/src; then
-            echo "The read-only probe must not commit, save or synchronize." >&2
-            exit 1
-          fi
+      # The pure logic (GlobalIds, lengths, the change-list check, outcomes, report.json's shape), on .NET 10.
+      - name: The add-in's logic tests
+        run: dotnet run --project addin/tests/Flo2RvtLogic.Tests.csproj -c Release
       - name: The AppBundle has the layout Design Automation expects
         run: |
           unzip -l addin/dist/Flo2RvtProbe.bundle.zip

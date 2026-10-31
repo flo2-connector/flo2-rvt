@@ -18,7 +18,7 @@ namespace Flo2Rvt.Addin.Jobs
     public sealed class ProbeJob : IFlo2RvtJob
     {
         public const string Name = "probe";
-        public const string AddinVersion = "0.1.0";
+        public const string AddinVersion = "0.2.0";
         public const string ReportName = "report.json";
         /// <summary>1 ft = 304.8 mm exactly; Revit's internal length unit is the foot.</summary>
         private const double MmPerFoot = 304.8;
@@ -51,10 +51,10 @@ namespace Flo2Rvt.Addin.Jobs
             report.ElementCountTotal = total;
 
             context.Heartbeat.Step("printing sheets to sheets.pdf");
-            report.Exports.SheetsPdf = Guard("sheets.pdf", () => Exports.Pdf(doc, context.WorkingFolder, printable), probeWarnings);
+            report.Exports.SheetsPdf = Guard("sheets.pdf", () => Exports.Pdf(doc, context.WorkingFolder, printable, Name), probeWarnings);
 
             context.Heartbeat.Step("exporting model.ifc");
-            report.Exports.ModelIfc = Guard("model.ifc", () => Exports.Ifc(doc, context.WorkingFolder), probeWarnings);
+            report.Exports.ModelIfc = Guard("model.ifc", () => Exports.Ifc(doc, context.WorkingFolder, Name), probeWarnings);
 
             context.Heartbeat.Step("reading warnings");
             int warningsTotal;
@@ -90,7 +90,7 @@ namespace Flo2Rvt.Addin.Jobs
             }
         }
 
-        private static void ReadVersions(JobContext context, ProbeReport report)
+        public static void ReadVersions(JobContext context, ProbeReport report)
         {
             Application app = context.Data.RevitApp;
             report.Engine.VersionName = app.VersionName;
@@ -107,7 +107,7 @@ namespace Flo2Rvt.Addin.Jobs
             report.File.OpenedDetached = context.OpenedDetached;
         }
 
-        private static List<LevelInfo> Levels(Document doc)
+        public static List<LevelInfo> Levels(Document doc)
         {
             return new FilteredElementCollector(doc)
                 .OfClass(typeof(Level))
@@ -217,14 +217,20 @@ namespace Flo2Rvt.Addin.Jobs
 
         private static List<WarningInfo> Warnings(Document doc, List<string> probeWarnings, out int total)
         {
-            var list = probeWarnings.Select(w => new WarningInfo { Source = "probe", Text = w, Count = 1 }).ToList();
+            return Warnings(doc, probeWarnings, out total, MaxWarningKinds, Name);
+        }
+
+        /// <summary>The job's own warnings (source: the job's name), then the warnings stored in the model, by kind.</summary>
+        public static List<WarningInfo> Warnings(Document doc, List<string> jobWarnings, out int total, int maxKinds, string source)
+        {
+            var list = jobWarnings.Select(w => new WarningInfo { Source = source, Text = w, Count = 1 }).ToList();
             IList<FailureMessage> stored = doc.GetWarnings();
-            total = stored.Count + probeWarnings.Count;
+            total = stored.Count + jobWarnings.Count;
             list.AddRange(stored
                 .GroupBy(w => w.GetDescriptionText())
                 .OrderByDescending(g => g.Count())
                 .ThenBy(g => g.Key, StringComparer.Ordinal)
-                .Take(MaxWarningKinds)
+                .Take(maxKinds)
                 .Select(g => new WarningInfo { Source = "revit", Text = g.Key, Count = g.Count() }));
             return list;
         }

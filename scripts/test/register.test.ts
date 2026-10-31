@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import { MockAps } from '../../server/test/mock-aps.ts';
 import { main } from '../flo2-rvt.ts';
-import { activityBody } from '../lib/registration.ts';
+import { activityBody, editActivityBody } from '../lib/registration.ts';
 
 const SECRET = 'made-up-secret-never-printed';
 const ENV = { APS_CLIENT_ID: 'MadeUpClientId0123456789abcdefAB', APS_CLIENT_SECRET: SECRET };
@@ -29,7 +29,7 @@ async function runCli(aps: MockAps, argv: string[], env: Record<string, string> 
 }
 
 describe('flo2-rvt register', () => {
-  test('on a new app it creates the AppBundle and the Activity, their prod aliases, and the monthly cap', async () => {
+  test('on a new app it creates the AppBundle and both Activities, their prod aliases, and the monthly cap', async () => {
     const aps = new MockAps();
     await aps.start();
     try {
@@ -49,6 +49,9 @@ describe('flo2-rvt register', () => {
         'POST /da/us-east/v3/activities',
         'PATCH /da/us-east/v3/activities/Flo2RvtProbe/aliases/prod',
         'POST /da/us-east/v3/activities/Flo2RvtProbe/aliases',
+        'POST /da/us-east/v3/activities',
+        'PATCH /da/us-east/v3/activities/Flo2RvtEdit/aliases/prod',
+        'POST /da/us-east/v3/activities/Flo2RvtEdit/aliases',
         'PUT /da/us-east/v3/servicelimits/me',
         'GET /da/us-east/v3/servicelimits/me',
       ]);
@@ -56,16 +59,18 @@ describe('flo2-rvt register', () => {
       assert.ok(daCalls.every((c) => c.auth === 'Bearer registration-token-for-tests-only'));
 
       const bundle = aps.calls.find((c) => c.path === '/da/us-east/v3/appbundles');
-      assert.deepEqual(bundle?.json, { id: 'Flo2RvtProbe', engine: 'Autodesk.Revit+2024', description: 'flo2-rvt read-only probe for Revit 2024' });
+      assert.deepEqual(bundle?.json, { id: 'Flo2RvtProbe', engine: 'Autodesk.Revit+2024', description: 'flo2-rvt probe and edit jobs for Revit 2024' });
       const upload = aps.appBundleUploads[0];
       assert.equal(upload?.fields.at(-1), 'file', 'the file field comes last');
       assert.ok(upload?.fields.includes('policy') && upload.fields.includes('x-amz-signature'));
 
-      const activity = aps.calls.find((c) => c.path === '/da/us-east/v3/activities');
-      assert.deepEqual(activity?.json, { id: 'Flo2RvtProbe', ...activityBody('SdkTester') });
+      const [probe, edit] = aps.calls.filter((c) => c.method === 'POST' && c.path === '/da/us-east/v3/activities');
+      assert.deepEqual(probe?.json, { id: 'Flo2RvtProbe', ...activityBody('SdkTester') });
+      assert.deepEqual(edit?.json, { id: 'Flo2RvtEdit', ...editActivityBody('SdkTester') });
       assert.deepEqual(aps.calls.find((c) => c.method === 'PUT')?.json, { frontendLimits: { limitMonthlyProcessingTimeInHours: 3 } });
 
       assert.match(lines.join('\n'), /Activity SdkTester\.Flo2RvtProbe\+prod: created 1; alias prod created/);
+      assert.match(lines.join('\n'), /Activity SdkTester\.Flo2RvtEdit\+prod: created 1; alias prod created/);
       assert.match(lines.join('\n'), /asked for 3 h; Autodesk now reports 3 h/);
       assert.ok(!lines.join('\n').includes(SECRET));
       assert.ok(!lines.join('\n').includes('registration-token-for-tests-only'));
@@ -74,7 +79,7 @@ describe('flo2-rvt register', () => {
     }
   });
 
-  test('on an app that has them, it adds versions and moves the prod aliases', async () => {
+  test('on an app registered for the probe alone, it versions the probe, creates the edit, and moves the prod aliases', async () => {
     const aps = new MockAps();
     await aps.start();
     aps.preexisting('appbundles', 'Flo2RvtProbe', 'prod');
@@ -82,6 +87,9 @@ describe('flo2-rvt register', () => {
     try {
       const { code, lines } = await runCli(aps, ['register', '--bundle', zip]);
       assert.equal(code, 0, lines.join('\n'));
+      assert.match(lines.join('\n'), /Activity SdkTester\.Flo2RvtProbe\+prod: new version 2; alias prod moved/);
+      assert.match(lines.join('\n'), /Activity SdkTester\.Flo2RvtEdit\+prod: created 1; alias prod created/);
+      assert.equal(aps.appBundleUploads.length, 1, 'one AppBundle upload serves both');
       assert.ok(aps.calls.some((c) => c.path === '/da/us-east/v3/appbundles/Flo2RvtProbe/versions'));
       const version = aps.calls.find((c) => c.path === '/da/us-east/v3/activities/Flo2RvtProbe/versions');
       assert.equal((version?.json as { id?: string }).id, undefined, 'a new version carries no id');
@@ -154,6 +162,42 @@ describe('flo2-rvt register', () => {
     } finally {
       await aps.stop();
     }
+  });
+
+  test('on an app that has both, a new add-in is a new version of each, and every alias moves', async () => {
+    const aps = new MockAps();
+    await aps.start();
+    aps.preexisting('appbundles', 'Flo2RvtProbe', 'prod');
+    aps.preexisting('activities', 'Flo2RvtProbe', 'prod');
+    aps.preexisting('activities', 'Flo2RvtEdit', 'prod');
+    try {
+      const { code, lines } = await runCli(aps, ['register', '--bundle', zip]);
+      assert.equal(code, 0, lines.join('\n'));
+      for (const id of ['Flo2RvtProbe', 'Flo2RvtEdit']) {
+        assert.ok(aps.calls.some((c) => c.method === 'POST' && c.path === `/da/us-east/v3/activities/${id}/versions`), id);
+        assert.ok(aps.calls.some((c) => c.method === 'PATCH' && c.path === `/da/us-east/v3/activities/${id}/aliases/prod`), id);
+      }
+      assert.match(lines.join('\n'), /Activity SdkTester\.Flo2RvtEdit\+prod: new version 2; alias prod moved/);
+      assert.ok(!aps.calls.some((c) => c.method === 'DELETE'));
+    } finally {
+      await aps.stop();
+    }
+  });
+
+  test('the edit Activity takes the model and the change list, and puts the report and a NEW model, both over the one AppBundle', () => {
+    const body = editActivityBody('SdkTester') as { commandLine: string[]; engine: string; appbundles: string[]; parameters: Record<string, { verb: string; localName: string; required: boolean }> };
+    assert.equal(body.engine, 'Autodesk.Revit+2024');
+    assert.deepEqual(body.appbundles, ['SdkTester.Flo2RvtProbe+prod'], 'the same AppBundle as the probe');
+    assert.deepEqual(body.commandLine, (activityBody('SdkTester') as { commandLine: string[] }).commandLine);
+    assert.deepEqual(Object.fromEntries(Object.entries(body.parameters).map(([k, v]) => [k, [v.verb, v.localName, v.required]])), {
+      rvtFile: ['get', 'input.rvt', true],
+      changes: ['get', 'changes.json', true],
+      report: ['put', 'report.json', true],
+      result: ['put', 'model.rvt', false],
+      sheets: ['put', 'sheets.pdf', false],
+      ifc: ['put', 'model.ifc', false],
+    });
+    assert.ok(!Object.values(body.parameters).some((p) => p.localName === 'input.rvt' && p.verb === 'put'), 'the input is never written back');
   });
 
   test('the Activity runs revitcoreconsole with the AppBundle on the 2024 engine and names the four files', () => {

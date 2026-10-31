@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/flo2-connector/flo2-rvt/blob/main/schema/change-list.schema.json",
   "title": "ChangeList",
-  "description": "A list of changes for one Revit model, in flo2-rvt's fixed vocabulary. The agent writes only this data; one reviewed add-in maps each change kind to the Revit API. Version 0 defines the envelope, the element reference and the first three change kinds. The schema accepts them, but no edit job runs them in v0: the only job is the read-only probe.",
+  "description": "A list of changes for one Revit model, in flo2-rvt's fixed vocabulary. The agent writes only this data; one reviewed add-in maps each change kind to the Revit API. Version 0 defines the envelope, the element reference and three change kinds, which flo2-rvt's edit job runs in order, each in its own transaction, saving the result as a NEW .rvt and never changing the input.",
   "type": "object",
   "additionalProperties": false,
   "required": ["version", "changes"],
@@ -38,7 +38,7 @@
   },
   "$defs": {
     "IfcGlobalId": {
-      "description": "An IFC GlobalId: 22 characters of IFC's base-64 alphabet, as Revit's own IFC exporter writes it for the element.",
+      "description": "An IFC GlobalId: 22 characters of IFC's base-64 alphabet, as Revit's own IFC exporter writes it for the element: the element's IfcGUID parameter when it holds a valid one (never for a curtain wall), otherwise Revit's export id for the element (ExportUtils.GetExportId), compressed. For a level, the GlobalId of the IfcBuildingStorey Revit exports for it.",
       "type": "string",
       "pattern": "^[0-9A-Za-z_$]{22}$"
     },
@@ -52,7 +52,7 @@
       }
     },
     "LevelNameReference": {
-      "description": "A level named by its name in the Revit model, matched exactly.",
+      "description": "A level named by its name in the Revit model, matched exactly (case and spaces count).",
       "type": "object",
       "additionalProperties": false,
       "required": ["level_name"],
@@ -72,7 +72,7 @@
       ]
     },
     "Length": {
-      "description": "A length with its unit. The add-in converts it to Revit's internal feet.",
+      "description": "A length with its unit. The add-in converts it to Revit's internal feet (1 ft = 304.8 mm exactly).",
       "type": "object",
       "additionalProperties": false,
       "required": ["value", "unit"],
@@ -89,7 +89,7 @@
       "pattern": "^[A-Za-z0-9._-]+$"
     },
     "DeleteElementsOnLevel": {
-      "description": "Delete every model element hosted on, or associated with, the level. The level itself is kept.",
+      "description": "Delete every model element whose level is this level: its Revit level (Element.LevelId), or its base or reference level (a wall's base constraint, a column's base level, a beam's reference level, a stair's or railing's base level, a duct's or pipe's reference level, a group's or a part's base level). Elements hosted in them (doors and windows in a deleted wall) are deleted by Revit with their host, and the report names them. Elements that only reach the level from below (a wall or column whose TOP is this level) are kept, as are views, sheets, annotation, links and imports, and the level itself. A member of a group goes with its group, never alone.",
       "type": "object",
       "additionalProperties": false,
       "required": ["kind", "level"],
@@ -100,7 +100,7 @@
       }
     },
     "DeleteElementsByGlobalId": {
-      "description": "Delete the elements named by their IFC GlobalIds.",
+      "description": "Delete the elements named by their IFC GlobalIds. Each must name one model element; a level, a type, a view, a link or a member of a group is refused by name in the report, and a GlobalId that names no element is listed as not found. Revit deletes what is hosted in them with them.",
       "type": "object",
       "additionalProperties": false,
       "required": ["kind", "elements"],
@@ -117,7 +117,7 @@
       }
     },
     "SetLevelElevation": {
-      "description": "Set a level's elevation. Hosted elements follow their level, as they do in Revit.",
+      "description": "Set a level's elevation. What is on the level moves with it, as it does in Revit: elements whose base or reference level it is keep their offset from it, elements whose top is constrained to it change height, and hosted elements follow their hosts.",
       "type": "object",
       "additionalProperties": false,
       "required": ["kind", "level", "elevation", "relative_to"],

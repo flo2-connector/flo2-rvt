@@ -7,7 +7,10 @@
 // 4b62539284e404530c4fe2705fee45712c19d0d7, ExportToPdfsPlugin/ExportToPdfs.cs).
 // Copyright (c) 2026 Autodesk, Inc. and Copyright (c) 2022 Autodesk Inc; both MIT License,
 // see THIRD_PARTY_NOTICES.md. Changes: C# 7.3 for .NET Framework 4.8, flo2-rvt's job box
-// in place of the MCP tool box, and the probe as the only registered job.
+// in place of the MCP tool box, and flo2-rvt's two jobs, the probe and the edit.
+//
+// The class keeps the name of the add-in's first job: it runs every job. Which one is the
+// working folder's to say (Edit/Logic/JobSelection.cs): changes.json there means the edit.
 
 using System;
 using Autodesk.Revit.ApplicationServices;
@@ -38,11 +41,12 @@ namespace Flo2Rvt.Addin
         {
             try
             {
-                // v0 registers one job, the read-only probe. Edit jobs join here, one change kind at a time.
+                // The read-only probe and the edit job. A new change kind joins the edit job's vocabulary, not a new job.
                 e.Succeeded = JobBox.CreateBuilder(e.DesignAutomationData)
                     .AddJob<ProbeJob>()
+                    .AddJob<EditJob>()
                     .Build()
-                    .Execute(ProbeJob.Name);
+                    .ExecuteForWorkingFolder();
             }
             catch (Exception ex)
             {
