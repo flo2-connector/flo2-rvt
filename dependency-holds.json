@@ -21,6 +21,12 @@
     },
     {
       "kind": "nuget",
+      "name": "Nice3point.Revit.Api.RevitAPIIFC",
+      "reason": "As RevitAPI: the reference package's major is the Revit year, and the add-in targets the Autodesk.Revit+2024 engine. It moves with RevitAPI and the engine, before Revit 2024's engine deprecation on 2027-03-29.",
+      "look_again": "2027-03-01"
+    },
+    {
+      "kind": "nuget",
       "name": "Autodesk.Forge.DesignAutomation.Revit",
       "reason": "The bridge's major is the Revit year; 2024.0.2 is the bridge for the Autodesk.Revit+2024 engine. Move with the engine, before its deprecation on 2027-03-29.",
       "look_again": "2027-03-01"
