@@ -277,6 +277,183 @@ namespace Flo2Rvt.Addin.Tests
                 Is(o.Why.Contains("2 model element(s) still tied to the level"), o.Why);
             });
 
+            Test("the 0.3.0 re-run's c3: its 14 parts of kept elements are listed, never counted as left: not exported, and with no owner the report named", () =>
+            {
+                LeftOnLevel left = LeftOnLevelRules.Collect(RerunC3(root), "Level 2");
+                Eq(2, left.Total, "only the wardrobes are left");
+                Is(left.Elements.All(e => e.Reason == LeftOnLevelRules.ReasonNoRevitLevel && e.TiedBy.SequenceEqual(new[] { LeftOnLevelRules.TiedByIfcStorey })), "the wardrobes: no Revit level, filed by the IFC storey");
+                Is(left.NotExported != null, "the 14 are listed");
+                Eq(14, left.NotExported.Total, "not_exported");
+                Is(left.NotExported.Elements.All(e => e.ModelElement && e.TiedBy.SequenceEqual(new[] { LeftOnLevelRules.TiedByStoreyRule })), "each tied by the storey rule only, never by the IFC storey");
+                Func<string, int> count = reason => left.NotExported.ByReason.Where(b => b.Reason == reason).Select(b => b.Count).SingleOrDefault();
+                Eq(11, count(ExportFilter.RuleCurveOfSketch), "the stair's and the rails' sketch lines");
+                Eq(2, count(ExportFilter.RuleClass), "the curtain grid lines");
+                Eq(1, count(ExportFilter.RuleRailingPart), "the top rail");
+                Is(left.NotExported.Elements.All(e => e.PartOf != null), "each says what kind of part it is");
+                Eq(null, left.PartsOfKeptElements, "no owner was named");
+                var r = new ChangeReport { Id = "c3", Kind = ChangeKinds.DeleteElementsOnLevel, Deleted = ReportedElements.From(Tally(1)) };
+                Reconcile.Committed(new DeleteFacts { Kind = r.Kind, Deleted = new HashSet<long> { 1 }, Left = left }).ApplyTo(r);
+                Eq(0, ReportCheck.Violations(r).Count, "keeps the invariants: " + string.Join("; ", ReportCheck.Violations(r)));
+            });
+            Test("the 0.3.0 re-run's c3, with the owners Revit names: the 14 go under their owners; an owner gone makes its parts orphans, left and counted", () =>
+            {
+                // Made-up owner ids: a stair run, a top rail's railing, the curtain walls.
+                Func<bool, List<LeftCandidate>> withOwners = railingExists =>
+                {
+                    List<LeftCandidate> cs = RerunC3(root);
+                    foreach (LeftCandidate c in cs)
+                    {
+                        if (c.Element.Category == "<Stair/Ramp Sketch: Boundary>") c.Export.Owner = Owner(900001, "StairsRun", "Runs", true);
+                        else if (c.Element.Category == "Railing Rail Path Extension Lines") c.Export.Owner = Owner(934462, "TopRail", "Top Rails", true);
+                        else if (c.Element.RevitClass == "TopRail") c.Export.Owner = Owner(900002, "Railing", "Railings", railingExists);
+                        else if (c.Element.RevitClass == "CurtainGridLine") c.Export.Owner = Owner(c.Element.Id == 423106 ? 900003 : 900004, "Wall", "Walls", true);
+                    }
+                    return cs;
+                };
+                LeftOnLevel kept = LeftOnLevelRules.Collect(withOwners(true), "Level 2");
+                Eq(2, kept.ModelElements, "only the wardrobes are left");
+                Eq(null, kept.NotExported, "every part has its owner");
+                Eq(14, kept.PartsOfKeptElements.Total, "parts_of_kept_elements");
+                Eq(5, kept.PartsOfKeptElements.Owners.Count, "five owners");
+                Eq(934462L, kept.PartsOfKeptElements.Owners[0].Owner.ElementId, "the top rail, with its seven path extension lines, first");
+                Eq(7, kept.PartsOfKeptElements.Owners[0].Parts.Count, "its parts");
+                Eq(4, kept.PartsOfKeptElements.Owners[1].Parts.Count, "the stair run's four sketch lines");
+                Is(kept.PartsOfKeptElements.Owners.All(op => op.Owner.Exists && op.Parts.All(p => p.Reason == LeftOnLevelRules.ReasonPartOfKeptElement && p.Owner == null)), "each under an owner still in the model");
+                LeftElement line = kept.PartsOfKeptElements.Owners[1].Parts[0];
+                Eq(ExportFilter.PartSketch, line.PartOf, "a sketch's curve");
+                Is(line.Why.StartsWith("part of StairsRun 900001 (Runs), which is still in the model: it is a curve of another element's sketch"), line.Why);
+                DeleteOutcome o = Reconcile.Committed(new DeleteFacts { Kind = ChangeKinds.DeleteElementsOnLevel, Deleted = new HashSet<long> { 1 }, Left = kept });
+                Is(o.Why.Contains("2 model element(s) still tied to the level"), o.Why);
+
+                LeftOnLevel orphaned = LeftOnLevelRules.Collect(withOwners(false), "Level 2");
+                Eq(3, orphaned.ModelElements, "the wardrobes and the top rail whose railing is gone");
+                LeftElement rail = orphaned.Elements.Single(e => e.ElementId == 934462);
+                Eq(LeftOnLevelRules.ReasonOrphanedPart, rail.Reason, "an orphan");
+                Is(rail.Owner != null && !rail.Owner.Exists && rail.Owner.ElementId == 900002, "names its gone railing");
+                Is(rail.Why.Contains("no longer in the model") && rail.Why.Contains("left behind"), rail.Why);
+                Eq(13, orphaned.PartsOfKeptElements.Total, "its own path extension lines still go with the top rail, which is still in the model");
+                o = Reconcile.Committed(new DeleteFacts { Kind = ChangeKinds.DeleteElementsOnLevel, Deleted = new HashSet<long> { 1 }, Left = orphaned });
+                Eq(ChangeStatus.AppliedInPart, o.Status, "an orphan is left");
+                Is(o.Why.Contains("3 model element(s) still tied to the level"), o.Why);
+                var r = new ChangeReport { Id = "c3", Kind = ChangeKinds.DeleteElementsOnLevel, Deleted = ReportedElements.From(Tally(1)) };
+                o.ApplyTo(r);
+                Eq(0, ReportCheck.Violations(r).Count, "keeps the invariants: " + string.Join("; ", ReportCheck.Violations(r)));
+            });
+
+            // ─── what Revit's IFC exporter exports as a product of its own (revit-ifc 887c3d3e)
+            Test("the exporter exports a family instance, a wall, a model line on its own; never a curtain grid line, a sketch's curve, a rail, a curtain-hosted panel", () =>
+            {
+                Is(ExportFilter.Of(null).Standalone, "nothing read: taken as exported, as 0.3.0 took it");
+                Is(ExportFilter.Of(Facts("FamilyInstance", "Instance")).Standalone, "a wardrobe");
+                Is(ExportFilter.Of(Facts("Wall", "HostObject")).Standalone, "a wall");
+                Is(ExportFilter.Of(new ExportFacts { Classes = { "ModelLine", "ModelCurve", "CurveElement", "Element" }, CurveType = "ModelCurve" }).Standalone, "a model line of its own");
+                Func<ExportFacts, ExportVerdict> of = ExportFilter.Of;
+                ExportVerdict v = of(Facts("CurtainGridLine"));
+                Is(!v.Standalone && v.Rule == ExportFilter.RuleClass && v.PartOf == ExportFilter.PartCurtainGrid && v.Why.Contains("GetClassFilter"), v.Why);
+                v = of(new ExportFacts { Classes = { "ModelLine", "ModelCurve", "CurveElement", "Element" }, CurveType = "ModelCurve", CurveOfAnotherSketch = true });
+                Is(!v.Standalone && v.PartOf == ExportFilter.PartSketch && v.Why.Contains("ShouldCurveElementBeExported"), v.Why);
+                v = of(new ExportFacts { Classes = { "ModelLine", "ModelCurve", "CurveElement", "Element" }, CurveType = "RoomSeparation", CurveOfAnotherSketch = true });
+                Eq(ExportFilter.PartSketch, v.PartOf, "a sketch's curve goes to the sketch's owner whatever its type");
+                v = of(new ExportFacts { Classes = { "ModelLine", "ModelCurve", "CurveElement", "Element" }, CurveType = "RoomSeparation" });
+                Is(!v.Standalone && v.Rule == ExportFilter.RuleCurve && v.PartOf == null, "a room separation line is not exported");
+                Is(!of(new ExportFacts { Classes = { "ModelLine", "ModelCurve", "CurveElement", "Element" }, CurveType = "ModelCurve", CurveHasNoLength = true }).Standalone, "a line whose ends meet");
+                Is(!of(new ExportFacts { Classes = { "ModelLine", "ModelCurve", "CurveElement", "Element" }, CurveType = "ModelCurve", CurveHasNoSketchPlane = true }).Standalone, "a curve with no sketch plane");
+                v = of(Facts("TopRail", "ContinuousRail"));
+                Is(!v.Standalone && v.PartOf == ExportFilter.PartRailing && v.Why.Contains("RailingExporter.CollectSubElements"), v.Why);
+                Eq(ExportFilter.PartRailing, of(Facts("HandRail", "ContinuousRail")).PartOf, "a handrail");
+                Eq(ExportFilter.PartRailing, of(new ExportFacts { Classes = { "FamilyInstance", "Instance", "Element" }, RailSupport = true }).PartOf, "a handrail's support");
+                v = of(new ExportFacts { Classes = { "Panel", "FamilyInstance", "Instance", "Element" }, CurtainHosted = true });
+                Is(!v.Standalone && v.PartOf == ExportFilter.PartCurtainHost && v.Why.Contains("FamilyInstanceExporter.ExportFamilyInstanceElement"), v.Why);
+                Eq(ExportFilter.PartCutHost, of(Facts("Opening")).PartOf, "an opening");
+            });
+            Test("the exporter skips an element set not to export, in a secondary design option, demolished, invisible, or of an excluded category", () =>
+            {
+                Func<ExportFacts, string> rule = f => ExportFilter.Of(f).Rule;
+                Eq(ExportFilter.RuleExportSetting, rule(new ExportFacts { Classes = { "FamilyInstance", "Instance", "Element" }, ExportSetting = false }), "Export to IFC: No");
+                Eq(ExportFilter.Exported, rule(new ExportFacts { Classes = { "FamilyInstance", "Instance", "Element" }, ExportSetting = true }), "Export to IFC: Yes");
+                Eq(ExportFilter.RuleClass, rule(new ExportFacts { Classes = { "CurtainGridLine", "Element" }, ExportSetting = true }), "Yes does not export a class the collector leaves out");
+                Eq(ExportFilter.RuleDesignOption, rule(new ExportFacts { Classes = { "Wall", "Element" }, InSecondaryDesignOption = true }), "a secondary design option");
+                Eq(ExportFilter.RulePhase, rule(new ExportFacts { Classes = { "Wall", "Element" }, PhaseStatus = "Demolished" }), "demolished in the exported phase");
+                foreach (string status in ExportFilter.ExportedPhaseStatuses) Eq(ExportFilter.Exported, rule(new ExportFacts { Classes = { "Wall", "Element" }, PhaseStatus = status }), status);
+                Eq(ExportFilter.RuleInvisible, rule(new ExportFacts { Classes = { "FamilyInstance", "Instance", "Element" }, Invisible = true }), "invisible");
+                Eq(ExportFilter.RuleCategory, rule(new ExportFacts { Classes = { "FamilyInstance", "Instance", "Element" }, BuiltInCategory = "OST_DecalElement" }), "a decal");
+                Eq(ExportFilter.Exported, rule(new ExportFacts { Classes = { "FamilyInstance", "Instance", "Element" }, BuiltInCategory = "OST_Furniture" }), "furniture");
+            });
+            Test("an element the exporter skips, tied to the level by no Revit setting, is listed apart and not counted; one a Revit setting ties is still left", () =>
+            {
+                var skipped = Candidate(1, true, s => { s.StoreyBy = LeftOnLevelRules.StoreyByHeight; s.Export = new ExportFacts { Classes = { "FamilyInstance", "Instance", "Element" }, ExportSetting = false }; });
+                var tied = Candidate(2, true, s => { s.RevitSettings.Add("FAMILY_LEVEL_PARAM"); s.StoreyBy = LeftOnLevelRules.StoreyBaseLevel; s.Export = new ExportFacts { Classes = { "FamilyInstance", "Instance", "Element" }, ExportSetting = false }; });
+                LeftOnLevel left = LeftOnLevelRules.Collect(new[] { skipped, tied }, "Level 2");
+                Eq(1, left.ModelElements, "the one a Revit setting ties");
+                Eq(2L, left.Elements[0].ElementId, "left");
+                Eq(LeftOnLevelRules.ReasonSettingNotTaken, left.Elements[0].Reason, "by its setting");
+                Is(!left.Elements[0].Why.Contains("IFC exporter files it"), "never claims the IFC storey for what the exporter skips: " + left.Elements[0].Why);
+                Is(left.Elements[0].TiedBy.SequenceEqual(new[] { "FAMILY_LEVEL_PARAM", LeftOnLevelRules.TiedByStoreyRule }), string.Join(",", left.Elements[0].TiedBy));
+                Eq(1, left.NotExported.Total, "the skipped one apart");
+                Eq(ExportFilter.RuleExportSetting, left.NotExported.Elements[0].Reason, "with the exporter's reason");
+                Is(left.NotExported.Elements[0].Why.Contains("no Revit setting ties it"), left.NotExported.Elements[0].Why);
+                Eq(null, left.NotExported.Elements[0].PartOf, "not a part");
+            });
+            Test("a part still asked for and still in the model is not_deleted; a part with a Revit setting and its owner kept goes with its owner", () =>
+            {
+                var asked = Candidate(1, true, s => { s.Targeted = true; s.RevitSettings.Add("Element.LevelId"); s.Export = new ExportFacts { Classes = { "TopRail", "ContinuousRail", "Element" }, Owner = Owner(9, "Railing", "Railings", true) }; });
+                var withSetting = Candidate(2, true, s => { s.RevitSettings.Add("Element.LevelId"); s.Export = new ExportFacts { Classes = { "TopRail", "ContinuousRail", "Element" }, Owner = Owner(9, "Railing", "Railings", true) }; });
+                LeftOnLevel left = LeftOnLevelRules.Collect(new[] { asked, withSetting }, "Level 2");
+                Eq(1, left.ModelElements, "the one asked for");
+                Eq(LeftOnLevelRules.ReasonNotDeleted, left.Elements[0].Reason, "not_deleted");
+                Eq(1, left.PartsOfKeptElements.Total, "the other under its railing");
+                Eq(9L, left.PartsOfKeptElements.Owners[0].Owner.ElementId, "the railing");
+                Is(left.PartsOfKeptElements.Owners[0].Parts[0].TiedBy.SequenceEqual(new[] { "Element.LevelId" }), "its tie is still said");
+            });
+            Test("the report check names a part under a gone or deleted owner, a part also left or deleted, and an orphan whose owner is not gone", () =>
+            {
+                var r = new ChangeReport { Id = "c9", Kind = ChangeKinds.DeleteElementsOnLevel, Status = ChangeStatus.Applied, Deleted = ReportedElements.From(Tally(5, 9)) };
+                r.LeftOnLevel = LeftOnLevelRules.Collect(new[]
+                {
+                    Candidate(5, true, s => { s.StoreyBy = LeftOnLevelRules.StoreyByHeight; s.Export = new ExportFacts { Classes = { "TopRail", "ContinuousRail", "Element" }, Owner = Owner(9, "Railing", "Railings", true) }; }),
+                }, "Level 2");
+                r.LeftOnLevel.Elements.Add(new LeftElement { ElementId = 7, ModelElement = true, Reason = LeftOnLevelRules.ReasonOrphanedPart, Owner = new OwnerRef { ElementId = 8, Exists = true } });
+                r.LeftOnLevel.Total = r.LeftOnLevel.ModelElements = 1;
+                r.Status = ChangeStatus.AppliedInPart;
+                List<string> broken = ReportCheck.Violations(r);
+                Is(broken.Any(b => b.Contains("owner 9 in parts_of_kept_elements is deleted")), string.Join("; ", broken));
+                Is(broken.Any(b => b.Contains("part 5 is both in parts_of_kept_elements and deleted")), string.Join("; ", broken));
+                Is(broken.Any(b => b.Contains("element 7 is an orphaned_part whose owner is not named as gone")), string.Join("; ", broken));
+            });
+            Test("report.json carries parts_of_kept_elements, not_exported, part_of and owner, and reads them back", () =>
+            {
+                LeftOnLevel left = LeftOnLevelRules.Collect(new[]
+                {
+                    Candidate(1, true, s => { s.StoreyBy = LeftOnLevelRules.StoreyByHeight; s.Export = new ExportFacts { Classes = { "CurtainGridLine", "Element" }, Owner = Owner(9, "Wall", "Walls", true) }; }),
+                    Candidate(2, true, s => { s.StoreyBy = LeftOnLevelRules.StoreyByHeight; s.Export = new ExportFacts { Classes = { "TopRail", "ContinuousRail", "Element" }, Owner = Owner(8, "Railing", "Railings", false) }; }),
+                    Candidate(3, true, s => { s.StoreyBy = LeftOnLevelRules.StoreyByHeight; s.Export = new ExportFacts { Classes = { "CurtainGridLine", "Element" } }; }),
+                }, "Level 2");
+                var report = new EditReport();
+                report.Changes.Add(new ChangeReport { Id = "c1", Kind = ChangeKinds.DeleteElementsOnLevel, Status = ChangeStatus.AppliedInPart, LeftOnLevel = left });
+                var buffer = new MemoryStream();
+                report.WriteTo(buffer);
+                using (var json = JsonDocument.Parse(buffer.ToArray()))
+                {
+                    JsonElement l = json.RootElement.GetProperty("changes")[0].GetProperty("left_on_level");
+                    Eq(1, l.GetProperty("model_elements").GetInt32(), "the orphan is counted");
+                    JsonElement orphan = l.GetProperty("elements")[0];
+                    Eq("orphaned_part", orphan.GetProperty("reason").GetString(), "orphaned_part");
+                    Eq("railing", orphan.GetProperty("part_of").GetString(), "part_of");
+                    Is(!orphan.GetProperty("owner").GetProperty("exists").GetBoolean(), "owner.exists");
+                    JsonElement owner = l.GetProperty("parts_of_kept_elements").GetProperty("owners")[0];
+                    Eq(9L, owner.GetProperty("owner").GetProperty("element_id").GetInt64(), "owner");
+                    Eq("test", owner.GetProperty("owner").GetProperty("found_by").GetString(), "found_by");
+                    Eq("part_of_kept_element", owner.GetProperty("parts")[0].GetProperty("reason").GetString(), "part");
+                    Is(!owner.GetProperty("parts")[0].TryGetProperty("owner", out JsonElement _), "a part under its owner does not repeat it");
+                    Eq(1, l.GetProperty("not_exported").GetProperty("total").GetInt32(), "not_exported");
+                }
+                buffer.Position = 0;
+                EditReport read = EditReport.ReadFrom(buffer);
+                Eq(1, read.Changes[0].LeftOnLevel.PartsOfKeptElements.Total, "read back");
+                Eq(1, read.Changes[0].LeftOnLevel.NotExported.Total, "read back");
+                Eq(2, read.Version, "the report's version is still 2");
+            });
+
             // ─── reconciling a committed delete with the model after it
             Test("an element refused before the transaction is deleted_with_host when the transaction deleted it, and could_not when it is still there", () =>
             {
@@ -516,8 +693,10 @@ namespace Flo2Rvt.Addin.Tests
         /// The 0.3.0 re-run's c3 (delete_elements_on_level "Level 2"): the 16 model elements its
         /// left_on_level listed (addin/tests/fixtures/rerun-2026-10-31-c3-left-on-level.json, by
         /// element id, Revit class and category only), handed to the logic as Edit/Leftovers.cs
-        /// handed them: no Revit setting names the level, and Revit's IFC exporter's storey rule
-        /// puts each in Level 2's storey by the height of its lowest point.
+        /// hands them: no Revit setting names the level, Revit's IFC exporter's storey rule puts
+        /// each in Level 2's storey by the height of its lowest point, and what ExportReader reads
+        /// of each for the exporter's choice (RerunExportFacts). The report recorded no owners, so
+        /// none is named here.
         /// </summary>
         private static List<LeftCandidate> RerunC3(string root)
         {
@@ -533,8 +712,45 @@ namespace Flo2Rvt.Addin.Tests
                         Model = true,
                     },
                     StoreyBy = LeftOnLevelRules.StoreyByHeight,
+                    Export = RerunExportFacts(e.GetProperty("revit_class").GetString()),
                 }).ToList();
             }
+        }
+
+        /// <summary>
+        /// What ExportReader reads in Revit of an element of the re-run's c3, by its class: the
+        /// class and those it derives from (Revit 2024's API: ModelLine from ModelCurve from
+        /// CurveElement; TopRail from ContinuousRail; Mullion and Panel from FamilyInstance), and
+        /// for its curves, what Revit's own ExporterIFCUtils.IsCurveFromOtherElementSketch says of
+        /// a stair's sketch boundary and a rail's path extension: a curve of another element's
+        /// sketch (borne out by the job's IFC, whose four IfcAnnotations are text notes).
+        /// </summary>
+        private static ExportFacts RerunExportFacts(string revitClass)
+        {
+            var chains = new Dictionary<string, string[]>
+            {
+                { "FamilyInstance", new[] { "FamilyInstance", "Instance", "Element" } },
+                { "CurtainGridLine", new[] { "CurtainGridLine", "Element" } },
+                { "ModelLine", new[] { "ModelLine", "ModelCurve", "CurveElement", "Element" } },
+                { "TopRail", new[] { "TopRail", "ContinuousRail", "Element" } },
+            };
+            var f = new ExportFacts { Classes = chains[revitClass].ToList(), PhaseStatus = "New" };
+            if (revitClass == "ModelLine")
+            {
+                f.CurveType = "ModelCurve";
+                f.CurveOfAnotherSketch = true;
+            }
+            return f;
+        }
+
+        private static OwnerFacts Owner(long id, string revitClass, string category, bool exists)
+        {
+            return new OwnerFacts { Element = new ElementFacts { Id = id, RevitClass = revitClass, Category = category, Model = true }, Exists = exists, Via = "test" };
+        }
+
+        private static ExportFacts Facts(params string[] classes)
+        {
+            return new ExportFacts { Classes = classes.Concat(new[] { "Element" }).ToList() };
         }
 
         /// <summary>Every value in the fixture (but its _note) is in what the contract wrote, the same.</summary>
