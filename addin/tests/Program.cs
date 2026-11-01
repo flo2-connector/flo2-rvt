@@ -264,6 +264,19 @@ namespace Flo2Rvt.Addin.Tests
                 Eq(44, ReportCheck.Violations(asWritten).Count, "0.2.0's report: 44 elements both could_not and deleted");
             });
 
+            // ─── the 0.3.0 re-run of the first live edit (2026-10-31, Autodesk's sample model), change c3
+            Test("the 0.3.0 re-run's c3: the two wardrobes are the only model elements left on Level 2, and it reads applied_in_part for them alone", () =>
+            {
+                LeftOnLevel left = LeftOnLevelRules.Collect(RerunC3(root), "Level 2");
+                List<LeftElement> models = left.Elements.Where(e => e.ModelElement).ToList();
+                Is(models.Select(e => e.ElementId).OrderBy(id => id).SequenceEqual(RerunWardrobes),
+                    "the model elements left should be the two wardrobes (506168, 523531); " + models.Count + " are: " + string.Join(", ", models.Select(e => e.ElementId + " " + e.RevitClass)));
+                Eq(2, left.ModelElements, "left_on_level.model_elements");
+                DeleteOutcome o = Reconcile.Committed(new DeleteFacts { Kind = ChangeKinds.DeleteElementsOnLevel, Deleted = new HashSet<long> { 1 }, Left = left });
+                Eq(ChangeStatus.AppliedInPart, o.Status, "status");
+                Is(o.Why.Contains("2 model element(s) still tied to the level"), o.Why);
+            });
+
             // ─── reconciling a committed delete with the model after it
             Test("an element refused before the transaction is deleted_with_host when the transaction deleted it, and could_not when it is still there", () =>
             {
@@ -493,6 +506,34 @@ namespace Flo2Rvt.Addin.Tests
                 var c3 = new DeleteFacts { Kind = r.Kind, PreChecked = preChecked, Deleted = new HashSet<long>(deleted.Listed.Select(e => e.Id)) };
                 Reconcile.Committed(c3).ApplyTo(r);
                 return r;
+            }
+        }
+
+        /// <summary>The 0.3.0 re-run's two wardrobes, the real leftovers on Level 2.</summary>
+        private static readonly long[] RerunWardrobes = { 506168, 523531 };
+
+        /// <summary>
+        /// The 0.3.0 re-run's c3 (delete_elements_on_level "Level 2"): the 16 model elements its
+        /// left_on_level listed (addin/tests/fixtures/rerun-2026-10-31-c3-left-on-level.json, by
+        /// element id, Revit class and category only), handed to the logic as Edit/Leftovers.cs
+        /// handed them: no Revit setting names the level, and Revit's IFC exporter's storey rule
+        /// puts each in Level 2's storey by the height of its lowest point.
+        /// </summary>
+        private static List<LeftCandidate> RerunC3(string root)
+        {
+            using (var doc = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(root, "addin", "tests", "fixtures", "rerun-2026-10-31-c3-left-on-level.json"))))
+            {
+                return doc.RootElement.GetProperty("left_on_level_model_elements").EnumerateArray().Select(e => new LeftCandidate
+                {
+                    Element = new ElementFacts
+                    {
+                        Id = e.GetProperty("element_id").GetInt64(),
+                        RevitClass = e.GetProperty("revit_class").GetString(),
+                        Category = e.GetProperty("category").GetString(),
+                        Model = true,
+                    },
+                    StoreyBy = LeftOnLevelRules.StoreyByHeight,
+                }).ToList();
             }
         }
 
