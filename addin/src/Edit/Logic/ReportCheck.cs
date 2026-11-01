@@ -8,7 +8,10 @@
 //   · what went with its host (deleted_with_host) is in what was deleted;
 //   · a kept delete reads applied exactly when nothing it named is left undone (not_found,
 //     could_not, a model element in left_on_level), and applied_in_part otherwise;
-//   · every set's model and other elements add up to its total.
+//   · every set's model and other elements add up to its total;
+//   · (since 0.4.0) a part of a kept element is listed once, under an owner that is still in the
+//     model and not deleted, and is itself neither deleted nor among what is left; an
+//     orphaned_part names an owner that is gone; what is not exported is not deleted either.
 //
 // The lists are read as the report lists them: past ElementTally.Cap a set is truncated, and
 // only its listed elements are checked.
@@ -58,6 +61,39 @@ namespace Flo2Rvt.Addin.Edit.Logic
                     if (stillThere.Contains(e.ElementId)) found.Add(at + "element " + e.ElementId + " is both in could_not and left_on_level");
                 }
                 if (r.LeftOnLevel.ModelElements + r.LeftOnLevel.OtherElements != r.LeftOnLevel.Total) found.Add(at + "left_on_level's model and other elements do not add up to its total");
+                var leftIds = new HashSet<long>(r.LeftOnLevel.Elements.Select(e => e.ElementId));
+                foreach (LeftElement e in r.LeftOnLevel.Elements)
+                {
+                    if (e.Reason == LeftOnLevelRules.ReasonOrphanedPart && (e.Owner == null || e.Owner.Exists)) found.Add(at + "element " + e.ElementId + " is an orphaned_part whose owner is not named as gone");
+                }
+                PartsOfKeptElements parts = r.LeftOnLevel.PartsOfKeptElements;
+                if (parts != null)
+                {
+                    var partIds = new HashSet<long>();
+                    foreach (OwnerParts o in parts.Owners)
+                    {
+                        if (o.Owner == null || !o.Owner.Exists) found.Add(at + "parts_of_kept_elements lists parts under an owner that is not in the model");
+                        else if (deleted.Contains(o.Owner.ElementId)) found.Add(at + "owner " + o.Owner.ElementId + " in parts_of_kept_elements is deleted");
+                        foreach (LeftElement e in o.Parts)
+                        {
+                            if (!partIds.Add(e.ElementId)) found.Add(at + "part " + e.ElementId + " is listed under more than one owner");
+                            if (deleted.Contains(e.ElementId)) found.Add(at + "part " + e.ElementId + " is both in parts_of_kept_elements and deleted");
+                            if (leftIds.Contains(e.ElementId)) found.Add(at + "part " + e.ElementId + " is both in parts_of_kept_elements and among what is left");
+                            if (stillThere.Contains(e.ElementId)) found.Add(at + "part " + e.ElementId + " is both in could_not and parts_of_kept_elements");
+                        }
+                    }
+                    if (!parts.Truncated && partIds.Count != parts.Total) found.Add(at + "parts_of_kept_elements lists " + partIds.Count + " parts but counts " + parts.Total);
+                }
+                NotExportedElements notExported = r.LeftOnLevel.NotExported;
+                if (notExported != null)
+                {
+                    foreach (LeftElement e in notExported.Elements)
+                    {
+                        if (deleted.Contains(e.ElementId)) found.Add(at + "element " + e.ElementId + " is both in not_exported and deleted");
+                        if (leftIds.Contains(e.ElementId)) found.Add(at + "element " + e.ElementId + " is both in not_exported and among what is left");
+                    }
+                    if (!notExported.Truncated && notExported.Elements.Count != notExported.Total) found.Add(at + "not_exported lists " + notExported.Elements.Count + " elements but counts " + notExported.Total);
+                }
             }
             if (r.DeletedWithHost != null)
             {

@@ -29,12 +29,26 @@
 //      host's), commonInit's loop over the level infos.
 // The exporter's own export options (only some categories, only what a view shows) are the
 // probe's defaults, which export the whole model.
+//
+// ⭐ ONLY WHAT THE EXPORTER EXPORTS ON ITS OWN (since 0.4.0). The storey rule above says where
+// the exporter files a product; it does not say which elements are products. For every model
+// element still tied to the level, ExportReader reads what the exporter's own filter reads
+// (Logic/ExportFilter.cs states the rule, from the same revit-ifc commit: ElementFilteringUtil's
+// GetClassFilter, GetDesignOptionFilter, GetPhaseStatusFilter and ShouldElementBeExported;
+// CurveElementExporter.ShouldCurveElementBeExported; FamilyInstanceExporter's curtain-host
+// test; RailingExporter.CollectSubElements) and what the element is part of: the owner of the
+// sketch whose curve it is (Sketch.OwnerId), a rail's railing (ContinuousRail.HostRailingId),
+// the handrail a support is on, the curtain wall, roof or system whose grid holds the line, a
+// family instance's host, an opening's host. A part whose owner is still in the model is
+// listed under that owner, not as left (Logic/LeftOnLevelRules.cs). The 0.3.0 re-run of the
+// first live edit listed 14 such parts on Level 2 as left, beside the 2 real leftovers.
 
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Architecture;
+using Autodesk.Revit.DB.IFC;
 using Autodesk.Revit.DB.Structure;
 using Flo2Rvt.Addin.Edit.Logic;
 
@@ -69,6 +83,7 @@ namespace Flo2Rvt.Addin.Edit
             long levelId = level.Id.Value;
             Storeys storeys = Storeys.Of(LevelsOf(doc));
             var candidates = new Dictionary<long, LeftCandidate>();
+            var elements = new Dictionary<long, Element>();
             Func<Element, LeftCandidate> candidate = e =>
             {
                 LeftCandidate c;
@@ -82,6 +97,7 @@ namespace Flo2Rvt.Addin.Edit
                         Targeted = targeted.Contains(e.Id.Value),
                     };
                     candidates[e.Id.Value] = c;
+                    elements[e.Id.Value] = e;
                 }
                 return c;
             };
@@ -120,6 +136,22 @@ namespace Flo2Rvt.Addin.Edit
                     c.StoreyBy = by;
                     c.StoreyVia = via;
                     c.StoreysSharingSpan = sharing;
+                }
+            }
+
+            // What the exporter does with each model element, and what it is part of.
+            var reader = new ExportReader(doc, index);
+            foreach (LeftCandidate c in candidates.Values)
+            {
+                if (c.NotModelWhy != null) continue;
+                try
+                {
+                    c.Export = reader.Read(elements[c.Element.Id]);
+                }
+                catch (Exception)
+                {
+                    // Not read: taken as exported on its own, and listed as left (never hidden).
+                    c.Export = null;
                 }
             }
             return LeftOnLevelRules.Collect(candidates.Values, level.Name);
@@ -253,6 +285,277 @@ namespace Flo2Rvt.Addin.Edit
                 if (hostBox != null) return hostBox.Min.Z;
             }
             return null;
+        }
+    }
+
+    /// <summary>
+    /// What Revit says of a model element for Revit's IFC exporter's choice of what it exports on
+    /// its own, and what it is part of (Logic/ExportFilter.cs judges it). Reads only; each lookup
+    /// that spans the model (sketches, curtain grids, rail supports) is built once, when first
+    /// needed, from the model as it is after the change.
+    /// </summary>
+    internal sealed class ExportReader
+    {
+        private readonly Document doc;
+        private readonly ElementIndex index;
+        private readonly ElementId exportPhase;
+        private readonly Lazy<Dictionary<long, ElementId>> sketchOwners;
+        private readonly Lazy<Dictionary<long, ElementId>> curtainHosts;
+        private readonly Lazy<Dictionary<long, ElementId>> supportRails;
+
+        public ExportReader(Document doc, ElementIndex index)
+        {
+            this.doc = doc;
+            this.index = index;
+            // ExportOptionsCache.UpdateForDocument: with no phase and no view named, the model's last phase.
+            PhaseArray phases = doc.Phases;
+            exportPhase = phases != null && phases.Size > 0 ? phases.get_Item(phases.Size - 1).Id : ElementId.InvalidElementId;
+            sketchOwners = new Lazy<Dictionary<long, ElementId>>(SketchOwners);
+            curtainHosts = new Lazy<Dictionary<long, ElementId>>(CurtainHosts);
+            supportRails = new Lazy<Dictionary<long, ElementId>>(SupportRails);
+        }
+
+        public ExportFacts Read(Element e)
+        {
+            var f = new ExportFacts();
+            for (Type t = e.GetType(); t != null && t != typeof(object); t = t.BaseType)
+            {
+                f.Classes.Add(t.Name);
+                if (t == typeof(Element)) break;
+            }
+            Category c = e.Category;
+            if (c != null) f.BuiltInCategory = c.BuiltInCategory.ToString();
+            DesignOption option = e.DesignOption;
+            f.InSecondaryDesignOption = option != null && !option.IsPrimary;
+            if (exportPhase != ElementId.InvalidElementId)
+            {
+                try
+                {
+                    f.PhaseStatus = e.GetPhaseStatus(exportPhase).ToString();
+                }
+                catch (Exception)
+                {
+                    f.PhaseStatus = null;
+                }
+            }
+            f.ExportSetting = ExportSetting(e);
+
+            ElementId owner = ElementId.InvalidElementId;
+            string via = null;
+            var curve = e as CurveElement;
+            if (curve != null)
+            {
+                f.CurveType = curve.CurveElementType.ToString();
+                ElementId sketchOwner;
+                bool inSketch = sketchOwners.Value.TryGetValue(e.Id.Value, out sketchOwner);
+                bool ofOther = false;
+                try
+                {
+                    ofOther = ExporterIFCUtils.IsCurveFromOtherElementSketch(curve);
+                }
+                catch (Exception)
+                {
+                    ofOther = false;
+                }
+                f.CurveOfAnotherSketch = ofOther || (inSketch && sketchOwner != ElementId.InvalidElementId);
+                if (inSketch && sketchOwner != ElementId.InvalidElementId)
+                {
+                    owner = sketchOwner;
+                    via = "Sketch.OwnerId";
+                }
+                Curve g = curve.GeometryCurve;
+                f.CurveHasNoLength = g == null || (g is Line && (!g.IsBound || g.GetEndPoint(0).IsAlmostEqualTo(g.GetEndPoint(1))));
+                try
+                {
+                    f.CurveHasNoSketchPlane = curve.SketchPlane == null;
+                }
+                catch (Exception)
+                {
+                    f.CurveHasNoSketchPlane = false;
+                }
+            }
+            var fi = e as FamilyInstance;
+            if (fi != null)
+            {
+                f.Invisible = fi.Invisible;
+                Element host = fi.Host;
+                f.CurtainHosted = IsCurtainHost(host);
+                if (host != null)
+                {
+                    owner = host.Id;
+                    via = "FamilyInstance.Host";
+                }
+            }
+            var rail = e as ContinuousRail;
+            if (rail != null && rail.HostRailingId != ElementId.InvalidElementId)
+            {
+                owner = rail.HostRailingId;
+                via = "ContinuousRail.HostRailingId";
+            }
+            ElementId supportOf;
+            if (supportRails.Value.TryGetValue(e.Id.Value, out supportOf))
+            {
+                f.RailSupport = true;
+                owner = supportOf;
+                via = "ContinuousRail.GetSupports";
+            }
+            ElementId curtainHost;
+            if (e is CurtainGridLine && curtainHosts.Value.TryGetValue(e.Id.Value, out curtainHost))
+            {
+                owner = curtainHost;
+                via = "CurtainGrid";
+            }
+            var opening = e as Opening;
+            if (opening != null && opening.Host != null)
+            {
+                owner = opening.Host.Id;
+                via = "Opening.Host";
+            }
+            if (owner != ElementId.InvalidElementId)
+            {
+                f.Owner = new OwnerFacts { Element = index.Facts(doc, owner), Exists = doc.GetElement(owner) != null, Via = via };
+            }
+            return f;
+        }
+
+        /// <summary>ElementFilteringUtil.GetExportElementState: the element's Export to IFC, and when it is By Type, its type's; null when both leave it to the category.</summary>
+        private bool? ExportSetting(Element e)
+        {
+            Parameter p = e.get_Parameter(BuiltInParameter.IFC_EXPORT_ELEMENT);
+            IFCExportElement value = p != null ? (IFCExportElement)p.AsInteger() : IFCExportElement.ByType;
+            if (value == IFCExportElement.Yes) return true;
+            if (value == IFCExportElement.No) return false;
+            ElementId typeId = e.GetTypeId();
+            Element type = typeId != ElementId.InvalidElementId ? doc.GetElement(typeId) : null;
+            Parameter tp = type != null ? type.get_Parameter(BuiltInParameter.IFC_EXPORT_ELEMENT_TYPE) : null;
+            IFCExportElementType typeValue = tp != null ? (IFCExportElementType)tp.AsInteger() : IFCExportElementType.Default;
+            if (typeValue == IFCExportElementType.Yes) return true;
+            if (typeValue == IFCExportElementType.No) return false;
+            return null;
+        }
+
+        /// <summary>CurtainSystemExporter.IsCurtainSystem and IsLegacyCurtainElement: a host whose curtain grids export what it hosts.</summary>
+        private static bool IsCurtainHost(Element host)
+        {
+            if (host == null) return false;
+            try
+            {
+                var wall = host as Wall;
+                if (wall != null) return wall.CurtainGrid != null;
+                CurtainGridSet grids = CurtainGridsOf(host);
+                if (grids != null) return grids.Size > 0;
+                return host.Category != null && host.Category.BuiltInCategory == BuiltInCategory.OST_Curtain_Systems;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        /// <summary>CurtainSystemExporter.GetCurtainGridSet, for the hosts other than a wall.</summary>
+        private static CurtainGridSet CurtainGridsOf(Element host)
+        {
+            var footprint = host as FootPrintRoof;
+            if (footprint != null) return footprint.CurtainGrids;
+            var extrusion = host as ExtrusionRoof;
+            if (extrusion != null) return extrusion.CurtainGrids;
+            var system = host as CurtainSystem;
+            if (system != null) return system.CurtainGrids;
+            return null;
+        }
+
+        /// <summary>Each curve of a sketch, with the sketch's owner (Sketch.GetAllElements, Sketch.OwnerId).</summary>
+        private Dictionary<long, ElementId> SketchOwners()
+        {
+            var map = new Dictionary<long, ElementId>();
+            foreach (Sketch sketch in All<Sketch>())
+            {
+                IList<ElementId> members;
+                ElementId owner;
+                try
+                {
+                    members = sketch.GetAllElements();
+                    owner = sketch.OwnerId;
+                }
+                catch (Exception)
+                {
+                    continue;
+                }
+                if (members == null) continue;
+                foreach (ElementId id in members) map[id.Value] = owner;
+            }
+            return map;
+        }
+
+        /// <summary>Each curtain grid line, with the wall, roof or curtain system whose curtain grid holds it.</summary>
+        private Dictionary<long, ElementId> CurtainHosts()
+        {
+            var map = new Dictionary<long, ElementId>();
+            Action<Element, CurtainGrid> add = (host, grid) =>
+            {
+                if (grid == null) return;
+                foreach (ElementId id in grid.GetUGridLineIds()) map[id.Value] = host.Id;
+                foreach (ElementId id in grid.GetVGridLineIds()) map[id.Value] = host.Id;
+            };
+            foreach (Wall wall in All<Wall>())
+            {
+                try
+                {
+                    add(wall, wall.CurtainGrid);
+                }
+                catch (Exception)
+                {
+                    // A legacy curtain wall: its grid is not readable through the API.
+                }
+            }
+            foreach (Element host in All<RoofBase>().Cast<Element>().Concat(All<CurtainSystem>()))
+            {
+                try
+                {
+                    CurtainGridSet grids = CurtainGridsOf(host);
+                    if (grids == null) continue;
+                    foreach (CurtainGrid grid in grids) add(host, grid);
+                }
+                catch (Exception)
+                {
+                    // A roof with no curtain grid.
+                }
+            }
+            return map;
+        }
+
+        /// <summary>Every element of a class: by OfClass, or, for a class Revit does not filter by, by testing each element.</summary>
+        private List<T> All<T>() where T : Element
+        {
+            try
+            {
+                return new FilteredElementCollector(doc).OfClass(typeof(T)).Cast<T>().ToList();
+            }
+            catch (Autodesk.Revit.Exceptions.ArgumentException)
+            {
+                return new FilteredElementCollector(doc).WhereElementIsNotElementType().OfType<T>().ToList();
+            }
+        }
+
+        /// <summary>RailingExporter.CollectSubElements: each handrail's supports, with the handrail.</summary>
+        private Dictionary<long, ElementId> SupportRails()
+        {
+            var map = new Dictionary<long, ElementId>();
+            foreach (HandRail rail in All<HandRail>())
+            {
+                IList<ElementId> supports;
+                try
+                {
+                    supports = rail.GetSupports();
+                }
+                catch (Exception)
+                {
+                    continue;
+                }
+                if (supports == null) continue;
+                foreach (ElementId id in supports) map[id.Value] = rail.Id;
+            }
+            return map;
         }
     }
 }

@@ -16,7 +16,10 @@
 // is a model element; every count of elements counts the model elements apart from the others
 // (Revit's internal elements, annotation, datums), so a headline number never mixes the two.
 // Version 2 (add-in 0.3.0); version 1 (0.2.0) had no Revit class, no model/other counts, no
-// deleted_with_host or left_on_level, and counted every element together in `totals`.
+// deleted_with_host or left_on_level, and counted every element together in `totals`. Add-in
+// 0.4.0 writes version 2 still, with fields added and none changed: left_on_level lists the
+// parts of kept elements under their owner (`parts_of_kept_elements`) and what Revit's IFC
+// exporter does not export on its own (`not_exported`) apart from what is left.
 
 using System.Collections.Generic;
 using System.Linq;
@@ -320,6 +323,69 @@ namespace Flo2Rvt.Addin.Edit
         /// <summary>The first 500: the model elements first.</summary>
         [DataMember(Name = "elements", Order = 4)] public List<LeftElement> Elements = new List<LeftElement>();
         [DataMember(Name = "truncated", Order = 5, EmitDefaultValue = false)] public bool Truncated;
+        /// <summary>
+        /// Since add-in 0.4.0: parts of elements still in the model (a sketch's curves, a railing's
+        /// rails, a curtain grid's lines), which Revit's IFC exporter exports only with that owner
+        /// (Logic/ExportFilter.cs), listed under it. Not in total, model_elements or elements: they
+        /// go with their owner, and never make the change applied_in_part.
+        /// </summary>
+        [DataMember(Name = "parts_of_kept_elements", Order = 6, EmitDefaultValue = false)] public PartsOfKeptElements PartsOfKeptElements;
+        /// <summary>
+        /// Since add-in 0.4.0: elements the exporter's storey rule would put in the level's storey
+        /// but which Revit's IFC exporter does not export as products of their own, and which name
+        /// no owner (Logic/ExportFilter.cs says why for each). Not in total, model_elements or
+        /// elements, and never make the change applied_in_part.
+        /// </summary>
+        [DataMember(Name = "not_exported", Order = 7, EmitDefaultValue = false)] public NotExportedElements NotExported;
+    }
+
+    /// <summary>left_on_level's parts of kept elements, by owner.</summary>
+    [DataContract]
+    public sealed class PartsOfKeptElements
+    {
+        [DataMember(Name = "total", Order = 0)] public int Total;
+        /// <summary>Each owner with its parts, the owner with most parts first; the first 500 parts in all.</summary>
+        [DataMember(Name = "owners", Order = 1)] public List<OwnerParts> Owners = new List<OwnerParts>();
+        [DataMember(Name = "truncated", Order = 2, EmitDefaultValue = false)] public bool Truncated;
+    }
+
+    [DataContract]
+    public sealed class OwnerParts
+    {
+        [DataMember(Name = "owner", Order = 0)] public OwnerRef Owner;
+        [DataMember(Name = "parts", Order = 1)] public List<LeftElement> Parts = new List<LeftElement>();
+    }
+
+    /// <summary>What an element is part of, as Revit names it.</summary>
+    [DataContract]
+    public sealed class OwnerRef
+    {
+        [DataMember(Name = "element_id", Order = 0)] public long ElementId;
+        [DataMember(Name = "global_id", Order = 1, EmitDefaultValue = false)] public string GlobalId;
+        [DataMember(Name = "category", Order = 2, EmitDefaultValue = false)] public string Category;
+        [DataMember(Name = "revit_class", Order = 3, EmitDefaultValue = false)] public string RevitClass;
+        [DataMember(Name = "model_element", Order = 4)] public bool ModelElement;
+        /// <summary>Still in the model after the change.</summary>
+        [DataMember(Name = "exists", Order = 5)] public bool Exists;
+        /// <summary>How Revit names it: Sketch.OwnerId, ContinuousRail.HostRailingId, ContinuousRail.GetSupports, CurtainGrid, FamilyInstance.Host, Opening.Host.</summary>
+        [DataMember(Name = "found_by", Order = 6, EmitDefaultValue = false)] public string FoundBy;
+
+        public static OwnerRef Of(OwnerFacts o)
+        {
+            return new OwnerRef { ElementId = o.Element.Id, GlobalId = o.Element.GlobalId, Category = o.Element.Category, RevitClass = o.Element.RevitClass, ModelElement = o.Element.Model, Exists = o.Exists, FoundBy = o.Via };
+        }
+    }
+
+    /// <summary>left_on_level's elements the exporter does not export on their own and that name no owner.</summary>
+    [DataContract]
+    public sealed class NotExportedElements
+    {
+        [DataMember(Name = "total", Order = 0)] public int Total;
+        /// <summary>How many for each reason (an ExportFilter rule code), most first.</summary>
+        [DataMember(Name = "by_reason", Order = 1)] public List<ReasonCount> ByReason = new List<ReasonCount>();
+        /// <summary>The first 500.</summary>
+        [DataMember(Name = "elements", Order = 2)] public List<LeftElement> Elements = new List<LeftElement>();
+        [DataMember(Name = "truncated", Order = 3, EmitDefaultValue = false)] public bool Truncated;
     }
 
     [DataContract]
@@ -337,12 +403,19 @@ namespace Flo2Rvt.Addin.Edit
         [DataMember(Name = "category", Order = 2, EmitDefaultValue = false)] public string Category;
         [DataMember(Name = "revit_class", Order = 3, EmitDefaultValue = false)] public string RevitClass;
         [DataMember(Name = "model_element", Order = 4)] public bool ModelElement;
-        /// <summary>What ties it to the level: its Revit settings that name the level (Element.LevelId, FAMILY_LEVEL_PARAM, INSTANCE_SCHEDULE_ONLY_LEVEL_PARAM, FamilyInstance.Host, ...), and ifc_storey when Revit's IFC exporter files it under the level's storey.</summary>
+        /// <summary>What ties it to the level: its Revit settings that name the level (Element.LevelId, FAMILY_LEVEL_PARAM, INSTANCE_SCHEDULE_ONLY_LEVEL_PARAM, FamilyInstance.Host, ...); ifc_storey when Revit's IFC exporter files it under the level's storey; storey_rule (since 0.4.0) when the exporter's storey rule would put it there but the exporter does not export it on its own.</summary>
         [DataMember(Name = "tied_by", Order = 5)] public List<string> TiedBy = new List<string>();
-        /// <summary>A reason code (LeftOnLevelRules): not_a_model_element, group_member, no_revit_level, non_storey_level, container_parameter, setting_not_taken, not_deleted.</summary>
+        /// <summary>A reason code (LeftOnLevelRules): not_a_model_element, group_member, no_revit_level, non_storey_level, container_parameter, setting_not_taken, not_deleted, orphaned_part; under parts_of_kept_elements, part_of_kept_element; under not_exported, the ExportFilter rule.</summary>
         [DataMember(Name = "reason", Order = 6)] public string Reason;
         /// <summary>Why it was not taken, in a sentence.</summary>
         [DataMember(Name = "why", Order = 7)] public string Why;
+        /// <summary>Since 0.4.0: what kind of part it is, when Revit's IFC exporter exports it only with another element (sketch, railing, curtain_grid, curtain_host, cut_host).</summary>
+        [DataMember(Name = "part_of", Order = 8, EmitDefaultValue = false)] public string PartOf;
+        /// <summary>Since 0.4.0, on an orphaned_part: the owner it was part of, no longer in the model.</summary>
+        [DataMember(Name = "owner", Order = 9, EmitDefaultValue = false)] public OwnerRef Owner;
+
+        /// <summary>Not written: where LeftOnLevelRules.Collect lists it (elements, parts_of_kept_elements or not_exported).</summary>
+        public string ListedUnder;
     }
 
     [DataContract]

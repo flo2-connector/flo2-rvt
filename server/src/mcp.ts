@@ -23,7 +23,7 @@ import { JobService, Refusal } from './jobs.ts';
 import type { Logger } from './log.ts';
 
 export const SERVER_NAME = 'flo2-rvt';
-export const SERVER_VERSION = '0.3.0';
+export const SERVER_VERSION = '0.4.0';
 
 function text(message: string): CallToolResult {
   return { content: [{ type: 'text', text: message }], isError: true };

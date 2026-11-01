@@ -1,0 +1,23 @@
+{
+ "_note": "The third change (c3, delete_elements_on_level \"Level 2\") of the 0.3.0 re-run of the first live edit, 2026-10-31, on Autodesk's public sample model rac_basic_sample_project.rvt: the 16 model elements its report listed under left_on_level, each with reason no_revit_level and tied_by [\"ifc_storey\"] (no Revit level; filed under Level 2's storey by height), by element id, Revit class and category only. Two are real leftovers, the wardrobes (FamilyInstance, Furniture Systems). The other 14 are parts of elements the change keeps because they only reach Level 2 from below: a stair's sketch boundary lines, rails' path extension lines, a top rail, and curtain grid lines. The job's own IFC export files none of the 14 under Level 2 (that storey holds IfcAnnotation 4, IfcSystemFurnitureElement 2 and IfcGrid 1), and the report recorded no owners.",
+ "addin_version": "0.3.0",
+ "change": {"id": "c3", "kind": "delete_elements_on_level", "level": "Level 2", "status": "applied_in_part"},
+ "left_on_level_model_elements": [
+  {"element_id": 423106, "revit_class": "CurtainGridLine", "category": "Curtain Wall Grids"},
+  {"element_id": 506168, "revit_class": "FamilyInstance", "category": "Furniture Systems"},
+  {"element_id": 523531, "revit_class": "FamilyInstance", "category": "Furniture Systems"},
+  {"element_id": 707846, "revit_class": "CurtainGridLine", "category": "Curtain Wall Grids"},
+  {"element_id": 725402, "revit_class": "ModelLine", "category": "<Stair/Ramp Sketch: Boundary>"},
+  {"element_id": 725403, "revit_class": "ModelLine", "category": "<Stair/Ramp Sketch: Boundary>"},
+  {"element_id": 725404, "revit_class": "ModelLine", "category": "<Stair/Ramp Sketch: Boundary>"},
+  {"element_id": 725405, "revit_class": "ModelLine", "category": "<Stair/Ramp Sketch: Boundary>"},
+  {"element_id": 934462, "revit_class": "TopRail", "category": "Top Rails"},
+  {"element_id": 934471, "revit_class": "ModelLine", "category": "Railing Rail Path Extension Lines"},
+  {"element_id": 934472, "revit_class": "ModelLine", "category": "Railing Rail Path Extension Lines"},
+  {"element_id": 934473, "revit_class": "ModelLine", "category": "Railing Rail Path Extension Lines"},
+  {"element_id": 976237, "revit_class": "ModelLine", "category": "Railing Rail Path Extension Lines"},
+  {"element_id": 976238, "revit_class": "ModelLine", "category": "Railing Rail Path Extension Lines"},
+  {"element_id": 976239, "revit_class": "ModelLine", "category": "Railing Rail Path Extension Lines"},
+  {"element_id": 976240, "revit_class": "ModelLine", "category": "Railing Rail Path Extension Lines"}
+ ]
+}
