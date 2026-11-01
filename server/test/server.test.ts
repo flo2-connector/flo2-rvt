@@ -84,14 +84,14 @@ describe('the tools, as the contract names them', () => {
   });
   after(() => h.close());
 
-  test('tools/list offers rvt_probe_start, rvt_edit_start and rvt_job_status with their annotations', async () => {
+  test('tools/list offers rvt_probe_start, rvt_edit_start and rvt_job_status with their annotations, and the gateway\'s two setup tools', async () => {
     const r = await rpc(h.url, { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} });
     const tools = (r.json as Rpc).result?.tools ?? [];
-    assert.deepEqual(tools.map((t) => t.name).sort(), ['rvt_edit_start', 'rvt_job_status', 'rvt_probe_start']);
+    assert.deepEqual(tools.map((t) => t.name).sort(), ['rvt_edit_start', 'rvt_job_status', 'rvt_probe_start', 'rvt_setup_check', 'rvt_setup_run']);
     for (const t of tools) {
       const a = t.annotations as Record<string, unknown>;
       assert.equal(typeof a.title, 'string');
-      assert.equal(a.readOnlyHint, false);
+      assert.equal(a.readOnlyHint, t.name === 'rvt_setup_check', t.name as string);
       assert.equal(a.openWorldHint, true);
     }
     const start = tools.find((t) => t.name === 'rvt_probe_start') as { inputSchema: { properties: Record<string, { minimum?: number; maximum?: number; default?: number }>; required: string[] } };
@@ -286,7 +286,7 @@ describe("the official MCP client", () => {
         const transport = new StreamableHTTPClientTransport(new URL(h.url), { requestInit: { headers: { Authorization: `Bearer ${LOCAL_TOKEN}` } } });
         await client.connect(transport);
         const tools = await client.listTools();
-        assert.equal(tools.tools.length, 3, mode);
+        assert.equal(tools.tools.length, 5, mode);
         const res = (await client.callTool({ name: 'rvt_probe_start', arguments: { file: 'x.rvt' }, _meta: jobMeta(h.aps) })) as { structuredContent?: { state: string } };
         assert.equal(res.structuredContent?.state, 'submitted', mode);
         await client.close();

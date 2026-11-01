@@ -30,7 +30,7 @@ export async function startHarness(opts: MockOptions = {}, now?: () => number, e
   const logger = memoryLogger();
   const jobOpts: ConstructorParameters<typeof JobService>[0] = { logger, apsBaseUrl: base, upload: { chunkSize: 16 * 1024, urlBatch: 2 } };
   if (now) jobOpts.now = now;
-  if (extra.bundle) (jobOpts as unknown as Record<string, unknown>).bundle = { path: extra.bundle };
+  if (extra.bundle) jobOpts.bundle = { path: extra.bundle };
   const jobs = new JobService(jobOpts);
   const server: Server = createHttpServer({ localToken: LOCAL_TOKEN, jobs, logger });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));

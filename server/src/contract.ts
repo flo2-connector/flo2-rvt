@@ -1,4 +1,4 @@
-// The gateway ↔ flo2-rvt contract, v2 (v1, and more of an edit's report in its summary), as types and validators. Everything the
+// The gateway ↔ flo2-rvt contract, v3 (v2, and the setup of a person's app from flo2.io), as types and validators. Everything the
 // agent sends is untrusted and bounded here; everything that decides what
 // flo2-rvt does with Autodesk (the token, the client id, the input file and the
 // time limit) comes only from the hidden context the gateway sets.
@@ -12,13 +12,32 @@ import { ENGINE } from './names.ts';
  * report_summary what a report from add-in 0.3.0 counts apart (other_elements_deleted,
  * deleted_with_host, left_on_level), and elements_deleted counts model elements only for such a
  * report. Nothing else changed: a v1 gateway, which passes the summary through, still works.
+ * 3 (flo2-rvt 0.5.0) adds the setup of a person's own app from flo2.io: two tools the gateway
+ * calls itself (rvt_setup_check, rvt_setup_run, never offered to an agent), the hidden
+ * context's `setup` (what the person approved), `_meta["flo2.io/error"]` on a refused start
+ * (`not_set_up`), and a start that reads its Activity before it uploads anything. Nothing of v2
+ * changed: a v2 gateway still works, and an app flo2-rvt was never set up on is refused before
+ * any upload, with plain words in place of Autodesk's.
  */
-export const CONTRACT_VERSION = 2;
+export const CONTRACT_VERSION = 3;
 
 /** The `_meta` keys of the contract. */
 export const META_JOB = 'flo2.io/job';
 export const META_OUTPUTS = 'flo2.io/outputs';
 export const META_USAGE = 'flo2.io/usage';
+/** On a refused call, what the refusal is, for the gateway to act on: {code, billed, autodesk_said?}. */
+export const META_ERROR = 'flo2.io/error';
+
+/** What a refusal is, by its code: `not_set_up`, the person's app holds no Activity (or AppBundle) the job needs. */
+export interface ErrorMeta {
+  code: 'not_set_up';
+  /** Always false for not_set_up: nothing ran at Autodesk. */
+  billed: false;
+  /** Autodesk's own words, when Autodesk refused (no URL in them). */
+  autodesk_said?: string;
+}
+
+const SHA256 = z.string().regex(/^[0-9a-f]{64}$/);
 
 /** Hidden context, set by the gateway on every tools/call as params._meta["flo2.io/job"]. */
 export const JobContextSchema = z.object({
@@ -42,6 +61,17 @@ export const JobContextSchema = z.object({
   limits: z.object({
     max_processing_sec: z.number().int().positive(),
   }),
+  /**
+   * Required on rvt_setup_run, and only there: what the person approved on flo2.io. The
+   * monthly cap the setup sets on their app (Autodesk's own, whole hours), and the sha256 of the
+   * AppBundle they were shown, which must be the one this server holds.
+   */
+  setup: z
+    .object({
+      monthly_hours: z.number().int().min(1).max(744),
+      bundle_sha256: SHA256,
+    })
+    .optional(),
 });
 export type JobContext = z.infer<typeof JobContextSchema>;
 
@@ -143,6 +173,65 @@ export const JobStatusResult = z.object({
   error: z.string().optional(),
 });
 export type JobStatusResult = z.infer<typeof JobStatusResult>;
+
+/** The gateway's arguments to rvt_setup_check: which job's Activity to read (default both), and whether to say what a setup would do. */
+export const SetupCheckArgs = z.object({
+  job: z.enum(['probe', 'edit', 'all']).default('all').describe("Which job's Activity to read: probe, edit, or all (both)."),
+  plan: z.boolean().default(false).describe('Also say what a setup would do on this app (its nickname step reads the app\'s lists when it has no nickname).'),
+});
+
+const Found = z.object({
+  kind: z.enum(['appbundle', 'activity']),
+  id: z.string(),
+  state: z.enum(['ready', 'missing', 'outdated']),
+  /** The add-in version its description names, or null when it names none. */
+  addin_version: z.string().nullable().optional(),
+  version: z.number().int().optional(),
+  why: z.string().optional(),
+});
+
+/** rvt_setup_check's result: whether the person's app holds what a job needs, and what a setup would do. */
+export const SetupCheckResult = z.object({
+  ready: z.boolean(),
+  state: z.enum(['ready', 'not_set_up', 'outdated']),
+  /** When not ready: why, in plain words. */
+  why: z.string().optional(),
+  /** What prefixes the app's ids: its nickname, or its client id when none is set. */
+  owner: z.string(),
+  nickname_set: z.boolean(),
+  expected: z.object({ addin_version: z.string(), appbundle: z.string(), activities: z.array(z.string()) }),
+  found: z.array(Found),
+  /** What a setup from this server would do: whether it can (it holds a verified AppBundle), and with what. */
+  setup: z.object({
+    available: z.boolean(),
+    why: z.string().optional(),
+    addin_version: z.string(),
+    bundle_sha256: z.string().optional(),
+    bundle_bytes: z.number().int().optional(),
+    /** With `plan`: the nickname step. `will_set` on an app with no nickname and no data; `keeps_client_id` on one with data. */
+    nickname: z.object({ now: z.string().nullable(), will_set: z.string().nullable(), keeps_client_id: z.boolean() }).optional(),
+    deletes_nothing: z.literal(true),
+  }),
+});
+export type SetupCheckResult = z.infer<typeof SetupCheckResult>;
+
+const Registered = z.object({ id: z.string(), version: z.number().int(), created: z.boolean(), alias: z.enum(['moved', 'created']) });
+
+/** rvt_setup_run's result: what was done on the person's app, and the check read back after it. */
+export const SetupRunResult = z.object({
+  state: z.literal('set_up'),
+  owner: z.string(),
+  owner_how: z.enum(['existing', 'set', 'client_id']),
+  owner_note: z.string().optional(),
+  addin_version: z.string(),
+  bundle_sha256: z.string(),
+  bundle_bytes: z.number().int(),
+  appbundle: Registered,
+  activities: z.array(Registered),
+  monthly_hours: z.object({ requested: z.number().int(), reported: z.number().nullable() }),
+  check: SetupCheckResult,
+});
+export type SetupRunResult = z.infer<typeof SetupRunResult>;
 
 /** One entry of _meta["flo2.io/outputs"]: what the gateway downloads and keeps. */
 export interface OutputMeta {

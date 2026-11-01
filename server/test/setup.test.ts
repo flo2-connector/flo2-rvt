@@ -16,6 +16,8 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, describe, test } from 'node:test';
+import { ApsError } from '../src/aps/http.ts';
+import { isActivityNotFound } from '../src/setup.ts';
 import { CLIENT_ID, jobMeta, rpc, startHarness, type Harness } from './helpers.ts';
 import { recorded } from './mock-aps.ts';
 
@@ -95,6 +97,15 @@ describe("Autodesk's activity-not-found, in plain words", () => {
     } finally {
       await h.close();
     }
+  });
+
+  test('what counts as Autodesk saying the app holds no such Activity or AppBundle', () => {
+    const said = recorded('da-workitems-post-activity-not-found').body as string;
+    assert.ok(isActivityNotFound(new ApsError('DA workitems POST', 400, said)));
+    assert.ok(isActivityNotFound(new ApsError('DA workitems POST', 404, 'AppBundle SdkTester.Flo2RvtProbe+prod does not exist.')));
+    assert.ok(!isActivityNotFound(new ApsError('DA workitems POST', 400, 'limitProcessingTimeSec is out of range.')));
+    assert.ok(!isActivityNotFound(new ApsError('DA workitems POST', 403, said)), 'a 403 is another case');
+    assert.ok(!isActivityNotFound(new ApsError('OSS signeds3upload GET', 404, 'Object not found')));
   });
 
   test('another Autodesk refusal of a WorkItem keeps its own words', async () => {

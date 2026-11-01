@@ -5,6 +5,12 @@
 // An edit is a probe's start with one more input: the change list, checked against the
 // one schema and its limits (change-list.ts), uploaded beside the model as changes.json in
 // its canonical form, and named in the start result by its SHA-256.
+//
+// Since 0.5.0 a start reads the job's Activity on the person's app BEFORE it makes a bucket or
+// uploads anything (req:a-job-checks-the-persons-autodesk-app-is-set-up-before-approval-and-upload):
+// an app flo2-rvt was never set up on is refused in plain words, nothing uploaded. Autodesk's own
+// "activity could not be found" at the WorkItem says the same (setup.ts notSetUpAtAutodesk). The
+// setup itself, and the fuller check flo2.io makes before it asks the person, are setup.ts.
 
 import { createHash } from 'node:crypto';
 import { ApsError, type ApsContext } from './aps/http.ts';
@@ -18,7 +24,8 @@ import {
   uploadStream,
   type UploadOptions,
 } from './aps/oss.ts';
-import { createWorkItem, getNickname, getWorkItem, processingSeconds, type XrefArgument } from './aps/da.ts';
+import { DA_PATH, createWorkItem, getNickname, getWorkItem, processingSeconds, type XrefArgument } from './aps/da.ts';
+import { apsFetch } from './aps/http.ts';
 import { checkChangeList } from './change-list.ts';
 import {
   expiresAtMs,
@@ -28,8 +35,12 @@ import {
   type JobStatusResult,
   type OutputMeta,
   type ProbeStartResult,
+  type SetupCheckResult,
+  type SetupRunResult,
   type UsageMeta,
 } from './contract.ts';
+import { NotSetUp, Refusal } from './refusal.ts';
+import { checkSetup, isActivityNotFound, notSetUpAtAutodesk, notSetUpBeforeUpload, readBundle, runSetup, type BundleSource } from './setup.ts';
 import {
   CHANGES_NAME,
   CHANGES_PARAMETER,
@@ -47,13 +58,7 @@ import {
 } from './names.ts';
 import type { Logger } from './log.ts';
 
-/** A refusal the agent should read: a plain sentence, no URL, no token. */
-export class Refusal extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'Refusal';
-  }
-}
+export { NotSetUp, Refusal };
 
 export interface JobServiceOptions {
   logger: Logger;
@@ -64,6 +69,8 @@ export interface JobServiceOptions {
   now?: () => number;
   /** Minutes the signed output URLs handed to the gateway stay usable (1 to 60). */
   outputUrlMinutes?: number;
+  /** The AppBundle a setup uploads, with its sha256 beside it (index.ts: FLO2_RVT_BUNDLE, or addin/dist/). */
+  bundle?: BundleSource;
 }
 
 /** A job's token must outlive the job: Design Automation uses it to fetch the input and store the outputs. */
@@ -162,6 +169,29 @@ export class JobService {
     return nickname;
   }
 
+  /** Once a setup has set (or kept) an app's nickname, every job uses it at once. */
+  private rememberNickname(clientId: string, nickname: string): void {
+    this.nicknames.set(hashOf(clientId), { nickname, at: this.now() });
+  }
+
+  /** The job's Activity at prod, or a refusal in plain words before anything is uploaded. */
+  private async requireActivity(aps: ApsContext, clientId: string, nickname: string, kind: JobKind): Promise<string> {
+    const activityId = activityIdFor(nickname, kind);
+    const res = await apsFetch(aps, {
+      operation: 'DA activities/{id} GET',
+      method: 'GET',
+      path: `${DA_PATH}/activities/${encodeURIComponent(activityId)}`,
+      accept: [200, 404],
+    });
+    await res.body?.cancel();
+    if (res.status === 404) {
+      // Read the nickname again next time: a setup may give the app one.
+      this.nicknames.delete(hashOf(clientId));
+      throw notSetUpBeforeUpload(KIND_WORD[kind], activityId);
+    }
+    return activityId;
+  }
+
   private async bucket(aps: ApsContext, bucketKey: string): Promise<void> {
     if (this.buckets.has(bucketKey)) return;
     const how = await ensureTransientBucket(aps, bucketKey);
@@ -222,8 +252,10 @@ export class JobService {
     const started = this.now();
     this.logger.info(`${kind}_start`, { job_id: jobId, size: input.size, limit_sec: limitSec });
 
-    await this.bucket(aps, bucketKey);
+    // The app first, by GETs alone: no bucket and no upload on an app that cannot run the job.
     const nickname = await this.nickname(aps, ctx.aps.client_id);
+    const activityId = await this.requireActivity(aps, ctx.aps.client_id, nickname, kind);
+    await this.bucket(aps, bucketKey);
 
     // The input, from flo2's short-lived download link straight into the bucket.
     let download: Response;
@@ -272,8 +304,16 @@ export class JobService {
       if (!out.required) arg.optional = true;
       args[out.parameter] = arg;
     }
-    const activityId = activityIdFor(nickname, kind);
-    const workItem = await createWorkItem(aps, { activityId, arguments: args, limitProcessingTimeSec: limitSec });
+    let workItem;
+    try {
+      workItem = await createWorkItem(aps, { activityId, arguments: args, limitProcessingTimeSec: limitSec });
+    } catch (err) {
+      if (isActivityNotFound(err)) {
+        this.nicknames.delete(hashOf(ctx.aps.client_id));
+        throw notSetUpAtAutodesk(word, err.reason ?? `HTTP ${err.status}`);
+      }
+      throw err;
+    }
     this.remember(jobId, { workitemId: workItem.id, clientHash: hashOf(ctx.aps.client_id), kind });
     this.logger.info(`${kind}_submitted`, { job_id: jobId, workitem_id: workItem.id, state: workItem.status });
 
@@ -295,6 +335,32 @@ export class JobService {
     }
 
     return { result: { job_id: jobId, state: 'submitted', engine: ENGINE } };
+  }
+
+  /** rvt_setup_check: whether the person's app holds what the job needs (GETs only), and what a setup would do. */
+  async setupCheck(ctx: JobContext, job: JobKind | 'all', plan: boolean, signal?: AbortSignal): Promise<SetupCheckResult> {
+    const result = await checkSetup(this.aps(ctx, signal), ctx.aps.client_id, job, { plan, bundle: readBundle(this.opts.bundle) });
+    this.rememberNickname(ctx.aps.client_id, result.owner);
+    this.logger.info('setup_checked', { state: result.state, job, setup_available: result.setup.available });
+    return result;
+  }
+
+  /** rvt_setup_run: the setup the person approved on flo2.io, on their app, with this server's AppBundle. */
+  async setupRun(ctx: JobContext, signal?: AbortSignal): Promise<SetupRunResult> {
+    const bundle = readBundle(this.opts.bundle);
+    this.logger.info('setup_start', { approved: ctx.setup !== undefined, bundle: bundle.available ? bundle.sha256.slice(0, 12) : 'none' });
+    const result = await runSetup(this.aps(ctx, signal), ctx, bundle, this.now());
+    this.rememberNickname(ctx.aps.client_id, result.owner);
+    this.logger.info('setup_done', {
+      owner_how: result.owner_how,
+      addin_version: result.addin_version,
+      appbundle_version: result.appbundle.version,
+      probe_version: result.activities[0]?.version,
+      edit_version: result.activities[1]?.version,
+      monthly_hours: result.monthly_hours.reported ?? undefined,
+      ready: result.check.ready,
+    });
+    return result;
   }
 
   private async findJob(aps: ApsContext, ctx: JobContext, jobId: string): Promise<CachedJob> {

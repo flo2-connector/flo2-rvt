@@ -9,7 +9,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { activities as registeredActivities } from '../../scripts/lib/registration.ts';
+import { activities as registeredActivities, appBundleBody } from '../src/aps/registration.ts';
 
 const FIXTURES = new URL('./fixtures/', import.meta.url);
 
@@ -92,7 +92,8 @@ export class MockAps {
     if (opts.setUp === 'current' || opts.setUp === 'unmarked') {
       const owner = this.owner();
       const strip = (text: unknown) => (opts.setUp === 'unmarked' && typeof text === 'string' ? text.replace(/ \(flo2-rvt add-in [^)]*\)/, '') : text);
-      this.register('appbundles', 'Flo2RvtProbe', { engine: 'Autodesk.Revit+2024', description: strip('flo2-rvt probe and edit jobs for Revit 2024 (flo2-rvt add-in 0.4.0)') });
+      const bundle = appBundleBody();
+      this.register('appbundles', 'Flo2RvtProbe', { ...bundle, description: strip(bundle.description) });
       for (const a of registeredActivities(owner)) this.register('activities', a.id, { ...a.body, description: strip(a.body.description) });
     }
   }
