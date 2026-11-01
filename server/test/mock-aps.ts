@@ -9,6 +9,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { activities as registeredActivities } from '../../scripts/lib/registration.ts';
 
 const FIXTURES = new URL('./fixtures/', import.meta.url);
 
@@ -54,6 +55,17 @@ export interface MockOptions {
   expireFirstPutOfPart?: number;
   /** Outputs the "add-in" writes on success (default all the job makes). */
   writes?: Array<'report.json' | 'sheets.pdf' | 'model.ifc' | 'model.rvt'>;
+  /**
+   * What flo2-rvt finds registered on the app, and whether a WorkItem is refused for an
+   * Activity the app does not hold (as Autodesk refused one on 2026-11-01):
+   *   'current'  the AppBundle and both Activities at prod, as this flo2-rvt registers them;
+   *   'unmarked' the same, registered by an older flo2-rvt whose descriptions name no add-in version;
+   *   'none'     nothing at all, and no nickname (forgeapps/me answers the client id in noNicknameFor).
+   * Left out, the stand-in holds nothing and takes any WorkItem (the client tests).
+   */
+  setUp?: 'current' | 'unmarked' | 'none';
+  /** POST workitems answers this, whatever the app holds. */
+  workItemAnswer?: { status: number; body: unknown };
 }
 
 export class MockAps {
@@ -63,8 +75,10 @@ export class MockAps {
   readonly appBundleUploads: Array<{ fields: string[]; fileBytes: number }> = [];
   private readonly uploads = new Map<string, Upload>();
   private readonly buckets = new Map<string, 'me' | 'other'>();
-  private readonly aliases = new Set<string>();
+  private readonly aliases = new Map<string, number>();
   private readonly entities = new Set<string>();
+  /** The body each AppBundle or Activity was registered with, and its latest version. */
+  readonly bodies = new Map<string, { body: Record<string, unknown>; version: number }>();
   private statusIndex = 0;
   private nicknameSet: string | undefined;
   private expired = false;
@@ -75,6 +89,19 @@ export class MockAps {
 
   constructor(opts: MockOptions = {}) {
     this.opts = opts;
+    if (opts.setUp === 'current' || opts.setUp === 'unmarked') {
+      const owner = this.owner();
+      const strip = (text: unknown) => (opts.setUp === 'unmarked' && typeof text === 'string' ? text.replace(/ \(flo2-rvt add-in [^)]*\)/, '') : text);
+      this.register('appbundles', 'Flo2RvtProbe', { engine: 'Autodesk.Revit+2024', description: strip('flo2-rvt probe and edit jobs for Revit 2024 (flo2-rvt add-in 0.4.0)') });
+      for (const a of registeredActivities(owner)) this.register('activities', a.id, { ...a.body, description: strip(a.body.description) });
+    }
+  }
+
+  /** An AppBundle or Activity the app already holds, at version 1 with alias prod. */
+  private register(kind: 'appbundles' | 'activities', id: string, body: Record<string, unknown>): void {
+    this.entities.add(`${kind}/${id}`);
+    this.bodies.set(`${kind}/${id}`, { body, version: 1 });
+    this.aliases.set(`${kind}/${id}/prod`, 1);
   }
 
   async start(): Promise<string> {
@@ -91,7 +118,7 @@ export class MockAps {
   /** Mark an AppBundle or Activity (by path segment, e.g. "appbundles/Flo2RvtProbe") as already existing, with alias prod. */
   preexisting(kind: 'appbundles' | 'activities', id: string, alias?: string): void {
     this.entities.add(`${kind}/${id}`);
-    if (alias) this.aliases.add(`${kind}/${id}/${alias}`);
+    if (alias) this.aliases.set(`${kind}/${id}/${alias}`, 1);
   }
 
   private send(res: ServerResponse, status: number, body: unknown, type = 'application/json'): void {
@@ -219,6 +246,13 @@ export class MockAps {
       return this.send(res, 200, body);
     }
     if (req.method === 'POST' && path === '/da/us-east/v3/workitems') {
+      if (this.opts.workItemAnswer) return this.send(res, this.opts.workItemAnswer.status, this.opts.workItemAnswer.body);
+      const activityId = String((call.json as { activityId?: unknown }).activityId ?? '');
+      if (this.opts.setUp !== undefined && !this.holds('activities', activityId)) {
+        // As Autodesk answered flo2-rvt's first edit on an app it had never been registered on.
+        const r = recorded('da-workitems-post-activity-not-found');
+        return this.send(res, r.status, `The activity ${activityId} could not be found (Parameter 'activityId')`);
+      }
       this.workItems.push(call.json);
       const r = recorded('da-workitems-post');
       return this.send(res, r.status, r.body);
@@ -248,6 +282,23 @@ export class MockAps {
       }
       return this.send(res, 200, this.serviceLimits);
     }
+    if (req.method === 'GET' && (g = m(/^\/da\/us-east\/v3\/(appbundles|activities)\/([^/]+)$/))) {
+      const kind = g[1] as 'appbundles' | 'activities';
+      const qualified = decodeURIComponent(g[2] as string);
+      const parts = /^([^.]+)\.([^+]+)\+(.+)$/.exec(qualified);
+      if (!parts || !this.holds(kind, qualified)) {
+        const r = recorded('da-activities-id-get-missing');
+        return this.send(res, r.status, r.body);
+      }
+      const held = this.bodies.get(`${kind}/${parts[2]}`);
+      const version = this.aliases.get(`${kind}/${parts[2]}/${parts[3]}`) ?? 1;
+      if (kind === 'activities') {
+        // The reference's example form: the body as registered, its qualified id and version.
+        return this.send(res, 200, { ...(held?.body ?? {}), id: qualified, version });
+      }
+      const r = recorded('da-appbundles-id-get').body as Record<string, unknown>;
+      return this.send(res, 200, { ...r, ...(held?.body ?? {}), package: `${this.base}/s3/appbundle-package?X-Amz-Signature=test`, id: qualified, version });
+    }
     if (path === '/da/us-east/v3/engines') return this.send(res, 200, recorded('da-engines-get').body);
     if ((g = m(/^\/da\/us-east\/v3\/engines\/([^/]+)$/))) {
       const id = decodeURIComponent(g[1] as string);
@@ -259,14 +310,20 @@ export class MockAps {
       const id = (call.json as { id: string }).id;
       if (this.entities.has(`${kind}/${id}`)) return this.send(res, 409, `"${kind === 'appbundles' ? 'AppBundle' : 'Activity'} '${id}' already exists."`);
       this.entities.add(`${kind}/${id}`);
+      const { id: _id, ...body } = call.json as Record<string, unknown>;
+      this.bodies.set(`${kind}/${id}`, { body, version: 1 });
       return this.send(res, 200, this.entityAnswer(kind, id, 1));
     }
     if ((g = m(/^\/da\/us-east\/v3\/(appbundles|activities)\/([^/]+)\/versions$/)) && req.method === 'POST') {
       const kind = g[1] as 'appbundles' | 'activities';
-      return this.send(res, 200, this.entityAnswer(kind, g[2] as string, 2));
+      const id = g[2] as string;
+      const version = (this.bodies.get(`${kind}/${id}`)?.version ?? 1) + 1;
+      this.bodies.set(`${kind}/${id}`, { body: call.json as Record<string, unknown>, version });
+      return this.send(res, 200, this.entityAnswer(kind, id, version));
     }
     if ((g = m(/^\/da\/us-east\/v3\/(appbundles|activities)\/([^/]+)\/aliases$/)) && req.method === 'POST') {
-      this.aliases.add(`${g[1]}/${g[2]}/${(call.json as { id: string }).id}`);
+      const sent = call.json as { id: string; version: number };
+      this.aliases.set(`${g[1]}/${g[2]}/${sent.id}`, sent.version);
       return this.send(res, 200, call.json);
     }
     if ((g = m(/^\/da\/us-east\/v3\/(appbundles|activities)\/([^/]+)\/aliases\/([^/]+)$/)) && req.method === 'PATCH') {
@@ -274,6 +331,7 @@ export class MockAps {
         const r = recorded('da-alias-patch-missing');
         return this.send(res, r.status, r.body);
       }
+      this.aliases.set(`${g[1]}/${g[2]}/${g[3]}`, (call.json as { version: number }).version);
       return this.send(res, 200, { ...(call.json as object), id: g[3] });
     }
     if (path === '/s3/appbundle' && req.method === 'POST') {
@@ -301,6 +359,12 @@ export class MockAps {
 
   private owner(): string {
     return this.nicknameSet ?? this.opts.noNicknameFor ?? this.opts.nickname ?? (recorded('da-forgeapps-me').body as string);
+  }
+
+  /** Whether the app holds `<owner>.<id>+<alias>`: this app's own, registered, with that alias. */
+  holds(kind: 'appbundles' | 'activities', qualified: string): boolean {
+    const parts = /^([^.]+)\.([^+]+)\+(.+)$/.exec(qualified);
+    return !!parts && parts[1] === this.owner() && this.entities.has(`${kind}/${parts[2]}`) && this.aliases.has(`${kind}/${parts[2]}/${parts[3]}`);
   }
 
   /** What the add-in would leave: the outputs, written where the WorkItem said to put them. */

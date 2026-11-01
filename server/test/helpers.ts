@@ -19,12 +19,18 @@ export interface Harness {
   close: () => Promise<void>;
 }
 
-export async function startHarness(opts: MockOptions = {}, now?: () => number): Promise<Harness> {
-  const aps = new MockAps(opts);
+/**
+ * A server and its Autodesk stand-in. The app is set up as this flo2-rvt sets it up unless
+ * `opts.setUp` says otherwise ('none' is an app with no nickname and nothing on it). `bundle`
+ * is the AppBundle zip the server's setup uploads, with its `.sha256` beside it.
+ */
+export async function startHarness(opts: MockOptions = {}, now?: () => number, extra: { bundle?: string } = {}): Promise<Harness> {
+  const aps = new MockAps({ setUp: 'current', ...(opts.setUp === 'none' ? { noNicknameFor: CLIENT_ID } : {}), ...opts });
   const base = await aps.start();
   const logger = memoryLogger();
   const jobOpts: ConstructorParameters<typeof JobService>[0] = { logger, apsBaseUrl: base, upload: { chunkSize: 16 * 1024, urlBatch: 2 } };
   if (now) jobOpts.now = now;
+  if (extra.bundle) (jobOpts as unknown as Record<string, unknown>).bundle = { path: extra.bundle };
   const jobs = new JobService(jobOpts);
   const server: Server = createHttpServer({ localToken: LOCAL_TOKEN, jobs, logger });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));

@@ -1,0 +1,10 @@
+{
+  "_source": "The example response of the Automation API reference, appbundles-id-GET (developer.doc.autodesk.com/bPlouYTd/design-automation-forge-doc-master-792222/design-automation/v3/reference/http/design-automation/appbundles-id-GET.html), read 2026-11-01: the package link, the fully qualified id, the engine and the version (the reference's body structure adds description). The stand-in answers in this form, with flo2-rvt's own id and engine and a signed link of its own.",
+  "status": 200,
+  "body": {
+    "package": "https://dasprod-store.s3.us-east-1.amazonaws.com/apps/hcX",
+    "id": "owner.ChangeParams+test",
+    "engine": "Autodesk.Inventor+23",
+    "version": 10
+  }
+}
