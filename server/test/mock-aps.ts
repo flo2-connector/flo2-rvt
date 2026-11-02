@@ -60,10 +60,11 @@ export interface MockOptions {
    * Activity the app does not hold (as Autodesk refused one on 2026-11-01):
    *   'current'  the AppBundle and both Activities at prod, as this flo2-rvt registers them;
    *   'unmarked' the same, registered by an older flo2-rvt whose descriptions name no add-in version;
+   *   'addin-0.4.0' the same, registered by flo2-rvt 0.5.x, whose descriptions name add-in 0.4.0;
    *   'none'     nothing at all, and no nickname (forgeapps/me answers the client id in noNicknameFor).
    * Left out, the stand-in holds nothing and takes any WorkItem (the client tests).
    */
-  setUp?: 'current' | 'unmarked' | 'none';
+  setUp?: 'current' | 'unmarked' | 'addin-0.4.0' | 'none';
   /** POST workitems answers this, whatever the app holds. */
   workItemAnswer?: { status: number; body: unknown };
   /** One call Autodesk refuses (method and exact path), with this status and body: a setup step that stops. */
@@ -91,9 +92,13 @@ export class MockAps {
 
   constructor(opts: MockOptions = {}) {
     this.opts = opts;
-    if (opts.setUp === 'current' || opts.setUp === 'unmarked') {
+    if (opts.setUp === 'current' || opts.setUp === 'unmarked' || opts.setUp === 'addin-0.4.0') {
       const owner = this.owner();
-      const strip = (text: unknown) => (opts.setUp === 'unmarked' && typeof text === 'string' ? text.replace(/ \(flo2-rvt add-in [^)]*\)/, '') : text);
+      const strip = (text: unknown) =>
+        typeof text !== 'string' ? text
+          : opts.setUp === 'unmarked' ? text.replace(/ \(flo2-rvt add-in [^)]*\)/, '')
+            : opts.setUp === 'addin-0.4.0' ? text.replace(/\(flo2-rvt add-in [^)]*\)/, '(flo2-rvt add-in 0.4.0)')
+              : text;
       const bundle = appBundleBody();
       this.register('appbundles', 'Flo2RvtProbe', { ...bundle, description: strip(bundle.description) });
       for (const a of registeredActivities(owner)) this.register('activities', a.id, { ...a.body, description: strip(a.body.description) });

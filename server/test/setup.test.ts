@@ -236,6 +236,22 @@ describe('rvt_setup_check', () => {
     }
   });
 
+  test('on an app set up by flo2-rvt 0.5.x, whose Activities run add-in 0.4.0: outdated, and a setup brings it to this add-in', async () => {
+    const h = await startHarness({ setUp: 'addin-0.4.0' }, undefined, { bundle });
+    try {
+      const out = ok(await call(h, 'rvt_setup_check', {}, setupMeta(h)));
+      assert.equal(out.ready, false, 'an app whose add-in cannot read move_levels_together is not ready');
+      assert.equal(out.state, 'outdated');
+      assert.match(String(out.why), /runs add-in 0\.4\.0, not 0\.5\.0/);
+      assert.ok((out.found as Array<{ state: string; kind: string; addin_version?: string }>).filter((f) => f.kind === 'activity').every((f) => f.state === 'outdated' && f.addin_version === '0.4.0'));
+      const run = ok(await call(h, 'rvt_setup_run', {}, setupMeta(h, approved)));
+      assert.equal(run.addin_version, '0.5.0');
+      assert.equal((run.check as { ready: boolean }).ready, true);
+    } finally {
+      await h.close();
+    }
+  });
+
   test('a server with no AppBundle can still check, and says it cannot set up', async () => {
     const h = await startHarness({ setUp: 'none' });
     try {
