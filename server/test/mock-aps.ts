@@ -66,6 +66,8 @@ export interface MockOptions {
   setUp?: 'current' | 'unmarked' | 'none';
   /** POST workitems answers this, whatever the app holds. */
   workItemAnswer?: { status: number; body: unknown };
+  /** One call Autodesk refuses (method and exact path), with this status and body: a setup step that stops. */
+  refuse?: { method: string; path: string; status: number; body: unknown };
 }
 
 export class MockAps {
@@ -150,6 +152,10 @@ export class MockAps {
     const m = (re: RegExp) => re.exec(path);
     let g: RegExpExecArray | null;
 
+    // A call Autodesk refuses, whatever else the stand-in would answer.
+    const refuse = this.opts.refuse;
+    if (refuse && refuse.method === req.method && refuse.path === path) return this.send(res, refuse.status, refuse.body);
+
     // flo2.io's short-lived download link for the input.
     if (path === '/flo2/download/input') return this.send(res, 200, SAMPLE_INPUT.toString('latin1'), 'application/octet-stream');
 
@@ -223,7 +229,8 @@ export class MockAps {
 
     // Design Automation
     if (path === '/da/us-east/v3/forgeapps/me' && req.method === 'PATCH') {
-      if (this.opts.nicknameTaken) return this.send(res, 409, '"Conflict (in use by someone else)."');
+      // A JSON string, as Design Automation answers (send() encodes it).
+      if (this.opts.nicknameTaken) return this.send(res, 409, 'Conflict (in use by someone else).');
       const r = recorded('da-forgeapps-patch');
       this.nicknameSet = (call.json as { nickname: string }).nickname;
       res.writeHead(r.status);

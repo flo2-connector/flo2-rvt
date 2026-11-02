@@ -31,7 +31,7 @@ import { JobService, NotSetUp, Refusal } from './jobs.ts';
 import type { Logger } from './log.ts';
 
 export const SERVER_NAME = 'flo2-rvt';
-export const SERVER_VERSION = '0.5.0';
+export const SERVER_VERSION = '0.5.1';
 
 function text(message: string): CallToolResult {
   return { content: [{ type: 'text', text: message }], isError: true };
@@ -192,7 +192,7 @@ export function buildServer(jobs: JobService, logger: Logger): McpServer {
     {
       title: "Set flo2-rvt up on the person's Autodesk app, as they approved",
       description:
-        "Called by flo2.io's gateway, never offered to an agent, and only once the person has approved the setup on flo2.io (the hidden context's `setup` carries what they approved: the monthly cap and the AppBundle's sha256). On their own Autodesk app it sets the nickname when the app has none and holds nothing, uploads this server's AppBundle (checked against its sha256 and the one approved), creates or versions the probe and edit Activities with their prod aliases, and sets Autodesk's monthly processing cap; then reads it all back. It never deletes anything, and costs no processing time.",
+        "Called by flo2.io's gateway, never offered to an agent, and only once the person has approved the setup on flo2.io (the hidden context's `setup` carries what they approved: the monthly cap and the AppBundle's sha256). On their own Autodesk app it keeps the app's nickname and never sets one (an app with none is named by its client id, which Autodesk always accepts), uploads this server's AppBundle (checked against its sha256 and the one approved), creates or versions the probe and edit Activities with their prod aliases, and sets Autodesk's monthly processing cap; then reads it all back. A step Autodesk refuses stops it with which step, and Autodesk's status and words. It never deletes anything, and costs no processing time.",
       inputSchema: z.object({}),
       outputSchema: SetupRunResult,
       annotations: {

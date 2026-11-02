@@ -9,6 +9,13 @@
 // uploaded their model and its change list to an Autodesk app flo2-rvt had never been registered
 // on, then Autodesk refused the WorkItem with 400 "The activity <client id>.Flo2RvtEdit+prod could
 // not be found", and the person read Autodesk's words alone.
+//
+// And then (6ab9996ca4bdbc45:fact:root-cause-a-persons-first-setup-stopped-on-autodesks-409-to-the-
+// nickname-and-its-words-were-dropped-2026-11-01): that person's first setup derived a nickname
+// from their client id and sent PATCH forgeapps/me, Autodesk answered 409, and flo2-rvt dropped
+// Autodesk's words, guessed a cause, logged nothing past setup_start, and showed 12 characters of
+// the client id. Since 0.5.1 a setup never sets a nickname: an app with none is named by its
+// client id, which Autodesk always accepts, and a step Autodesk refuses keeps Autodesk's words.
 
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -47,7 +54,12 @@ const LIST = {
   changes: [{ kind: 'delete_elements_on_level', id: 'c1', level: { level_name: 'Level 2' } }],
 };
 const MODEL = 'rac_basic_sample_project.rvt';
-const DEFAULT_NICKNAME = 'flo2rvt_madeupclient';
+/** What 0.5.0 derived from the made-up client id: no request, result or log may hold it again. */
+const DERIVED_BEFORE = 'madeupclient';
+/** The client id, as a setup's refusal and its log write it: by its last four characters. */
+const CLIENT_ID_SHOWN = `…${CLIENT_ID.slice(-4)}`;
+const lists = (h: Harness) => h.aps.calls.filter((c) => c.method === 'GET' && (c.path === '/da/us-east/v3/appbundles' || c.path === '/da/us-east/v3/activities'));
+const nicknamePatches = (h: Harness) => h.aps.calls.filter((c) => c.method === 'PATCH' && c.path === '/da/us-east/v3/forgeapps/me');
 
 /** The AppBundle the server would upload: made-up bytes, with its sha256 beside it as the install writes it. */
 const BUNDLE_BYTES = Buffer.from('PK made-up AppBundle bytes for the setup tests');
@@ -184,9 +196,10 @@ describe('rvt_setup_check', () => {
       assert.equal(setup.addin_version, '0.4.0');
       assert.equal(setup.bundle_sha256, BUNDLE_SHA);
       assert.equal(setup.bundle_bytes, BUNDLE_BYTES.length);
-      assert.deepEqual(setup.nickname, { now: null, will_set: DEFAULT_NICKNAME, keeps_client_id: false });
+      assert.deepEqual(setup.nickname, { now: null, will_set: null, keeps_client_id: true }, 'a setup sets no nickname: the client id names everything');
       assert.equal(setup.deletes_nothing, true);
       assert.ok(h.aps.calls.every((c) => c.method === 'GET'), 'a check only reads');
+      assert.deepEqual(lists(h), [], 'the plan no longer reads the app\'s lists for a nickname step');
     } finally {
       await h.close();
     }
@@ -279,42 +292,48 @@ describe('rvt_setup_run', () => {
     }
   });
 
-  test('on an app never set up: the nickname first, the AppBundle byte for byte, both Activities at prod, the cap, never a DELETE; then ready, and the job that failed now starts', async () => {
-    const h = await startHarness({ setUp: 'none' }, undefined, { bundle });
-    try {
-      // The person who already hit the error: their edit is refused, nothing uploaded.
-      const first = await call(h, 'rvt_edit_start', { file: MODEL, change_list: LIST }, jobMeta(h.aps));
-      assert.match(refusal(first), /not set up/);
+  for (const taken of [false, true]) {
+    test(`on an app never set up${taken ? ', every nickname taken at Autodesk (the person\'s case)' : ''}: no nickname is set, the client id names the AppBundle and both Activities, the cap, never a DELETE; then ready, and the job that failed now starts`, async () => {
+      const h = await startHarness({ setUp: 'none', nicknameTaken: taken }, undefined, { bundle });
+      try {
+        // The person who already hit the error: their edit is refused, nothing uploaded.
+        const first = await call(h, 'rvt_edit_start', { file: MODEL, change_list: LIST }, jobMeta(h.aps));
+        assert.match(refusal(first), /not set up/);
 
-      const out = ok(await call(h, 'rvt_setup_run', {}, setupMeta(h, approved)));
-      assert.equal(out.state, 'set_up');
-      assert.equal(out.owner, DEFAULT_NICKNAME);
-      assert.equal(out.owner_how, 'set');
-      assert.equal(out.addin_version, '0.4.0');
-      assert.equal(out.bundle_sha256, BUNDLE_SHA);
-      assert.deepEqual(out.monthly_hours, { requested: 3, reported: 3 });
-      assert.deepEqual((out.activities as Array<{ id: string }>).map((a) => a.id), [`${DEFAULT_NICKNAME}.Flo2RvtProbe+prod`, `${DEFAULT_NICKNAME}.Flo2RvtEdit+prod`]);
-      assert.equal((out.check as { ready: boolean }).ready, true, 'read back: set up');
+        const out = ok(await call(h, 'rvt_setup_run', {}, setupMeta(h, approved)));
+        assert.equal(out.state, 'set_up');
+        assert.equal(out.owner, CLIENT_ID);
+        assert.equal(out.owner_how, 'client_id');
+        assert.equal(out.addin_version, '0.4.0');
+        assert.equal(out.bundle_sha256, BUNDLE_SHA);
+        assert.deepEqual(out.monthly_hours, { requested: 3, reported: 3 });
+        assert.equal((out.appbundle as { id: string }).id, `${CLIENT_ID}.Flo2RvtProbe+prod`);
+        assert.deepEqual((out.activities as Array<{ id: string }>).map((a) => a.id), [`${CLIENT_ID}.Flo2RvtProbe+prod`, `${CLIENT_ID}.Flo2RvtEdit+prod`]);
+        assert.equal((out.check as { ready: boolean }).ready, true, 'read back: set up');
 
-      const order = h.aps.calls.map((c) => `${c.method} ${c.path}`);
-      const patch = order.indexOf('PATCH /da/us-east/v3/forgeapps/me');
-      assert.ok(patch >= 0 && patch < order.indexOf('POST /da/us-east/v3/appbundles'), 'the nickname is set before anything is created');
-      assert.deepEqual(h.aps.calls.find((c) => c.method === 'PATCH' && c.path.endsWith('/forgeapps/me'))?.json, { nickname: DEFAULT_NICKNAME });
-      assert.equal(h.aps.appBundleUploads.length, 1);
-      assert.ok((h.aps.appBundleUploads[0]?.fileBytes ?? 0) >= BUNDLE_BYTES.length, 'the bundle went up');
-      assert.deepEqual(h.aps.calls.find((c) => c.method === 'PUT' && c.path.endsWith('/servicelimits/me'))?.json, { frontendLimits: { limitMonthlyProcessingTimeInHours: 3 } });
-      for (const c of h.aps.calls) assert.ok(['GET', 'POST', 'PATCH', 'PUT'].includes(c.method), `never ${c.method} ${c.path}`);
-      for (const c of h.aps.calls.filter((x) => x.path.startsWith('/da/'))) assert.equal(c.auth, `Bearer ${(setupMeta(h)['flo2.io/job'] as { aps: { access_token: string } }).aps.access_token}`, 'the token flo2.io handed over');
-      assert.ok(!h.logger.lines.join('\n').includes('made-up-aps-access-token'), 'no token in the log');
+        assert.deepEqual(nicknamePatches(h), [], 'no PATCH forgeapps/me, ever');
+        assert.deepEqual(lists(h), [], 'and no reading of the app\'s lists to decide one');
+        for (const a of h.aps.calls.filter((c) => c.method === 'POST' && c.path === '/da/us-east/v3/activities')) {
+          assert.deepEqual((a.json as { appbundles: string[] }).appbundles, [`${CLIENT_ID}.Flo2RvtProbe+prod`], 'each Activity names the AppBundle by the client id');
+        }
+        assert.ok(!JSON.stringify(h.aps.calls.map((c) => c.json ?? null)).includes(`flo2rvt_${DERIVED_BEFORE}`), 'no nickname derived from the client id is sent');
+        assert.ok(!JSON.stringify(out).includes(`flo2rvt_${DERIVED_BEFORE}`), 'nor answered');
+        assert.equal(h.aps.appBundleUploads.length, 1);
+        assert.ok((h.aps.appBundleUploads[0]?.fileBytes ?? 0) >= BUNDLE_BYTES.length, 'the bundle went up');
+        assert.deepEqual(h.aps.calls.find((c) => c.method === 'PUT' && c.path.endsWith('/servicelimits/me'))?.json, { frontendLimits: { limitMonthlyProcessingTimeInHours: 3 } });
+        for (const c of h.aps.calls) assert.ok(['GET', 'POST', 'PATCH', 'PUT'].includes(c.method), `never ${c.method} ${c.path}`);
+        for (const c of h.aps.calls.filter((x) => x.path.startsWith('/da/'))) assert.equal(c.auth, `Bearer ${(setupMeta(h)['flo2.io/job'] as { aps: { access_token: string } }).aps.access_token}`, 'the token flo2.io handed over');
+        assert.ok(!h.logger.lines.join('\n').includes('made-up-aps-access-token'), 'no token in the log');
 
-      // The same person, the same server, at once: the edit runs under the new nickname.
-      const again = ok(await call(h, 'rvt_edit_start', { file: MODEL, change_list: LIST }, jobMeta(h.aps)));
-      assert.equal(again.state, 'submitted');
-      assert.equal((h.aps.workItems.at(-1) as { activityId: string }).activityId, `${DEFAULT_NICKNAME}.Flo2RvtEdit+prod`);
-    } finally {
-      await h.close();
-    }
-  });
+        // The same person, the same server, at once: the edit runs under the client id.
+        const again = ok(await call(h, 'rvt_edit_start', { file: MODEL, change_list: LIST }, jobMeta(h.aps)));
+        assert.equal(again.state, 'submitted');
+        assert.equal((h.aps.workItems.at(-1) as { activityId: string }).activityId, `${CLIENT_ID}.Flo2RvtEdit+prod`);
+      } finally {
+        await h.close();
+      }
+    });
+  }
 
   test('on an app set up by an older flo2-rvt: the nickname kept, new versions, every alias moved, then ready', async () => {
     const h = await startHarness({ setUp: 'unmarked' }, undefined, { bundle });
@@ -329,4 +348,47 @@ describe('rvt_setup_run', () => {
       await h.close();
     }
   });
+  const refusedSteps = [
+    {
+      step: /registering flo2-rvt's add-in \(the AppBundle\)/,
+      operation: 'DA appbundles POST',
+      refuse: { method: 'POST', path: '/da/us-east/v3/appbundles', status: 403, body: { diagnostic: `The client ${CLIENT_ID} is not entitled to Design Automation.` } },
+      said: `The client ${CLIENT_ID_SHOWN} is not entitled to Design Automation.`,
+    },
+    {
+      step: /setting Autodesk's monthly processing cap/,
+      operation: 'DA servicelimits PUT',
+      refuse: { method: 'PUT', path: '/da/us-east/v3/servicelimits/me', status: 500, body: `Service limits for ${CLIENT_ID} could not be updated.` },
+      said: `Service limits for ${CLIENT_ID_SHOWN} could not be updated.`,
+    },
+  ];
+  for (const r of refusedSteps) {
+    test(`a step Autodesk refuses (${r.operation} answering ${r.refuse.status}): the refusal names the step, with Autodesk's status and words beside flo2-rvt's, says nothing was deleted and it can run again, and the log says the same; the client id only by its last four`, async () => {
+      const h = await startHarness({ setUp: 'none', refuse: r.refuse }, undefined, { bundle });
+      try {
+        const text = refusal(await call(h, 'rvt_setup_run', {}, setupMeta(h, approved)));
+        assert.match(text, /flo2-rvt's setup on this Autodesk app stopped/);
+        assert.match(text, r.step, 'which step, in plain words');
+        assert.ok(text.includes(r.operation), `and by its call: ${text}`);
+        assert.ok(text.includes(`Autodesk answered HTTP ${r.refuse.status}: "${r.said}"`), `Autodesk's status and words: ${text}`);
+        assert.match(text, /nothing on it was deleted/);
+        assert.match(text, /can be run again from flo2\.io/);
+        assert.ok(!text.includes(CLIENT_ID), 'the refusal never holds the whole client id');
+        assert.doesNotMatch(text, /another Autodesk app may hold it/, 'no guessed cause');
+
+        const failed = h.logger.lines.map((l) => JSON.parse(l) as Record<string, unknown>).filter((l) => l.event === 'setup_failed');
+        assert.equal(failed.length, 1, h.logger.lines.join('\n'));
+        assert.equal(failed[0]?.operation, r.operation);
+        assert.equal(failed[0]?.status, r.refuse.status);
+        assert.equal(failed[0]?.autodesk_said, r.said);
+        const log = h.logger.lines.join('\n');
+        assert.ok(!log.includes(CLIENT_ID), 'the log never holds the whole client id');
+        assert.ok(!log.includes('made-up-aps-access-token'), 'nor a token');
+        assert.deepEqual(nicknamePatches(h), []);
+        assert.ok(!h.aps.calls.some((c) => c.method === 'DELETE'), 'never a DELETE');
+      } finally {
+        await h.close();
+      }
+    });
+  }
 });
