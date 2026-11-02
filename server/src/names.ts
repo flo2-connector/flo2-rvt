@@ -16,6 +16,34 @@ export const APPBUNDLE_NAME = PROBE_NAME;
 export const EDIT_NAME = 'Flo2RvtEdit';
 /** The alias every AppBundle and Activity uses. */
 export const ALIAS = 'prod';
+/** The AppBundle zip CI builds (addin/dist/) and a setup uploads. */
+export const BUNDLE_FILE = 'Flo2RvtProbe.bundle.zip';
+
+/**
+ * The add-in's own version, as addin/Flo2RvtProbe.csproj's <Version> says (a test holds them
+ * equal). It moves with every change to the add-in, as it has (0.2.0 the edit, 0.3.0 the
+ * reconciled report, 0.4.0 parts with their owners), and it is what a person's app must carry
+ * for a job to run there: a setup writes it into the AppBundle's and each Activity's
+ * description, and a job's check reads it back (server/src/setup.ts). It is not the bundle's
+ * sha256, which changes with every CI build of the same add-in.
+ */
+export const ADDIN_VERSION = '0.4.0';
+
+/** What a setup ends each description with, so a check can read which add-in an Activity runs. */
+export function setupMark(addinVersion = ADDIN_VERSION): string {
+  return `(flo2-rvt add-in ${addinVersion})`;
+}
+
+/** The add-in version a description names, or null when it names none (an older flo2-rvt registered it). */
+export function markedAddinVersion(description: unknown): string | null {
+  if (typeof description !== 'string') return null;
+  return /\(flo2-rvt add-in (\d+\.\d+\.\d+)\)/.exec(description)?.[1] ?? null;
+}
+
+/** The qualified AppBundle id every Activity names: `<owner>.Flo2RvtProbe+prod`. */
+export function appBundleIdFor(owner: string): string {
+  return `${owner}.${APPBUNDLE_NAME}+${ALIAS}`;
+}
 
 /** flo2-rvt's jobs. */
 export type JobKind = 'probe' | 'edit';

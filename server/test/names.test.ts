@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { BUCKET_KEY_RULE, COMMAND_LINE, JOBS, JOB_SCOPES, activityIdFor, bucketKeyFor, isJobId, newJobId, objectKey } from '../src/names.ts';
+import { ADDIN_VERSION, BUCKET_KEY_RULE, COMMAND_LINE, JOBS, JOB_SCOPES, activityIdFor, bucketKeyFor, isJobId, markedAddinVersion, newJobId, objectKey, setupMark } from '../src/names.ts';
 import { expiresAtMs } from '../src/contract.ts';
 import { scrub } from '../src/log.ts';
 
@@ -56,4 +57,13 @@ test('the logger drops secret-looking fields and URL values', () => {
     note: '[withheld]',
     n: 3,
   });
+});
+
+test("ADDIN_VERSION is the add-in's own <Version>, which a setup writes into each description and a check reads back", () => {
+  const csproj = readFileSync(new URL('../../addin/Flo2RvtProbe.csproj', import.meta.url), 'utf8');
+  assert.equal(/<Version>([^<]+)<\/Version>/.exec(csproj)?.[1], ADDIN_VERSION);
+  assert.equal(setupMark(), `(flo2-rvt add-in ${ADDIN_VERSION})`);
+  assert.equal(markedAddinVersion(`flo2-rvt edit: a change list applied. ${setupMark()}`), ADDIN_VERSION);
+  assert.equal(markedAddinVersion('flo2-rvt read-only probe: report.json, sheets.pdf and model.ifc from a Revit 2024 model.'), null, 'an older registration names none');
+  assert.equal(markedAddinVersion(undefined), null);
 });

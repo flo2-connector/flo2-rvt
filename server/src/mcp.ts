@@ -1,29 +1,37 @@
-// The three tools the agent sees, as the contract (v1) names them. Each refuses a
-// call that does not carry flo2.io's hidden job context, and treats the
-// agent's own arguments as untrusted.
+// The tools, as the contract (v3) names them: the three an agent sees through flo2.io
+// (rvt_probe_start, rvt_edit_start, rvt_job_status), and the two flo2.io's gateway calls
+// itself and never offers an agent (rvt_setup_check before it asks the person for a job,
+// rvt_setup_run once the person has approved the setup). Each refuses a call that does not
+// carry flo2.io's hidden job context, and treats the caller's own arguments as untrusted.
 
 import { McpServer } from '@modelcontextprotocol/server';
 import type { CallToolResult } from '@modelcontextprotocol/server';
 import { ApsError } from './aps/http.ts';
 import { BucketTakenError } from './aps/oss.ts';
+import * as z from 'zod/v4';
 import {
   EditStartArgs,
   EditStartResult,
   JobContextSchema,
   JobStatusArgs,
   JobStatusResult,
+  META_ERROR,
   META_JOB,
   META_OUTPUTS,
   META_USAGE,
   ProbeStartArgs,
   ProbeStartResult,
+  SetupCheckArgs,
+  SetupCheckResult,
+  SetupRunResult,
+  type ErrorMeta,
   type JobContext,
 } from './contract.ts';
-import { JobService, Refusal } from './jobs.ts';
+import { JobService, NotSetUp, Refusal } from './jobs.ts';
 import type { Logger } from './log.ts';
 
 export const SERVER_NAME = 'flo2-rvt';
-export const SERVER_VERSION = '0.4.0';
+export const SERVER_VERSION = '0.5.0';
 
 function text(message: string): CallToolResult {
   return { content: [{ type: 'text', text: message }], isError: true };
@@ -43,7 +51,19 @@ export function readJobContext(meta: Record<string, unknown> | undefined): { ok:
 }
 
 function failure(err: unknown, logger: Logger, tool: string): CallToolResult {
+  if (err instanceof NotSetUp) {
+    // The gateway reads the case by its code, and offers the person the one-time setup.
+    logger.warn('not_set_up', { tool, autodesk_refused: err.autodeskSaid !== undefined });
+    const meta: ErrorMeta = { code: 'not_set_up', billed: false, ...(err.autodeskSaid ? { autodesk_said: err.autodeskSaid } : {}) };
+    return { ...text(err.message), _meta: { [META_ERROR]: meta } };
+  }
   if (err instanceof Refusal || err instanceof BucketTakenError) return text(err.message);
+  if (err instanceof ApsError && err.operation === 'DA forgeapps/me' && (err.status === 401 || err.status === 403)) {
+    logger.warn('autodesk_refused', { tool, operation: err.operation, status: err.status });
+    return text(
+      `Autodesk refused to let flo2-rvt read this app's Design Automation settings (HTTP ${err.status}). The app may not have the Automation API in its API Access (aps.autodesk.com, My applications, the app, API Access). Nothing was uploaded and nothing ran.`,
+    );
+  }
   if (err instanceof ApsError) {
     logger.warn('autodesk_refused', { tool, operation: err.operation, status: err.status });
     return text(`Autodesk refused the call: ${err.message}.`);
@@ -137,6 +157,60 @@ export function buildServer(jobs: JobService, logger: Logger): McpServer {
         return reply;
       } catch (err) {
         return failure(err, logger, 'rvt_job_status');
+      }
+    },
+  );
+
+  server.registerTool(
+    'rvt_setup_check',
+    {
+      title: "Check flo2-rvt is set up on the person's Autodesk app (read-only)",
+      description:
+        "Called by flo2.io's gateway, never offered to an agent: before a job is put to the person, read whether their own Autodesk app holds what the job needs (the AppBundle and the job's Activity at prod, at this flo2-rvt's add-in version), by GETs alone, and with `plan`, what the one-time setup would do there. Nothing is uploaded, created or billed.",
+      inputSchema: SetupCheckArgs,
+      outputSchema: SetupCheckResult,
+      annotations: {
+        title: "Check flo2-rvt is set up on the person's Autodesk app (read-only)",
+        readOnlyHint: true,
+        openWorldHint: true,
+      },
+    },
+    async (args, ctx) => {
+      const job = readJobContext(ctx.mcpReq._meta);
+      if (!job.ok) return text(job.why);
+      try {
+        const result = await jobs.setupCheck(job.ctx, args.job, args.plan, ctx.mcpReq.signal);
+        return { content: [{ type: 'text', text: JSON.stringify(result) }], structuredContent: result };
+      } catch (err) {
+        return failure(err, logger, 'rvt_setup_check');
+      }
+    },
+  );
+
+  server.registerTool(
+    'rvt_setup_run',
+    {
+      title: "Set flo2-rvt up on the person's Autodesk app, as they approved",
+      description:
+        "Called by flo2.io's gateway, never offered to an agent, and only once the person has approved the setup on flo2.io (the hidden context's `setup` carries what they approved: the monthly cap and the AppBundle's sha256). On their own Autodesk app it sets the nickname when the app has none and holds nothing, uploads this server's AppBundle (checked against its sha256 and the one approved), creates or versions the probe and edit Activities with their prod aliases, and sets Autodesk's monthly processing cap; then reads it all back. It never deletes anything, and costs no processing time.",
+      inputSchema: z.object({}),
+      outputSchema: SetupRunResult,
+      annotations: {
+        title: "Set flo2-rvt up on the person's Autodesk app, as they approved",
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: true,
+      },
+    },
+    async (_args, ctx) => {
+      const job = readJobContext(ctx.mcpReq._meta);
+      if (!job.ok) return text(job.why);
+      try {
+        const result = await jobs.setupRun(job.ctx, ctx.mcpReq.signal);
+        return { content: [{ type: 'text', text: JSON.stringify(result) }], structuredContent: result };
+      } catch (err) {
+        return failure(err, logger, 'rvt_setup_run');
       }
     },
   );

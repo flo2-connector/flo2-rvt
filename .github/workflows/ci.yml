@@ -63,9 +63,19 @@ jobs:
             echo "Autodesk's assemblies must not be shipped in the bundle; the engine provides them." >&2
             exit 1
           fi
+      # The bundle's sha256, beside it and in the run's summary: flo2.io pins it (ops/flo2-rvt.BUNDLE
+      # in the flo2 repo) and its install checks the bundle it fetches from this artifact against
+      # the pin before it puts it beside flo2-rvt's server, which checks it again before a setup
+      # uploads it to a person's Autodesk app. Nothing on flo2.io builds the add-in.
+      - name: The AppBundle's sha256
+        run: |
+          (cd addin/dist && sha256sum Flo2RvtProbe.bundle.zip | tee Flo2RvtProbe.bundle.zip.sha256)
+          { echo "AppBundle \`Flo2RvtProbe.bundle.zip\` for ${GITHUB_SHA}:"; echo; echo "    sha256 $(cut -d' ' -f1 addin/dist/Flo2RvtProbe.bundle.zip.sha256)"; } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v7
         with:
           name: Flo2RvtProbe.bundle
-          path: addin/dist/Flo2RvtProbe.bundle.zip
+          path: |
+            addin/dist/Flo2RvtProbe.bundle.zip
+            addin/dist/Flo2RvtProbe.bundle.zip.sha256
           if-no-files-found: error
           retention-days: 90

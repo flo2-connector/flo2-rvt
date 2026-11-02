@@ -35,13 +35,16 @@ agent ──tools/call──▶ flo2.io gateway ──127.0.0.1:8740, bearer─�
                           ◀──── signed URLs of the outputs ────────────┘
 ```
 
-1. `rvt_probe_start` or `rvt_edit_start`: flo2-rvt makes (or finds) the person's transient bucket, streams the `.rvt` from flo2.io's short-lived download link into it through signed S3 upload URLs, checks the bytes against the size and SHA-256 flo2.io stated (no match, no job), uploads an edit's change list beside it, and submits a WorkItem with `limitProcessingTimeSec`. Autodesk's Revit reads the inputs and writes the outputs into the same bucket with the same token.
+0. Before the person is asked to approve a job, flo2.io's gateway calls `rvt_setup_check`: flo2-rvt reads, by GETs alone, whether the person's app holds the AppBundle and the job's Activity at `prod`, at this flo2-rvt's add-in version. If not, the person is told so in plain words and offered the one-time setup (`rvt_setup_run`, [below](#setting-up-a-persons-autodesk-app)); no job is made and nothing is uploaded.
+1. `rvt_probe_start` or `rvt_edit_start`: flo2-rvt reads the job's Activity on the person's app first (an app that does not hold it is refused in plain words, before any bucket or upload), then makes (or finds) the person's transient bucket, streams the `.rvt` from flo2.io's short-lived download link into it through signed S3 upload URLs, checks the bytes against the size and SHA-256 flo2.io stated (no match, no job), uploads an edit's change list beside it, and submits a WorkItem with `limitProcessingTimeSec`. Autodesk's Revit reads the inputs and writes the outputs into the same bucket with the same token.
 2. `rvt_job_status`, polled: Design Automation's own state, passed through. On success, the status result carries signed download URLs of the outputs for the gateway, which downloads them, saves them add-only, and strips them before the agent sees the result.
 3. Autodesk deletes everything in a transient bucket after 24 hours.
 
-## The contract with flo2.io's gateway (v2)
+## The contract with flo2.io's gateway (v3)
 
 v1 is v0 with the edit job added: one more tool, `rvt_edit_start`, its outputs, and an edit's report summary on `rvt_job_status`. Nothing in v0 changed, so a v0 gateway still works for the probe. v2 (0.3.0) adds three counts to an edit's report summary and counts only model elements in its `elements_deleted`; nothing else changed, and a v1 gateway, which passes the summary through, still works. 0.4.0 keeps v2: the summary is unchanged, and its `left_on_level` now leaves out parts of kept elements, which were never left.
+
+v3 (0.5.0) adds the setup of a person's own Autodesk app from flo2.io: two tools the gateway calls itself and never offers an agent (`rvt_setup_check`, `rvt_setup_run`), the hidden context's `setup` (what the person approved), `_meta["flo2.io/error"]` on a refused start, and a start that reads its Activity before it uploads anything. Nothing of v2 changed: a v2 gateway still works, and on an app flo2-rvt was never set up on its start is refused before any upload, in plain words.
 
 ### Transport
 
@@ -58,6 +61,17 @@ v1 is v0 with the edit job added: one more tool, `rvt_edit_start`, its outputs, 
 | `rvt_edit_start` | `file`, as above; `change_list`: a change list ([below](#the-change-list)); `max_minutes`?, as above | `{ job_id, state: "submitted", engine: "Autodesk.Revit+2024", change_list_sha256 }` |
 | `rvt_job_status` | `job_id`: string | `{ job_id, state, processing_seconds?, outputs?: [{ name, size }], report_summary?, error? }`. A probe's `report_summary` is `{ levels, sheets, links }`; an edit's is `{ outcome, changes, applied, applied_in_part, rolled_back, not_applied, elements_deleted, other_elements_deleted?, deleted_with_host?, left_on_level?, model_saved }`: from a report of add-in 0.3.0 (report version 2), `elements_deleted` counts model elements, `other_elements_deleted` Revit's internal elements, annotation and datums, `deleted_with_host` what Revit would not delete alone and deleted with its host, `left_on_level` the model elements still tied to an emptied level; a report of 0.2.0 (version 1) counted every element in `elements_deleted` and has none of the three. |
 
+### Tools for the gateway (v3)
+
+flo2.io's gateway calls these itself; its door never offers them to an agent.
+
+| Tool | Arguments | Result (`structuredContent`, also as JSON text) |
+| --- | --- | --- |
+| `rvt_setup_check` | `job`?: `probe`, `edit` or `all` (default); `plan`?: boolean | `{ ready, state, why?, owner, nickname_set, expected: { addin_version, appbundle, activities }, found: [{ kind, id, state, addin_version?, version?, why? }], setup: { available, why?, addin_version, bundle_sha256?, bundle_bytes?, nickname?: { now, will_set, keeps_client_id }, deletes_nothing: true } }`. `state` is `ready`, `not_set_up` (something the job needs is missing) or `outdated` (there, but registered by another flo2-rvt). By GETs alone: `forgeapps/me`, the AppBundle `<owner>.Flo2RvtProbe+prod` and each Activity the job needs, each by its qualified id. With `plan`, `setup.nickname` says what the setup's nickname step would do, which on an app with no nickname reads the app's AppBundle and Activity lists. Annotated `readOnlyHint: true`. |
+| `rvt_setup_run` | none | `{ state: "set_up", owner, owner_how, owner_note?, addin_version, bundle_sha256, bundle_bytes, appbundle: { id, version, created, alias }, activities: [{ id, version, created, alias }], monthly_hours: { requested, reported }, check }`, where `check` is `rvt_setup_check`'s result read back after the setup. Refused, and Autodesk never asked, without the hidden context's `setup`, when this server holds no AppBundle or one whose bytes are not its sha256, or when `setup.bundle_sha256` is not this server's AppBundle. Annotated `readOnlyHint: false`, `destructiveHint: true` (it moves aliases and sets the cap). |
+
+An Activity is `ready` when its body is the one this flo2-rvt registers (engine, the AppBundle it names, its command line, each parameter's verb and local name, no other required parameter) and its description names this add-in version: every AppBundle and Activity description ends with `(flo2-rvt add-in <version>)`, the add-in's own `<Version>` (`addin/Flo2RvtProbe.csproj`, held equal to `ADDIN_VERSION` in `server/src/names.ts` by a test). A description that names another version, or none (an app registered by flo2-rvt 0.4.0 or earlier), is `outdated`, and a setup brings it up to date. The version is the add-in's, not the bundle's sha256, so a new flo2-rvt whose add-in has not changed needs no new setup. *Assumed until the first live setup*: that Autodesk returns an Activity's description as it was given, as the reference's example shows; an answer with no description at all is judged by its body alone, so a setup is never asked for again and again.
+
 `state` is Design Automation's own status, passed through: `pending`, `inprogress`, `success`, `cancelled`, `failedLimitDataSize`, `failedLimitProcessingTime`, `failedDownload`, `failedInstructions`, `failedUpload`, `failedUploadOptional`, and any it adds. `processing_seconds` runs from the start of the input download to the end of the output upload, as Autodesk counts its limit, rounded up. Every tool carries annotations: a `title`, `readOnlyHint: false`, `openWorldHint: true` (and `destructiveHint: false`, since no job changes the person's file; `idempotentHint` false for the starts, true for status).
 
 `change_list_sha256` is the SHA-256 of the change list in its canonical form (every object's keys sorted, no whitespace): the exact bytes flo2-rvt uploads as `changes.json`, which the add-in reads and names again in `report.json`. flo2.io computes the same form, so it can check that what runs is what the person approved.
@@ -72,7 +86,8 @@ The gateway sets `params._meta["flo2.io/job"]` on every `tools/call`:
   "design_id": "…",
   "aps": { "access_token": "…", "expires_at": "2026-10-31T12:59:59Z", "client_id": "…" },
   "input": { "download_url": "https://…", "file_name": "….rvt", "size": 123, "sha256": "…" },
-  "limits": { "max_processing_sec": 1800 }
+  "limits": { "max_processing_sec": 1800 },
+  "setup": { "monthly_hours": 2, "bundle_sha256": "…" }
 }
 ```
 
@@ -82,6 +97,7 @@ The gateway sets `params._meta["flo2.io/job"]` on every `tools/call`:
 - **The token must outlive the job.** Autodesk's Revit stores the outputs with the same token when the job ends, so `rvt_probe_start` refuses a token valid for less than the job's time limit plus 600 s. A freshly minted two-legged token (3,599 s) covers the longest job (1,800 s).
 - The time limit is the lower of `max_minutes × 60` and `limits.max_processing_sec`.
 - flo2-rvt uses only this token, keeps it for no longer than the call (the WorkItem carries it to Autodesk), and never logs it.
+- `setup` (v3) is required on `rvt_setup_run` and read nowhere else: what the person approved on flo2.io. `monthly_hours` (1 to 744) is the cap the setup sets on their app (Autodesk's `limitMonthlyProcessingTimeInHours`); `bundle_sha256` is the sha256 of the AppBundle they were shown, which must be the one this server holds.
 
 ### Results for the gateway
 
@@ -92,12 +108,14 @@ When a job reaches `success`, the status result carries:
 
 `failedUploadOptional` (an optional output could not be stored) carries the same two keys for the outputs that were stored.
 
+A refused call (v3) may carry `_meta["flo2.io/error"] = { code, billed, autodesk_said? }`, so the gateway acts on the case rather than on the words. Its one code, `not_set_up`, means the person's app does not hold what the job needs: a start found no Activity before it uploaded anything (`billed: false`, nothing uploaded), or Autodesk refused the WorkItem with a 400 or 404 naming a missing Activity or AppBundle (`billed: false`, `autodesk_said` its words; the model went only to the transient bucket). The text says so in plain words, says nothing was billed, and says to ask flo2.io for the one-time setup and start the job again, with Autodesk's own words quoted after.
+
 ### Names
 
 - `job_id`: a v4 uuid flo2-rvt mints before the upload.
 - Bucket key: `flo2rvt-` + the lowercased client id, reduced to OSS's `[-_.a-z0-9]` and cut to fit 128 characters, + `-t`. Transient (24 h).
 - Objects: `<job_id>/input.rvt`, an edit's `<job_id>/changes.json`, `<job_id>/report.json`, `<job_id>/sheets.pdf`, `<job_id>/model.ifc`, an edit's `<job_id>/model.rvt`, and **`<job_id>/workitem.json`**, a small job record (the WorkItem id, the activity, the job, an edit's `change_list_sha256`, the time limit, when it was submitted). The WorkItem id only exists after the inputs and outputs are named, so it cannot be encoded in the `job_id`; the record is how a status call after a restart, with the `job_id` and a fresh token alone, finds the WorkItem and knows which job's outputs to list (a record without `job` is a probe's). An in-memory cache saves the read while the process lives.
-- Activities: `<nickname>.Flo2RvtProbe+prod` and `<nickname>.Flo2RvtEdit+prod`, where the nickname is what `GET /forgeapps/me` answers: the app's nickname, or its client id when it has none. Both run the one AppBundle, `<nickname>.Flo2RvtProbe+prod`.
+- Activities: `<nickname>.Flo2RvtProbe+prod` and `<nickname>.Flo2RvtEdit+prod`, where the nickname is what `GET /forgeapps/me` answers: the app's nickname, or its client id when it has none. Both run the one AppBundle, `<nickname>.Flo2RvtProbe+prod`. Each description ends with `(flo2-rvt add-in <version>)`.
 
 ### Token scopes the gateway requests
 
@@ -111,7 +129,7 @@ bucket:create bucket:read data:create data:write data:read code:all
 | `bucket:read` | `GET /oss/v2/buckets/{key}/details` (a 409 on create is checked to be this app's bucket) |
 | `data:create`, `data:write` | `GET`/`POST …/signeds3upload` (the input and the job record); Design Automation writing the outputs to their object URNs |
 | `data:read` | `GET …/signeds3download` (the outputs and the job record); Design Automation reading the input's URN |
-| `code:all` | `GET /da/us-east/v3/forgeapps/me`, `POST /workitems`, `GET /workitems/{id}` |
+| `code:all` | `GET /da/us-east/v3/forgeapps/me`, `GET /activities/{id}` and `/appbundles/{id}` (the check), `POST /workitems`, `GET /workitems/{id}`; and a setup's calls (`PATCH /forgeapps/me`, `GET /appbundles` and `/activities`, `POST` AppBundles, Activities, their versions and aliases, `PATCH` aliases, `PUT` and `GET /servicelimits/me`) |
 
 ## The change list
 
@@ -208,9 +226,15 @@ npm ci --omit=dev
 FLO2_RVT_LOCAL_TOKEN=… FLO2_RVT_PORT=8740 node server/src/index.ts
 ```
 
+`FLO2_RVT_BUNDLE` names the AppBundle zip a setup uploads (default `addin/dist/Flo2RvtProbe.bundle.zip` in the checkout), with its sha256 in `<zip>.sha256` beside it, as `sha256sum` writes it. On flo2.io, flo2.io's install (`ops/flo2-rvt-install` in the flo2 repository) puts there the zip this commit's CI built (the `Flo2RvtProbe.bundle` artifact of the CI run on the pinned commit), checked against the sha256 flo2.io pins for that commit; nothing on flo2.io builds the add-in. The server reads and hashes the zip again at every setup. Without it, jobs run as before and a setup is refused, saying why; the start log says which (`bundle_ready` or `bundle_absent`).
+
 Node 22.18 or later runs the TypeScript directly. On flo2.io it runs as its own service under its own unprivileged user, with network reach and no access to design files on disk. It logs one JSON line per event to stderr, never a token, a signed URL or a file's contents.
 
-## The owner's one-time setup
+## Setting up a person's Autodesk app
+
+A person creates their own Autodesk app once (step 1 below) and enters its keys on flo2.io (flo2.io/account, Cloud Revit). **Nothing is run on their computer.** The first time a job is asked for on an app that is not set up, flo2.io says so and offers flo2-rvt's one-time setup; the person approves it on flo2.io the way they approve a job, told what it does, and it is recorded in their design like a job. flo2.io's gateway then calls `rvt_setup_run` with a token from the keys it already holds for that person's jobs, and flo2-rvt's server runs the registration below (`server/src/aps/registration.ts`, the same code as the command line) with the AppBundle it holds. It runs again, the same way, when a new flo2-rvt brings a new add-in version.
+
+The command line (`npx flo2-rvt register`, step 3) stays, for an owner who runs flo2-rvt with their own keys rather than through flo2.io, and for developers.
 
 1. **Create the Autodesk app** (Autodesk's [Create an App](https://aps.autodesk.com/en/docs/oauth/v2/tutorials/create-app/) walkthrough):
    1. Sign in at [aps.autodesk.com](https://aps.autodesk.com) (create an account if needed).
@@ -218,7 +242,7 @@ Node 22.18 or later runs the TypeScript directly. On flo2.io it runs as its own 
    3. Profile menu > **My applications** > choose the hub > **Create application**. Name it, choose the **Server-to-Server App** type (client credentials, two-legged tokens), and under **API Access** select the **Automation API** and the **Data Management API** (for its storage). Save.
    4. Copy the Client ID and Client Secret into your environment as `APS_CLIENT_ID` and `APS_CLIENT_SECRET`, and into flo2.io's encrypted store as flo2.io asks. Never put them in a file in this repository.
 2. **Get the AppBundle**: download `Flo2RvtProbe.bundle` from the CI run's artifacts, or build it: `dotnet build addin -c Release` writes `addin/dist/Flo2RvtProbe.bundle.zip`.
-3. **Register** (on your own machine, once, and again for a new add-in version):
+3. **Register** (flo2.io does this from its server once the person approves it; by hand, on your own machine, once, and again for a new add-in version):
 
    ```sh
    npm ci
@@ -233,7 +257,7 @@ Node 22.18 or later runs the TypeScript directly. On flo2.io it runs as its own 
    3. The `Flo2RvtProbe` and `Flo2RvtEdit` Activities on the `Autodesk.Revit+2024` engine, named `<owner>.Flo2RvtProbe+prod` and `<owner>.Flo2RvtEdit+prod`, each with its `prod` alias. The edit Activity takes the model (`rvtFile`, `input.rvt`) and the change list (`changes`, `changes.json`, required), and puts `report.json` (required), `model.rvt`, `sheets.pdf` and `model.ifc` (each optional).
    4. Autodesk's own monthly processing cap on the app (`frontendLimits.limitMonthlyProcessingTimeInHours`, `APS_MONTHLY_HOURS`, default 2), read back.
 
-   It prints the owner prefix and how it was settled, each version and alias, and the cap Autodesk reports. flo2-rvt's server reads the same prefix from `GET /forgeapps/me` for every job.
+   It prints the owner prefix and how it was settled, each version and alias, and the cap Autodesk reports. flo2-rvt's server reads the same prefix from `GET /forgeapps/me` for every job. It sends GET, POST, PATCH and PUT, never DELETE. From flo2.io, the cap is the person's own flo2.io monthly limit in whole hours, rounded up, and the nickname is the default one.
 4. **Check the engines** whenever the monthly check asks: `npx flo2-rvt engines` lists Design Automation's Revit engines beside the dates Autodesk's Engine Lifecycle Policy page gives. The Revit 2024 engine takes no new AppBundles or Activities after **2027-03-29** and is removed on 2029-03-29.
 
 ## Development

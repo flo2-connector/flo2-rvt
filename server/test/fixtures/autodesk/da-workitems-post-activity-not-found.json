@@ -1,0 +1,5 @@
+{
+  "_source": "Autodesk's answer to flo2-rvt's own edit WorkItem (POST workitems) on 2026-11-01, on an Autodesk app flo2-rvt had never been registered on: HTTP 400 and this text, as flo2-rvt's reply relayed it. The owner part of the activity id (that app's client id, since no nickname was set) is replaced by the tests' made-up client id. The body's exact JSON form was not kept; Design Automation answers its other refusals as a bare JSON string (da-alias-patch-missing.json), so it is stored that way, and flo2-rvt reads the text either way (server/src/aps/http.ts reasonFrom).",
+  "status": 400,
+  "body": "The activity MadeUpClientId0123456789abcdefAB.Flo2RvtEdit+prod could not be found (Parameter 'activityId')"
+}

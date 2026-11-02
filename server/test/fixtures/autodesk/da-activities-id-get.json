@@ -1,0 +1,19 @@
+{
+  "_source": "The example response of the Automation API reference, activities-id-GET (developer.doc.autodesk.com/bPlouYTd/design-automation-forge-doc-master-792222/design-automation/v3/reference/http/design-automation/activities-id-GET.html), read 2026-11-01: an Activity's body as it was given, with its fully qualified id (owner.name+alias), its description and its version. The stand-in answers with the body flo2-rvt's own registration sent, in this form.",
+  "status": 200,
+  "body": {
+    "commandLine": ["$(engine.path)\\InventorCoreConsole.exe /i \"$(args[InventorDoc].path)\" /al \"$(appbundles[ChangeParams].path)\" \"$(args[InventorParams].path)\""],
+    "parameters": {
+      "InventorDoc": { "verb": "get" },
+      "InventorParams": { "localName": "params.json", "verb": "get" },
+      "OutputIpt": { "localName": "Result.ipt", "verb": "post" },
+      "OutputIam": { "localName": "Result.zip", "verb": "post" },
+      "OutputBmp": { "localName": "Result.bmp", "verb": "post" }
+    },
+    "id": "owner.SampleActivity+test",
+    "engine": "Autodesk.Inventor+23",
+    "appbundles": ["owner.ChangeParams+prod"],
+    "description": "Human readable description of the object.",
+    "version": 1
+  }
+}

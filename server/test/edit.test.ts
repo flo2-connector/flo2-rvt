@@ -51,7 +51,7 @@ describe('rvt_edit_start', () => {
   test('is listed with the change list in its input schema, paid and not read-only', async () => {
     const r = await rpc(h.url, { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} });
     const tools = (r.json as Rpc).result?.tools ?? [];
-    assert.deepEqual(tools.map((t) => t.name).sort(), ['rvt_edit_start', 'rvt_job_status', 'rvt_probe_start']);
+    assert.deepEqual(tools.map((t) => t.name).sort(), ['rvt_edit_start', 'rvt_job_status', 'rvt_probe_start', 'rvt_setup_check', 'rvt_setup_run']);
     const edit = tools.find((t) => t.name === 'rvt_edit_start') as { inputSchema: { properties: Record<string, Record<string, unknown>>; required: string[] }; annotations: Record<string, unknown>; description: string };
     assert.deepEqual([...edit.inputSchema.required].sort(), ['change_list', 'file']);
     assert.ok(JSON.stringify(edit.inputSchema.properties.change_list).includes('delete_elements_on_level'), 'the vocabulary is in the schema the agent sees');
