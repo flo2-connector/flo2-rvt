@@ -229,7 +229,8 @@ export class MockAps {
 
     // Design Automation
     if (path === '/da/us-east/v3/forgeapps/me' && req.method === 'PATCH') {
-      if (this.opts.nicknameTaken) return this.send(res, 409, '"Conflict (in use by someone else)."');
+      // A JSON string, as Design Automation answers (send() encodes it).
+      if (this.opts.nicknameTaken) return this.send(res, 409, 'Conflict (in use by someone else).');
       const r = recorded('da-forgeapps-patch');
       this.nicknameSet = (call.json as { nickname: string }).nickname;
       res.writeHead(r.status);

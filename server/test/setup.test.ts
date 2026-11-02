@@ -316,8 +316,8 @@ describe('rvt_setup_run', () => {
         for (const a of h.aps.calls.filter((c) => c.method === 'POST' && c.path === '/da/us-east/v3/activities')) {
           assert.deepEqual((a.json as { appbundles: string[] }).appbundles, [`${CLIENT_ID}.Flo2RvtProbe+prod`], 'each Activity names the AppBundle by the client id');
         }
-        assert.ok(!JSON.stringify(h.aps.calls.map((c) => c.json ?? null)).toLowerCase().includes(DERIVED_BEFORE), 'nothing derived from the client id is sent');
-        assert.ok(!JSON.stringify(out).toLowerCase().includes(`flo2rvt_${DERIVED_BEFORE}`), 'nor answered');
+        assert.ok(!JSON.stringify(h.aps.calls.map((c) => c.json ?? null)).includes(`flo2rvt_${DERIVED_BEFORE}`), 'no nickname derived from the client id is sent');
+        assert.ok(!JSON.stringify(out).includes(`flo2rvt_${DERIVED_BEFORE}`), 'nor answered');
         assert.equal(h.aps.appBundleUploads.length, 1);
         assert.ok((h.aps.appBundleUploads[0]?.fileBytes ?? 0) >= BUNDLE_BYTES.length, 'the bundle went up');
         assert.deepEqual(h.aps.calls.find((c) => c.method === 'PUT' && c.path.endsWith('/servicelimits/me'))?.json, { frontendLimits: { limitMonthlyProcessingTimeInHours: 3 } });

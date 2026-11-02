@@ -3,8 +3,9 @@
 //
 //   GET   /da/us-east/v3/forgeapps/me                    the nickname, or the client id when none is set
 //   GET   /da/us-east/v3/appbundles, /activities         paged; does the app own anything yet?
-//   PATCH /da/us-east/v3/forgeapps/me                    set the nickname, FIRST, on an app with no data
-//                                                        (409: taken by another app; nicknames are global)
+//   PATCH /da/us-east/v3/forgeapps/me                    set the nickname, FIRST, on an app with no data, and
+//                                                        ONLY when a person names one (the command line's
+//                                                        APS_NICKNAME); a setup from flo2.io never sends it
 //   POST  /da/us-east/v3/appbundles                      register the AppBundle (409 when it exists)
 //   POST  /da/us-east/v3/appbundles/{id}/versions        a new version of it
 //   POST  <uploadParameters.endpointURL>                 the zip, as a form: every formData field, then `file` last
@@ -24,6 +25,15 @@
 // way is DELETE /forgeapps/me, which deletes everything, and this code never calls it (the
 // Revit walkthrough, Task 3, Create a Nickname; reference forgeapps-id-PATCH). It sends GET,
 // POST, PATCH and PUT, and never DELETE.
+//
+// ⭐ NO NICKNAME IS EVER DERIVED (since 0.5.1; 6ab9996ca4bdbc45:fact:root-cause-a-persons-first-
+// setup-stopped-on-autodesks-409-to-the-nickname-and-its-words-were-dropped-2026-11-01). A
+// nickname must be unique across all of Autodesk, and PATCH forgeapps/me answers 409 both when
+// another app holds it and when this app already holds data, so a derived one can fail for
+// reasons no retry changes (0.5.0's, flo2rvt_ and the start of the client id, stopped a person's
+// first setup, and put part of their client id on their screen). A nickname the app has is
+// kept; otherwise the client id names the AppBundle and Activities (`<client id>.Flo2RvtProbe+prod`),
+// which Autodesk always accepts. Only a nickname a person names (APS_NICKNAME) is ever sent.
 //
 // Two runners, one code (since 0.5.0): flo2-rvt's server, on a person's app from flo2.io once
 // they approve the setup there (server/src/setup.ts), and the owner's command line
@@ -176,11 +186,6 @@ export async function uploadAppBundle(ctx: ApsContext, params: NonNullable<Versi
 /** A nickname Autodesk will take: letters, digits and underscores, never the client id. */
 export const NICKNAME_RULE = /^[A-Za-z0-9_]{3,64}$/;
 
-/** The default nickname for an app: `flo2rvt_` and the first 12 letters and digits of its client id, lowercased. */
-export function defaultNickname(clientId: string): string {
-  return `flo2rvt_${clientId.replace(/[^A-Za-z0-9]/g, '').slice(0, 12).toLowerCase()}`;
-}
-
 /** The app's own AppBundle or Activity ids (`<owner>.<id>+<alias>`), from the paged public list. */
 export async function ownedIds(ctx: ApsContext, kind: 'appbundles' | 'activities', owner: string): Promise<string[]> {
   const owned: string[] = [];
@@ -204,10 +209,15 @@ export async function holdsData(ctx: ApsContext, owner: string): Promise<boolean
   return (await ownedIds(ctx, 'appbundles', owner)).length > 0 || (await ownedIds(ctx, 'activities', owner)).length > 0;
 }
 
+/** A nickname a person named that cannot be set: by its form, or by Autodesk (its status and words). */
 export class NicknameError extends Error {
-  constructor(message: string) {
+  readonly status: number | undefined;
+  readonly reason: string | undefined;
+  constructor(message: string, refused?: ApsError) {
     super(message);
     this.name = 'NicknameError';
+    this.status = refused?.status;
+    this.reason = refused?.reason;
   }
 }
 
@@ -219,9 +229,10 @@ export interface Owner {
 }
 
 /**
- * Settle the owner prefix before anything is created. A nickname already set is
- * kept. An app with no nickname and no data gets one (APS_NICKNAME, or the
- * default); an app with data and no nickname carries on under its client id.
+ * Settle the owner prefix before anything is created. A nickname already set is kept. An app
+ * with none is named by its client id, which Autodesk always accepts, unless a person named a
+ * nickname (`wanted`, the command line's APS_NICKNAME): then it is set, on an app with no data,
+ * and a refusal carries Autodesk's status and words. Nothing derives a nickname.
  */
 export async function ensureNickname(ctx: ApsContext, clientId: string, wanted?: string): Promise<Owner> {
   const current = await getNickname(ctx);
@@ -232,6 +243,7 @@ export async function ensureNickname(ctx: ApsContext, clientId: string, wanted?:
     }
     return out;
   }
+  if (!wanted) return { owner: clientId, how: 'client_id' };
   if (await holdsData(ctx, clientId)) {
     return {
       owner: clientId,
@@ -239,22 +251,27 @@ export async function ensureNickname(ctx: ApsContext, clientId: string, wanted?:
       note: 'The app already has AppBundles or Activities and no nickname. A nickname can be set only on an app with no data, and the only way back is DELETE /forgeapps/me, which deletes everything; this command never calls it. Carrying on with the client id as the owner.',
     };
   }
-  const nickname = wanted ?? defaultNickname(clientId);
-  if (!NICKNAME_RULE.test(nickname) || nickname === clientId) {
-    throw new NicknameError(`"${nickname}" cannot be a nickname: use 3 to 64 letters, digits or underscores, and not the client id. Set APS_NICKNAME and run register again; nothing was created.`);
+  if (!NICKNAME_RULE.test(wanted) || wanted === clientId) {
+    throw new NicknameError(`"${wanted}" cannot be a nickname: use 3 to 64 letters, digits or underscores, and not the client id. Set APS_NICKNAME to another, or leave it unset to use the client id, and run register again; nothing was created.`);
   }
-  const res = await apsFetch(ctx, {
-    operation: 'DA forgeapps/me PATCH',
-    method: 'PATCH',
-    path: `${DA_PATH}/forgeapps/me`,
-    json: { nickname },
-    accept: [200, 409],
-  });
-  await res.body?.cancel();
-  if (res.status === 409) {
-    throw new NicknameError(`The nickname "${nickname}" is taken by another Autodesk app (nicknames are global). Choose another with APS_NICKNAME and run register again; nothing was created.`);
+  try {
+    const res = await apsFetch(ctx, {
+      operation: 'DA forgeapps/me PATCH',
+      method: 'PATCH',
+      path: `${DA_PATH}/forgeapps/me`,
+      json: { nickname: wanted },
+    });
+    await res.body?.cancel();
+  } catch (err) {
+    if (!(err instanceof ApsError)) throw err;
+    // Autodesk documents two refusals here (another app holds the name; this app already holds
+    // data) and its status alone does not say which, so its own words go to the person.
+    throw new NicknameError(
+      `Autodesk did not take the nickname "${wanted}": ${err.message.replace(/\.$/, '')}. Autodesk refuses a nickname another Autodesk app holds (nicknames are unique across all of Autodesk) and any nickname on an app that already holds AppBundles or Activities. Choose another with APS_NICKNAME, or leave APS_NICKNAME unset to name everything by the client id, and run register again; nothing was created.`,
+      err,
+    );
   }
-  return { owner: nickname, how: 'set' };
+  return { owner: wanted, how: 'set' };
 }
 
 export interface RegistrationResult {
@@ -266,6 +283,10 @@ export interface RegistrationResult {
   monthlyHours: { requested: number; reported: number | undefined };
 }
 
+/**
+ * The registration, in order. `wantedNickname` is a nickname a person named (the command
+ * line's APS_NICKNAME); without one an app with no nickname is named by its client id.
+ */
 export async function register(ctx: ApsContext, zip: BundleBytes, monthlyHours: number, clientId: string, wantedNickname?: string): Promise<RegistrationResult> {
   // First, before anything exists on the app: the owner prefix every id carries.
   const settled = await ensureNickname(ctx, clientId, wantedNickname);

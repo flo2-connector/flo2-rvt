@@ -177,7 +177,7 @@ export type JobStatusResult = z.infer<typeof JobStatusResult>;
 /** The gateway's arguments to rvt_setup_check: which job's Activity to read (default both), and whether to say what a setup would do. */
 export const SetupCheckArgs = z.object({
   job: z.enum(['probe', 'edit', 'all']).default('all').describe("Which job's Activity to read: probe, edit, or all (both)."),
-  plan: z.boolean().default(false).describe('Also say what a setup would do on this app (its nickname step reads the app\'s lists when it has no nickname).'),
+  plan: z.boolean().default(false).describe('Also say what a setup would do on this app (it keeps a nickname the app has, and sets none).'),
 });
 
 const Found = z.object({
@@ -208,7 +208,12 @@ export const SetupCheckResult = z.object({
     addin_version: z.string(),
     bundle_sha256: z.string().optional(),
     bundle_bytes: z.number().int().optional(),
-    /** With `plan`: the nickname step. `will_set` on an app with no nickname and no data; `keeps_client_id` on one with data. */
+    /**
+     * With `plan`: the nickname step. `now`, the nickname the app has, which a setup keeps. A setup
+     * never sets one (since 0.5.1), so `will_set` is always null, and `keeps_client_id` is true
+     * whenever the app has no nickname: its client id names the AppBundle and Activities, which
+     * Autodesk always accepts. The shape is v3's, so a gateway that reads `will_set` still works.
+     */
     nickname: z.object({ now: z.string().nullable(), will_set: z.string().nullable(), keeps_client_id: z.boolean() }).optional(),
     deletes_nothing: z.literal(true),
   }),

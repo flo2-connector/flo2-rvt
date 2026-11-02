@@ -22,3 +22,33 @@ export class NotSetUp extends Refusal {
     this.autodeskSaid = autodeskSaid;
   }
 }
+
+/** A client id as flo2-rvt shows it in a refusal or a log: `…` and its last four characters. */
+export function clientIdShown(clientId: string): string {
+  return `…${clientId.slice(-4)}`;
+}
+
+/** Text with every occurrence of the client id (in any case) written by its last four characters. */
+export function withoutClientId(text: string, clientId: string): string {
+  if (!clientId) return text;
+  return text.replace(new RegExp(clientId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), clientIdShown(clientId));
+}
+
+/**
+ * Autodesk refused a step of a person's setup. The message says which step, in plain words and
+ * by its call, with Autodesk's status and words beside them; the fields carry the same for the
+ * log. The client id is written by its last four characters in both.
+ */
+export class SetupStopped extends Refusal {
+  readonly operation: string;
+  readonly status: number;
+  /** Autodesk's own words, when it gave any (no URL in them, the client id by its last four). */
+  readonly autodeskSaid: string | undefined;
+  constructor(message: string, operation: string, status: number, autodeskSaid?: string) {
+    super(message);
+    this.name = 'SetupStopped';
+    this.operation = operation;
+    this.status = status;
+    this.autodeskSaid = autodeskSaid;
+  }
+}

@@ -39,7 +39,7 @@ import {
   type SetupRunResult,
   type UsageMeta,
 } from './contract.ts';
-import { NotSetUp, Refusal } from './refusal.ts';
+import { NotSetUp, Refusal, SetupStopped, withoutClientId } from './refusal.ts';
 import { checkSetup, isActivityNotFound, notSetUpAtAutodesk, notSetUpBeforeUpload, readBundle, runSetup, type BundleSource } from './setup.ts';
 import {
   CHANGES_NAME,
@@ -349,7 +349,21 @@ export class JobService {
   async setupRun(ctx: JobContext, signal?: AbortSignal): Promise<SetupRunResult> {
     const bundle = readBundle(this.opts.bundle);
     this.logger.info('setup_start', { approved: ctx.setup !== undefined, bundle: bundle.available ? bundle.sha256.slice(0, 12) : 'none' });
-    const result = await runSetup(this.aps(ctx, signal), ctx, bundle, this.now());
+    let result: SetupRunResult;
+    try {
+      result = await runSetup(this.aps(ctx, signal), ctx, bundle, this.now());
+    } catch (err) {
+      // Every setup that does not finish says why in the log: Autodesk's step, status and words
+      // when Autodesk refused one (the client id by its last four characters), else the refusal.
+      if (err instanceof SetupStopped) {
+        this.logger.warn('setup_failed', { operation: err.operation, status: err.status, autodesk_said: err.autodeskSaid });
+      } else if (err instanceof Refusal) {
+        this.logger.warn('setup_failed', { refused: withoutClientId(err.message, ctx.aps.client_id) });
+      } else {
+        this.logger.error('setup_failed', { error: err instanceof Error ? err.name : 'unknown' });
+      }
+      throw err;
+    }
     this.rememberNickname(ctx.aps.client_id, result.owner);
     this.logger.info('setup_done', {
       owner_how: result.owner_how,

@@ -27,18 +27,25 @@
 // runs) with the AppBundle this server holds: CI's build for this server's commit, put beside it
 // by flo2.io's install with its sha256 checked (ops/flo2-rvt-install in the flo2 repo). Its bytes
 // are read and hashed at each use and must match the sha256 beside them and the sha256 the person
-// approved; then the nickname (on an app with no nickname and no data), the AppBundle and its
-// prod alias, both Activities and their prod aliases, and Autodesk's monthly cap. GET, POST,
-// PATCH and PUT only: never DELETE.
+// approved; then the AppBundle and its prod alias, both Activities and their prod aliases, and
+// Autodesk's monthly cap. GET, POST, PATCH and PUT only: never DELETE.
+//
+// ⭐ IT NEVER SETS A NICKNAME (since 0.5.1; 6ab9996ca4bdbc45:fact:root-cause-a-persons-first-setup-
+// stopped-on-autodesks-409-to-the-nickname-and-its-words-were-dropped-2026-11-01). One the app has
+// is kept; an app with none is named by its client id (`<client id>.Flo2RvtProbe+prod`), which
+// Autodesk always accepts. No PATCH forgeapps/me is sent from the server. A step Autodesk refuses
+// stops the setup with which step it was, Autodesk's status and words beside flo2-rvt's, and that
+// nothing was deleted and it can run again (setupStopped); jobs.ts logs it as setup_failed. The
+// client id is written by its last four characters in both.
 
 import { createHash } from 'node:crypto';
 import { readFileSync, statSync } from 'node:fs';
 import { ApsError, apsJson, type ApsContext } from './aps/http.ts';
 import { DA_PATH, getNickname } from './aps/da.ts';
-import { activities, defaultNickname, holdsData, NicknameError, register } from './aps/registration.ts';
+import { activities, register } from './aps/registration.ts';
 import { expiresAtMs, type JobContext, type SetupCheckResult, type SetupRunResult } from './contract.ts';
 import { ADDIN_VERSION, ENGINE, JOBS, activityIdFor, appBundleIdFor, markedAddinVersion, type JobKind } from './names.ts';
-import { NotSetUp, Refusal } from './refusal.ts';
+import { NotSetUp, Refusal, SetupStopped, withoutClientId } from './refusal.ts';
 
 /** Where the server's AppBundle is, and its sha256 (default: the zip's path and `.sha256`). */
 export interface BundleSource {
@@ -165,12 +172,49 @@ export async function checkSetup(ctx: ApsContext, clientId: string, job: JobKind
   if (state === 'not_set_up') result.why = `flo2-rvt is not set up on this Autodesk app yet: ${missing.map((f) => f.why).join('; ')}.`;
   if (state === 'outdated') result.why = `flo2-rvt is set up on this Autodesk app for an earlier flo2-rvt: ${outdated.map((f) => f.why).join('; ')}. The one-time setup brings it up to date.`;
   if (opts.plan) {
-    // The nickname step, as register's ensureNickname will take it: kept when set; set on an
-    // app with no data; the client id kept as the owner on an app with data and no nickname.
-    const data = nicknameSet ? false : await holdsData(ctx, clientId);
-    result.setup.nickname = { now: nicknameSet ? owner : null, will_set: nicknameSet || data ? null : defaultNickname(clientId), keeps_client_id: !nicknameSet && data };
+    // The nickname step, as register's ensureNickname takes it from the server: a nickname the
+    // app has is kept, and none is ever set, so an app with none keeps its client id as the owner.
+    result.setup.nickname = { now: nicknameSet ? owner : null, will_set: null, keeps_client_id: !nicknameSet };
   }
   return result;
+}
+
+/** Each Design Automation call a setup makes, in plain words. */
+const SETUP_STEPS: Readonly<Record<string, string>> = {
+  'DA forgeapps/me': "reading the app's nickname",
+  'DA appbundles POST': "registering flo2-rvt's add-in (the AppBundle)",
+  'DA appbundles/{id}/versions POST': "adding a new version of flo2-rvt's add-in (the AppBundle)",
+  'AppBundle upload to S3': "uploading flo2-rvt's add-in to the storage Autodesk handed over",
+  'DA appbundles/{id}/aliases/{alias} PATCH': "pointing the add-in's prod alias at its new version",
+  'DA appbundles/{id}/aliases POST': "creating the add-in's prod alias",
+  'DA activities POST': "registering one of flo2-rvt's job definitions (an Activity)",
+  'DA activities/{id}/versions POST': "adding a new version of one of flo2-rvt's job definitions (an Activity)",
+  'DA activities/{id}/aliases/{alias} PATCH': "pointing a job definition's prod alias at its new version",
+  'DA activities/{id}/aliases POST': "creating a job definition's prod alias",
+  'DA servicelimits PUT': "setting Autodesk's monthly processing cap on the app",
+  'DA servicelimits GET': "reading Autodesk's monthly processing cap back",
+  'DA appbundles/{id} GET': 'reading the add-in back, to check the setup',
+  'DA activities/{id} GET': 'reading the job definitions back, to check the setup',
+};
+
+/**
+ * Autodesk refused a step of the setup: which step, in plain words and by its call, Autodesk's
+ * status and words beside them, and what that leaves. The client id by its last four characters.
+ */
+export function setupStopped(err: ApsError, clientId: string): SetupStopped {
+  const step = SETUP_STEPS[err.operation] ?? 'a Design Automation call';
+  const said = err.reason ? withoutClientId(err.reason, clientId) : undefined;
+  const answer =
+    err.status === 0
+      ? `Autodesk could not be reached${said ? ` (${said})` : ''}`
+      : `Autodesk answered HTTP ${err.status}${said ? `: "${said}"` : ', and gave no reason'}`;
+  const end = /[.!?]"?$/.test(answer) ? '' : '.';
+  return new SetupStopped(
+    `flo2-rvt's setup on this Autodesk app stopped at one step, ${step}, at the call ${err.operation}. ${answer}${end} What the setup did before that step stays on the app, and nothing on it was deleted: the setup never deletes anything. No Revit job ran and nothing was billed. The setup can be run again from flo2.io: it adds new versions of what is there and moves their prod aliases.`,
+    err.operation,
+    err.status,
+    said,
+  );
 }
 
 /** rvt_setup_run: the approved setup, with this server's AppBundle; then the check, read back. */
@@ -184,15 +228,15 @@ export async function runSetup(ctx: ApsContext, job: JobContext, bundle: BundleS
   const expires = expiresAtMs(job.aps.expires_at);
   if (Number.isNaN(expires) || (expires - now) / 1000 < SETUP_TOKEN_MIN_SEC) throw new Refusal(`The Autodesk token flo2.io handed over expires within ${SETUP_TOKEN_MIN_SEC} s; ask flo2.io to run the setup again with a fresh one. Nothing was done.`);
   let r;
+  let check;
   try {
+    // No nickname is named: one the app has is kept, and an app with none keeps its client id.
     r = await register(ctx, bundle.bytes, approved.monthly_hours, job.aps.client_id);
+    check = await checkSetup(ctx, job.aps.client_id, 'all', { plan: false, bundle });
   } catch (err) {
-    if (err instanceof NicknameError) {
-      throw new Refusal('The setup stopped before anything was created on the app: Autodesk would not take the nickname flo2-rvt chose for it (another Autodesk app may hold it; nicknames are global). Nothing was created.');
-    }
+    if (err instanceof ApsError) throw setupStopped(err, job.aps.client_id);
     throw err;
   }
-  const check = await checkSetup(ctx, job.aps.client_id, 'all', { plan: false, bundle });
   return {
     state: 'set_up',
     owner: r.nickname,

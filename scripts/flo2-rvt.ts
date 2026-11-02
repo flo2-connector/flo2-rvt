@@ -5,9 +5,11 @@
 // or a token.
 //
 //   flo2-rvt register [--bundle addin/dist/Flo2RvtProbe.bundle.zip]
-//       First settle the app's nickname: on an app with no data, set it
-//       (APS_NICKNAME, default flo2rvt_ and the start of the client id); keep one
-//       already set; on an app with data and no nickname, use the client id.
+//       First settle the app's owner prefix: keep a nickname already set; on an
+//       app with none, use the client id, which Autodesk always accepts. Only
+//       when you name a nickname with APS_NICKNAME is one set (on an app with no
+//       data; one Autodesk refuses stops the run with Autodesk's status and
+//       words, before anything is created). No nickname is ever derived.
 //       Then upload the AppBundle (one, for both jobs), create or update the
 //       two Activities (Flo2RvtProbe and Flo2RvtEdit), point every `prod`
 //       alias at the new versions, and set Autodesk's monthly processing cap
@@ -98,7 +100,7 @@ export async function main(argv: string[], io: CliIo): Promise<number> {
     const { ctx, clientId } = await context(io);
     const wanted = io.env.APS_NICKNAME?.trim() || undefined;
     const r = await register(ctx, bundle, hours, clientId, wanted);
-    const how = { existing: 'already set', set: 'set now, before anything was created', client_id: 'none; the client id is the owner' }[r.ownerHow];
+    const how = { existing: 'already set', set: 'set now, before anything was created', client_id: 'none; the client id is the owner, which Autodesk always accepts' }[r.ownerHow];
     io.out(`Owner: ${r.ownerHow === 'client_id' ? 'the client id' : r.nickname} (nickname ${how}).`);
     if (r.ownerNote) io.out(r.ownerNote);
     io.out(`AppBundle ${r.appBundle.id}: ${r.appBundle.created ? 'created' : 'new version'} ${r.appBundle.version}; alias prod ${r.appBundle.alias} to it.`);
