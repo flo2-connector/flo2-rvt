@@ -7,6 +7,15 @@
 //
 // What each change kind does, exactly, is in the README ("What each change kind does") and
 // in Edit/LevelRules.cs and Edit/ElementIndex.cs.
+//
+// ⭐ A LEVEL MOVE (set_level_elevation, and since 0.5.0 move_levels_together, which sets several
+// levels' Elevation in ONE transaction so Revit regenerates and judges only the model with all
+// of them moved: Logic/LevelMoves.cs) is tried first with every model group kept. When Revit
+// rolls it back for groups in the way and the change says groups_in_the_way "ungroup", it is
+// tried again, in a new transaction, with only the group instances Revit named ungrouped first
+// (Group.UngroupMembers), at most GroupsInTheWay.MaxAttempts tries (Logic/GroupsInTheWay.cs).
+// The report gives every try and every message Revit raised, each level before and after, and
+// the groups: moved whole with their levels, ungrouped, or in the way, as the model is after.
 
 using System;
 using System.Collections.Generic;
@@ -71,7 +80,8 @@ namespace Flo2Rvt.Addin.Jobs
                 ChangeReport r = Apply(context, index, change, i);
                 report.Changes.Add(r);
                 report.Totals.Count(r);
-                if (r.Status == ChangeStatus.RolledBack) report.Edit.TransactionsRolledBack++;
+                // A level move tried again (groups_in_the_way "ungroup") rolled back each try before the last.
+                report.Edit.TransactionsRolledBack += r.Attempts != null ? r.Attempts.Count(a => !a.Committed) : (r.Status == ChangeStatus.RolledBack ? 1 : 0);
                 if (r.Committed) report.Edit.TransactionsCommitted++;
                 foreach (string broken in ReportCheck.Violations(r)) probeWarnings.Add("the report check found: " + broken);
                 Console.WriteLine("[flo2-rvt] change " + (i + 1) + ": " + r.Status + (r.Why != null ? " (" + r.Why + ")" : ""));
@@ -159,6 +169,7 @@ namespace Flo2Rvt.Addin.Jobs
                     case ChangeKinds.DeleteElementsOnLevel: DeleteOnLevel(context, index, change, r); break;
                     case ChangeKinds.DeleteElementsByGlobalId: DeleteByGlobalId(context, index, change, r); break;
                     case ChangeKinds.SetLevelElevation: SetElevation(context, index, change, r); break;
+                    case ChangeKinds.MoveLevelsTogether: MoveTogether(context, index, change, r); break;
                     default:
                         r.Status = ChangeStatus.NotApplied;
                         r.Why = "the kind is not in this add-in's vocabulary";
@@ -410,10 +421,147 @@ namespace Flo2Rvt.Addin.Jobs
                 r.Elevation.After = r.Elevation.Before;
                 return;
             }
-            RunResult run = ChangeRunner.Run(doc, context.Data.RevitApp, "set the elevation of level " + level.Name, d => { level.Elevation = target; });
-            Record(doc, r, index, run, new long[0]);
+            var goals = new List<LevelGoal> { new LevelGoal { Level = level, TargetFt = target } };
+            RunResult run = MoveLevels(context, index, r, goals, change.GroupsInTheWay, "set the elevation of level " + level.Name);
             r.Elevation.After = Read(level);
-            if (run.Committed) r.Status = ChangeStatus.Applied;
+            if (!run.Committed) return;
+            MoveOutcome o = LevelMoves.Committed(new[] { new LevelLanding { Name = level.Name, RequestedFt = target, AfterFt = level.Elevation } });
+            r.Status = o.Status;
+            r.Why = o.Why;
+        }
+
+        /// <summary>One level a move sets, and the Level.Elevation it is set to.</summary>
+        private sealed class LevelGoal
+        {
+            public Level Level;
+            public double TargetFt;
+        }
+
+        private static void MoveTogether(JobContext context, ElementIndex index, Change change, ChangeReport r)
+        {
+            Document doc = context.Document;
+            var levels = new List<Level>();
+            var refs = new List<LevelRef>();
+            foreach (LevelReference reference in change.Levels)
+            {
+                var found = new ChangeReport();
+                Level level = FindLevel(doc, index, reference, found);
+                if (level == null)
+                {
+                    r.Status = ChangeStatus.NotApplied;
+                    r.Why = found.Why + "; no level was moved";
+                    return;
+                }
+                levels.Add(level);
+                refs.Add(found.Level);
+            }
+            double feet;
+            string why;
+            if (!Lengths.TryToFeet(change.By.Value, change.By.Unit, out feet, out why))
+            {
+                r.Status = ChangeStatus.NotApplied;
+                r.Why = why;
+                return;
+            }
+            why = LevelMoves.Check(refs, feet);
+            if (why != null)
+            {
+                r.Status = ChangeStatus.NotApplied;
+                r.Why = why;
+                return;
+            }
+            r.Move = new LevelsMove { ByFt = Lengths.Round(feet), ByMm = Lengths.Round(Lengths.ToMm(feet)) };
+            var goals = new List<LevelGoal>();
+            for (int i = 0; i < levels.Count; i++)
+            {
+                double target = levels[i].Elevation + feet;
+                goals.Add(new LevelGoal { Level = levels[i], TargetFt = target });
+                r.Move.Levels.Add(new LevelMoved { Level = refs[i], Before = Read(levels[i]), RequestedElevationFt = Lengths.Round(target) });
+            }
+            // What sits on a moved level moves with it; what only reaches a moved level from a level not moved changes height.
+            var attached = new HashSet<long>(levels.SelectMany(l => LevelRules.OnLevel(doc, l.Id)).Select(e => e.Id.Value));
+            r.Attached = ReportedElements.From(Tally(doc, index, attached));
+            r.TopConstrained = ReportedElements.From(Tally(doc, index, new HashSet<long>(levels.SelectMany(l => LevelRules.TopConstrainedTo(doc, l.Id)).Select(e => e.Id.Value).Where(id => !attached.Contains(id)))));
+            RunResult run = MoveLevels(context, index, r, goals, change.GroupsInTheWay, "move " + levels.Count + " level(s) together by " + r.Move.ByFt.ToString(CultureInfo.InvariantCulture) + " ft");
+            for (int i = 0; i < levels.Count; i++) r.Move.Levels[i].After = Read(levels[i]);
+            if (!run.Committed) return;
+            MoveOutcome o = LevelMoves.Committed(goals.Select(g => new LevelLanding { Name = g.Level.Name, RequestedFt = g.TargetFt, AfterFt = g.Level.Elevation }));
+            r.Status = o.Status;
+            r.Why = o.Why;
+        }
+
+        /// <summary>
+        /// Sets each level's Elevation in one transaction: first with every group kept, then, only
+        /// when Revit rolled it back for groups in the way alone and the change says
+        /// groups_in_the_way "ungroup", again with the group instances Revit named ungrouped first.
+        /// Records the last try (Record), every try when there was more than one, and the groups
+        /// as the model is after it. Returns the last try.
+        /// </summary>
+        private static RunResult MoveLevels(JobContext context, ElementIndex index, ChangeReport r, List<LevelGoal> goals, string option, string name)
+        {
+            Document doc = context.Document;
+            IDictionary<long, double> offsets = LevelMoves.Offsets(goals.ToDictionary(g => g.Level.Id.Value, g => g.TargetFt - g.Level.Elevation));
+            List<GroupFacts> tied = new List<GroupFacts>();
+            try
+            {
+                tied = Groups.TiedTo(doc, index, offsets.Keys);
+            }
+            catch (Exception ex)
+            {
+                r.GroupsUnread = ex.GetType().Name + ": " + ex.Message;
+            }
+            var ungroup = new List<long>();
+            var facts = new Dictionary<long, GroupFacts>();
+            var attempts = new List<MoveAttempt>();
+            var named = new List<long>();
+            RunResult run;
+            for (int attempt = 1; ; attempt++)
+            {
+                List<long> first = ungroup.ToList();
+                foreach (long id in first)
+                {
+                    var g = doc.GetElement(new ElementId(id)) as Group;
+                    if (g != null && !facts.ContainsKey(id)) facts[id] = Groups.Facts(doc, index, g);
+                }
+                if (attempt > 1) context.Heartbeat.Step(name + ", try " + attempt + " with " + first.Count + " group instance(s) ungrouped first");
+                run = ChangeRunner.Run(doc, context.Data.RevitApp, name + (attempt > 1 ? " (try " + attempt + ")" : ""), d =>
+                {
+                    foreach (long id in first)
+                    {
+                        var g = d.GetElement(new ElementId(id)) as Group;
+                        if (g == null) throw new InvalidOperationException("group " + id + " is no longer in the model");
+                        g.UngroupMembers();
+                    }
+                    foreach (LevelGoal goal in goals) goal.Level.Elevation = goal.TargetFt;
+                });
+                attempts.Add(new MoveAttempt { Attempt = attempt, UngroupedFirst = first.Count > 0 ? first : null, Committed = run.Committed, Why = run.RolledBackBecause, RevitMessages = run.Messages.Count > 0 ? run.Messages.ToList() : null });
+                if (run.Committed) break;
+                named = GroupsInTheWay.Named(run.GroupInTheWayIds, id => Groups.GroupOf(doc, id), id => Groups.IsGroup(doc, id));
+                RetryDecision next = GroupsInTheWay.Retry(option, run.Failures, new HashSet<long>(ungroup), named, attempt);
+                if (!next.Retry) break;
+                ungroup = next.Ungroup;
+            }
+            // The group instances a kept change ungrouped are its own deletions, not Revit's.
+            Record(doc, r, index, run, run.Committed ? ungroup : new List<long>());
+            if (attempts.Count > 1) r.Attempts = attempts;
+            // As the model is after the change: an ungrouped group is one that is gone; a kept group is one still there.
+            List<GroupFacts> ungrouped = run.Committed ? ungroup.Where(id => facts.ContainsKey(id) && !Groups.IsGroup(doc, id)).Select(id => facts[id]).ToList() : new List<GroupFacts>();
+            var inTheWay = new List<GroupFacts>();
+            if (!run.Committed)
+            {
+                foreach (long id in named)
+                {
+                    var g = doc.GetElement(new ElementId(id)) as Group;
+                    if (g != null) inTheWay.Add(Groups.Facts(doc, index, g));
+                }
+            }
+            r.Groups = GroupsInTheWay.Collect(option, tied, ungrouped, id => Groups.IsGroup(doc, id), inTheWay, run.Committed, offsets);
+            if (!run.Committed)
+            {
+                int otherErrors = run.Failures.Count(f => f.Error && !f.GroupInTheWay);
+                r.Why = GroupsInTheWay.RolledBackWhy(option, inTheWay.Count, otherErrors, run.RolledBackBecause);
+            }
+            return run;
         }
     }
 }

@@ -11,7 +11,11 @@
 //   · every set's model and other elements add up to its total;
 //   · (since 0.4.0) a part of a kept element is listed once, under an owner that is still in the
 //     model and not deleted, and is itself neither deleted nor among what is left; an
-//     orphaned_part names an owner that is gone; what is not exported is not deleted either.
+//     orphaned_part names an owner that is gone; what is not exported is not deleted either;
+//   · (since 0.5.0) a kept level move reads applied only when every level is where it was asked
+//     to be, and a change not kept moved no level; a group is never both moved with its levels
+//     and ungrouped, is ungrouped only by a kept change that said groups_in_the_way "ungroup",
+//     reads no longer linked once ungrouped, and is in the way only of a change not kept.
 //
 // The lists are read as the report lists them: past ElementTally.Cap a set is truncated, and
 // only its listed elements are checked.
@@ -107,6 +111,7 @@ namespace Flo2Rvt.Addin.Edit.Logic
             Adds(r.DeletedByRevit, "deleted_by_revit", at, found);
             Adds(r.DeletedWithHost, "deleted_with_host", at, found);
             Adds(r.ModifiedByRevit, "modified_by_revit", at, found);
+            LevelMoves(r, at, found);
             bool delete = r.Kind == ChangeKinds.DeleteElementsOnLevel || r.Kind == ChangeKinds.DeleteElementsByGlobalId;
             if (delete && ChangeStatus.Kept(r.Status))
             {
@@ -115,6 +120,48 @@ namespace Flo2Rvt.Addin.Edit.Logic
                 if (r.Status != should) found.Add(at + "reads " + r.Status + " though " + (undone == 0 ? "nothing it named is left undone" : undone + " of what it named is left undone"));
             }
             return found;
+        }
+
+        private static string Ft(double v)
+        {
+            return Lengths.Round(v).ToString("0.######", CultureInfo.InvariantCulture);
+        }
+
+        private static void LevelMoves(ChangeReport r, string at, List<string> found)
+        {
+            bool kept = ChangeStatus.Kept(r.Status);
+            double tol = Logic.LevelMoves.ToleranceFt;
+            if (r.Move != null && r.Move.Levels != null)
+            {
+                foreach (LevelMoved l in r.Move.Levels)
+                {
+                    if (l.Before == null || l.After == null) continue;
+                    string name = l.Level != null ? l.Level.Name : "?";
+                    if (r.Status == ChangeStatus.Applied && System.Math.Abs(l.After.ElevationFt - l.RequestedElevationFt) > tol)
+                        found.Add(at + "reads applied though level \"" + name + "\" is at " + Ft(l.After.ElevationFt) + " ft, not the " + Ft(l.RequestedElevationFt) + " ft asked for");
+                    if (!kept && System.Math.Abs(l.After.ElevationFt - l.Before.ElevationFt) > tol)
+                        found.Add(at + "level \"" + name + "\" reads moved, though the change was not kept");
+                }
+            }
+            if (r.Kind == ChangeKinds.SetLevelElevation && r.Elevation != null && r.Elevation.After != null && r.Status == ChangeStatus.Applied)
+            {
+                double after = r.Elevation.RelativeTo == SetLevelElevationRelativeToValues.ProjectOrigin ? r.Elevation.After.ProjectElevationFt : r.Elevation.After.ElevationFt;
+                if (System.Math.Abs(after - r.Elevation.RequestedFt) > tol) found.Add(at + "reads applied though the level is at " + Ft(after) + " ft, not the " + Ft(r.Elevation.RequestedFt) + " ft asked for");
+            }
+            GroupsReport g = r.Groups;
+            if (g == null) return;
+            var ungrouped = new HashSet<long>((g.Ungrouped ?? new List<GroupRef>()).Select(x => x.ElementId));
+            foreach (GroupRef m in g.MovedWithLevels ?? new List<GroupRef>())
+            {
+                if (ungrouped.Contains(m.ElementId)) found.Add(at + "group " + m.ElementId + " is both moved with its levels and ungrouped");
+            }
+            foreach (GroupRef u in g.Ungrouped ?? new List<GroupRef>())
+            {
+                if (!kept) found.Add(at + "group " + u.ElementId + " is listed as ungrouped, though the change was not kept");
+                if (u.Linked) found.Add(at + "group " + u.ElementId + " is ungrouped but reads linked");
+            }
+            if (ungrouped.Count > 0 && g.GroupsInTheWayOption != GroupsInTheWayValues.Ungroup) found.Add(at + ungrouped.Count + " group(s) are ungrouped, though the change did not say groups_in_the_way \"ungroup\"");
+            if (kept && g.InTheWay != null && g.InTheWay.Count > 0) found.Add(at + "lists groups in the way of a change that was kept");
         }
     }
 }

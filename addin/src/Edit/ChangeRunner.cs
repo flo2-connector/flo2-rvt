@@ -11,6 +11,12 @@
 //
 // What Revit did on its own is read from Application.DocumentChanged for this transaction:
 // the elements it deleted, modified and added while regenerating.
+//
+// Since add-in 0.5.0 each failure is also recorded with whether it is a model group in the way
+// (BuiltInFailures.GroupFailures.AtomViolationWhenMultiPlacedInstances), and every element it
+// names, uncapped: a level move whose change says groups_in_the_way "ungroup" is tried again,
+// in a new transaction of its own, with only the groups those elements are in ungrouped first
+// (Logic/GroupsInTheWay.cs). Nothing is resolved here: an error still rolls the change back.
 
 using System;
 using System.Collections.Generic;
@@ -19,6 +25,7 @@ using System.Linq;
 using Autodesk.Revit.ApplicationServices;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Events;
+using Flo2Rvt.Addin.Edit.Logic;
 
 namespace Flo2Rvt.Addin.Edit
 {
@@ -32,6 +39,10 @@ namespace Flo2Rvt.Addin.Edit
         public readonly HashSet<long> Modified = new HashSet<long>();
         public readonly HashSet<long> Added = new HashSet<long>();
         public double Seconds;
+        /// <summary>Every error Revit raised, and the first MaxMessages warnings, as Logic/GroupsInTheWay.cs judges them.</summary>
+        public readonly List<RevitFailure> Failures = new List<RevitFailure>();
+        /// <summary>Every element a group-in-the-way failure named, failing or additional, uncapped.</summary>
+        public readonly HashSet<long> GroupInTheWayIds = new HashSet<long>();
     }
 
     internal sealed class RecordingPreprocessor : IFailuresPreprocessor
@@ -54,16 +65,20 @@ namespace Flo2Rvt.Addin.Edit
                 FailureSeverity severity = m.GetSeverity();
                 bool warning = severity == FailureSeverity.Warning;
                 string text = m.GetDescriptionText();
+                bool groupInTheWay = m.GetFailureDefinitionId().Guid == BuiltInFailures.GroupFailures.AtomViolationWhenMultiPlacedInstances.Guid;
                 if (!warning)
                 {
                     error = true;
                     if (FirstError == null) FirstError = text;
                 }
+                List<long> named = m.GetFailingElementIds().Concat(m.GetAdditionalElementIds()).Select(id => id.Value).Distinct().ToList();
+                if (groupInTheWay) foreach (long id in named) result.GroupInTheWayIds.Add(id);
                 if (result.Messages.Count < MaxMessages)
                 {
-                    var ids = m.GetFailingElementIds().Concat(m.GetAdditionalElementIds()).Select(id => id.Value).Distinct().Take(MaxIdsPerMessage).ToList();
-                    result.Messages.Add(new RevitMessage { Severity = severity.ToString(), Text = text, Handled = warning ? "dismissed" : "rolled_back", ElementIds = ids });
+                    result.Messages.Add(new RevitMessage { Severity = severity.ToString(), Text = text, Handled = warning ? "dismissed" : "rolled_back", ElementIds = named.Take(MaxIdsPerMessage).ToList(), Kind = groupInTheWay ? RevitMessage.GroupInTheWay : null });
                 }
+                // Every error, uncapped (whether ungrouping could clear them all is judged on all of them); warnings within the cap.
+                if (!warning || result.Failures.Count < MaxMessages) result.Failures.Add(new RevitFailure { Error = !warning, GroupInTheWay = groupInTheWay, Text = text });
                 if (warning) failures.DeleteWarning(m);
             }
             return error ? FailureProcessingResult.ProceedWithRollBack : FailureProcessingResult.Continue;

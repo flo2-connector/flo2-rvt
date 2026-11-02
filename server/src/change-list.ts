@@ -1,7 +1,9 @@
 // The change list an edit job runs, as the server takes it: checked against the ONE schema
 // (schema/change-list.schema.json, read from the file itself through zod's fromJSONSchema,
 // so there is no second copy of it to drift), then against the limits the add-in holds too
-// (addin/src/Edit/Logic: ChangeListCheck.MaxBytes and MaxReferences, Units.ModelExtentFeet).
+// (addin/src/Edit/Logic: ChangeListCheck.MaxBytes and MaxReferences, Units.ModelExtentFeet), and
+// the rules the schema's keywords cannot say: a move by zero is refused, and a list that uses
+// what version 1 added (move_levels_together, groups_in_the_way) says version 1.
 //
 // ⭐ ITS CANONICAL FORM: the JSON with every object's keys sorted, no whitespace. That is the
 // exact byte string flo2-rvt uploads as changes.json, and its SHA-256 is the change list's
@@ -27,6 +29,8 @@ export const MAX_REFERENCES = 20_000;
 /** Revit keeps a model within 20 miles of its internal origin (Units.ModelExtentFeet). */
 export const MODEL_EXTENT_FEET = 105_600;
 const MM_PER_FOOT = 304.8;
+/** The first change-list version that reads move_levels_together and groups_in_the_way. */
+export const MOVE_LEVELS_VERSION = 1;
 
 /** JSON with every object's keys sorted, no whitespace: the bytes uploaded and hashed. */
 export function canonicalJson(value: unknown): string {
@@ -73,8 +77,20 @@ export function checkChangeList(value: unknown): CheckedChangeList {
   list.changes.forEach((c, i) => {
     if (c.kind === 'delete_elements_by_global_id') references += c.elements.length;
     if ((c.kind === 'delete_elements_on_level' || c.kind === 'set_level_elevation') && 'global_id' in c.level) references += 1;
+    if (c.kind === 'move_levels_together') references += c.levels.filter((l) => 'global_id' in l).length;
     if (c.kind === 'set_level_elevation' && Math.abs(feetOf(c.elevation)) >= MODEL_EXTENT_FEET) {
       errors.push(`changes.${i}.elevation: beyond Revit's model extent (20 miles from the internal origin)`);
+    }
+    if (c.kind === 'move_levels_together') {
+      const by = feetOf(c.by);
+      if (by === 0) errors.push(`changes.${i}.by: a move by zero moves nothing`);
+      else if (Math.abs(by) >= MODEL_EXTENT_FEET) errors.push(`changes.${i}.by: beyond Revit's model extent (20 miles from the internal origin)`);
+    }
+    if (list.version < MOVE_LEVELS_VERSION) {
+      if (c.kind === 'move_levels_together') errors.push(`changes.${i}.kind: move_levels_together needs version ${MOVE_LEVELS_VERSION}; say "version": ${MOVE_LEVELS_VERSION}`);
+      if ((c.kind === 'set_level_elevation' || c.kind === 'move_levels_together') && c.groups_in_the_way !== undefined) {
+        errors.push(`changes.${i}.groups_in_the_way needs version ${MOVE_LEVELS_VERSION}; say "version": ${MOVE_LEVELS_VERSION}`);
+      }
     }
   });
   if (references > MAX_REFERENCES) errors.push(`the list names ${references} elements; the most one list may name is ${MAX_REFERENCES}`);

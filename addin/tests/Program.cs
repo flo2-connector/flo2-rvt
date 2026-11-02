@@ -790,7 +790,7 @@ namespace Flo2Rvt.Addin.Tests
                 var buffer = new MemoryStream();
                 report.WriteTo(buffer);
                 string json = Encoding.UTF8.GetString(buffer.ToArray());
-                foreach (string key in new[] { "\"move\"", "\"by_ft\"", "\"levels\"", "\"requested_elevation_ft\"", "\"attempts\"", "\"ungrouped_first\"", "\"groups\"", "\"groups_in_the_way\"", "\"moved_with_levels\"", "\"ungrouped\"", "\"linked\":false", "\"type_name\"", "\"note\"", "\"group_in_the_way\"", "\"groups_ungrouped\"" })
+                foreach (string key in new[] { "\"move\"", "\"by_ft\"", "\"levels\"", "\"requested_elevation_ft\"", "\"attempts\"", "\"ungrouped_first\"", "\"groups\"", "\"groups_in_the_way\"", "\"moved_with_levels\"", "\"ungrouped\"", "\"linked\"", "\"type_name\"", "\"note\"", "\"group_in_the_way\"", "\"groups_ungrouped\"" })
                     Is(json.Contains(key), "report.json names " + key);
                 buffer.Position = 0;
                 EditReport read = EditReport.ReadFrom(buffer);
@@ -798,6 +798,8 @@ namespace Flo2Rvt.Addin.Tests
                 Eq(2, r.Move.Levels.Count, "levels read back");
                 Eq(9.5, r.Move.Levels[1].After.ElevationFt, "after read back");
                 Eq(3L, r.Groups.Ungrouped[0].ElementId, "ungrouped read back");
+                Eq(false, r.Groups.Ungrouped[0].Linked, "ungrouped reads no longer linked");
+                Eq(true, r.Groups.MovedWithLevels[0].Linked, "a group moved whole is still linked");
                 Eq(2, r.Attempts.Count, "attempts read back");
                 Eq(RevitMessage.GroupInTheWay, r.Attempts[0].RevitMessages[0].Kind, "the message's kind read back");
                 Eq(2, read.Version, "the report's version is still 2");

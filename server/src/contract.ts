@@ -105,7 +105,7 @@ export type ProbeStartResult = z.infer<typeof ProbeStartResult>;
 export const EditStartArgs = z.object({
   file: z.string().min(1).max(1024).describe('The design file to edit: its name or id in the design, as flo2 lists it. It is never changed: the result is a new model.'),
   change_list: ChangeListShape.describe(
-    "The changes, in flo2-rvt's fixed vocabulary (schema/change-list.schema.json, version 0): delete_elements_on_level, delete_elements_by_global_id, set_level_elevation. Applied in order, each in its own transaction.",
+    "The changes, in flo2-rvt's fixed vocabulary (schema/change-list.schema.json, version 1; a version 0 list still reads): delete_elements_on_level, delete_elements_by_global_id, set_level_elevation, and move_levels_together (version 1: several levels moved by one offset in one transaction). Applied in order, each in its own transaction. A level move's groups_in_the_way (version 1) is \"refuse\" unless the list says \"ungroup\", which only the person may agree to.",
   ),
   max_minutes: z
     .number()
