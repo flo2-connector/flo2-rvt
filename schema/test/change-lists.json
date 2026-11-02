@@ -220,7 +220,7 @@
       "schema": false,
       "accepted": false,
       "list": {
-        "version": 1,
+        "version": 2,
         "list_id": "sample-1",
         "description": "Made-up changes to a public sample model.",
         "changes": [
@@ -677,6 +677,428 @@
           }
         }
       ]
+    },
+    {
+      "why": "version 1: several levels moved together by one offset",
+      "schema": true,
+      "accepted": true,
+      "list": {
+        "version": 1,
+        "list_id": "sample-2",
+        "changes": [
+          {
+            "kind": "move_levels_together",
+            "id": "c1",
+            "levels": [
+              {
+                "level_name": "Level 1"
+              },
+              {
+                "level_name": "Level 2"
+              },
+              {
+                "level_name": "Roof Line"
+              }
+            ],
+            "by": {
+              "value": -250,
+              "unit": "mm"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "version 1: levels moved together, one by its storey's GlobalId, groups in the way ungrouped on approval",
+      "schema": true,
+      "accepted": true,
+      "list": {
+        "version": 1,
+        "changes": [
+          {
+            "kind": "move_levels_together",
+            "levels": [
+              {
+                "level_name": "Level 2"
+              },
+              {
+                "global_id": "3cUkl32yn9qRSPvBJVyWYp"
+              }
+            ],
+            "by": {
+              "value": 1.5,
+              "unit": "ft"
+            },
+            "groups_in_the_way": "ungroup"
+          }
+        ]
+      }
+    },
+    {
+      "why": "version 1: one level moved together with itself alone",
+      "schema": true,
+      "accepted": true,
+      "list": {
+        "version": 1,
+        "changes": [
+          {
+            "kind": "move_levels_together",
+            "levels": [
+              {
+                "level_name": "Roof Line"
+              }
+            ],
+            "by": {
+              "value": -12,
+              "unit": "in"
+            },
+            "groups_in_the_way": "refuse"
+          }
+        ]
+      }
+    },
+    {
+      "why": "version 1: set_level_elevation that refuses groups in the way, and one that ungroups them",
+      "schema": true,
+      "accepted": true,
+      "list": {
+        "version": 1,
+        "changes": [
+          {
+            "kind": "set_level_elevation",
+            "level": {
+              "level_name": "Roof Line"
+            },
+            "elevation": {
+              "value": 5700,
+              "unit": "mm"
+            },
+            "relative_to": "project_origin",
+            "id": "c1",
+            "groups_in_the_way": "refuse"
+          },
+          {
+            "kind": "set_level_elevation",
+            "level": {
+              "level_name": "Level 2"
+            },
+            "elevation": {
+              "value": 3.5,
+              "unit": "m"
+            },
+            "relative_to": "project_origin",
+            "id": "c2",
+            "groups_in_the_way": "ungroup"
+          }
+        ]
+      }
+    },
+    {
+      "why": "version 1: only version 0's change kinds",
+      "schema": true,
+      "accepted": true,
+      "list": {
+        "version": 1,
+        "changes": [
+          {
+            "kind": "delete_elements_on_level",
+            "level": {
+              "level_name": "Level B1"
+            }
+          },
+          {
+            "kind": "set_level_elevation",
+            "level": {
+              "level_name": "Roof Line"
+            },
+            "elevation": {
+              "value": 5700,
+              "unit": "mm"
+            },
+            "relative_to": "project_origin"
+          }
+        ]
+      }
+    },
+    {
+      "why": "version 0 naming move_levels_together, which needs version 1",
+      "schema": true,
+      "accepted": false,
+      "list": {
+        "version": 0,
+        "changes": [
+          {
+            "kind": "move_levels_together",
+            "levels": [
+              {
+                "level_name": "Level 1"
+              },
+              {
+                "level_name": "Level 2"
+              }
+            ],
+            "by": {
+              "value": -250,
+              "unit": "mm"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "version 0 naming groups_in_the_way, which needs version 1",
+      "schema": true,
+      "accepted": false,
+      "list": {
+        "version": 0,
+        "changes": [
+          {
+            "kind": "set_level_elevation",
+            "level": {
+              "level_name": "Roof Line"
+            },
+            "elevation": {
+              "value": 5700,
+              "unit": "mm"
+            },
+            "relative_to": "project_origin",
+            "groups_in_the_way": "ungroup"
+          }
+        ]
+      }
+    },
+    {
+      "why": "levels moved together by zero",
+      "schema": true,
+      "accepted": false,
+      "list": {
+        "version": 1,
+        "changes": [
+          {
+            "kind": "move_levels_together",
+            "levels": [
+              {
+                "level_name": "Level 1"
+              },
+              {
+                "level_name": "Level 2"
+              }
+            ],
+            "by": {
+              "value": 0,
+              "unit": "mm"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "levels moved together beyond Revit's model extent",
+      "schema": true,
+      "accepted": false,
+      "list": {
+        "version": 1,
+        "changes": [
+          {
+            "kind": "move_levels_together",
+            "levels": [
+              {
+                "level_name": "Level 1"
+              },
+              {
+                "level_name": "Level 2"
+              }
+            ],
+            "by": {
+              "value": 200000,
+              "unit": "ft"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "groups_in_the_way outside its set",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 1,
+        "changes": [
+          {
+            "kind": "move_levels_together",
+            "levels": [
+              {
+                "level_name": "Level 1"
+              },
+              {
+                "level_name": "Level 2"
+              }
+            ],
+            "by": {
+              "value": -250,
+              "unit": "mm"
+            },
+            "groups_in_the_way": "keep"
+          }
+        ]
+      }
+    },
+    {
+      "why": "groups_in_the_way in another case",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 1,
+        "changes": [
+          {
+            "kind": "set_level_elevation",
+            "level": {
+              "level_name": "Roof Line"
+            },
+            "elevation": {
+              "value": 5700,
+              "unit": "mm"
+            },
+            "relative_to": "project_origin",
+            "groups_in_the_way": "Ungroup"
+          }
+        ]
+      }
+    },
+    {
+      "why": "groups_in_the_way that is not text",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 1,
+        "changes": [
+          {
+            "kind": "set_level_elevation",
+            "level": {
+              "level_name": "Roof Line"
+            },
+            "elevation": {
+              "value": 5700,
+              "unit": "mm"
+            },
+            "relative_to": "project_origin",
+            "groups_in_the_way": true
+          }
+        ]
+      }
+    },
+    {
+      "why": "the same level named twice in levels moved together",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 1,
+        "changes": [
+          {
+            "kind": "move_levels_together",
+            "levels": [
+              {
+                "level_name": "Level 1"
+              },
+              {
+                "level_name": "Level 2"
+              },
+              {
+                "level_name": "Level 1"
+              }
+            ],
+            "by": {
+              "value": -250,
+              "unit": "mm"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "levels moved together with no levels",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 1,
+        "changes": [
+          {
+            "kind": "move_levels_together",
+            "levels": [],
+            "by": {
+              "value": -250,
+              "unit": "mm"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "levels moved together with no offset",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 1,
+        "changes": [
+          {
+            "kind": "move_levels_together",
+            "levels": [
+              {
+                "level_name": "Level 1"
+              },
+              {
+                "level_name": "Level 2"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "why": "levels moved together to an elevation rather than by an offset",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 1,
+        "changes": [
+          {
+            "kind": "move_levels_together",
+            "levels": [
+              {
+                "level_name": "Level 1"
+              },
+              {
+                "level_name": "Level 2"
+              }
+            ],
+            "by": {
+              "value": -250,
+              "unit": "mm"
+            },
+            "relative_to": "project_origin"
+          }
+        ]
+      }
+    },
+    {
+      "why": "levels moved together naming one level rather than a list",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 1,
+        "changes": [
+          {
+            "kind": "move_levels_together",
+            "levels": {
+              "level_name": "Level 1"
+            },
+            "by": {
+              "value": -250,
+              "unit": "mm"
+            }
+          }
+        ]
+      }
     }
   ]
 }

@@ -85,5 +85,33 @@ test('the C# types and their schema hash are generated from the schema as it is 
   const cs = readFileSync(new URL('../../addin/Generated/ChangeList.g.cs', import.meta.url), 'utf8');
   assert.equal(cs, csharpFor(schema, sha), 'run npm run gen');
   assert.equal(readFileSync(new URL('../../addin/Generated/change-list.schema.sha256', import.meta.url), 'utf8').trim(), sha);
-  for (const kind of ['delete_elements_on_level', 'delete_elements_by_global_id', 'set_level_elevation']) assert.ok(cs.includes(`"${kind}"`));
+  for (const kind of ['delete_elements_on_level', 'delete_elements_by_global_id', 'set_level_elevation', 'move_levels_together']) assert.ok(cs.includes(`"${kind}"`));
+  assert.ok(cs.includes('public static class GroupsInTheWayValues'), 'groups_in_the_way\'s values, for the add-in');
+  assert.ok(cs.includes('public static readonly long[] VersionValues = { 0, 1 };'), 'the versions this schema reads');
+});
+
+test('version 1 reads every list version 0 did, and a list that uses what version 1 added must say 1', () => {
+  const v0 = { version: 0, changes: [{ kind: 'set_level_elevation', level: { level_name: 'Roof Line' }, elevation: { value: 5700, unit: 'mm' }, relative_to: 'project_origin' }] };
+  assert.ok(checkChangeList(v0).ok, 'a version 0 list still reads');
+  assert.ok(checkChangeList({ ...v0, version: 1 }).ok, 'and as version 1');
+  const moved = { version: 0, changes: [{ kind: 'move_levels_together', levels: [{ level_name: 'Level 1' }, { level_name: 'Level 2' }], by: { value: -250, unit: 'mm' } }] };
+  const refused = checkChangeList(moved);
+  assert.equal(refused.ok, false);
+  assert.match(refused.ok ? '' : refused.errors.join(' '), /changes\.0\.kind: move_levels_together needs version 1/);
+  const ungroup = checkChangeList({ ...v0, changes: [{ ...v0.changes[0], groups_in_the_way: 'ungroup' }] });
+  assert.match(ungroup.ok ? '' : ungroup.errors.join(' '), /changes\.0\.groups_in_the_way needs version 1/);
+  assert.ok(checkChangeList({ ...moved, version: 1 }).ok);
+});
+
+test('levels moved together: by a non-zero offset within the model extent, each level named once', () => {
+  const list = (by: unknown, levels: unknown[] = [{ level_name: 'Level 1' }, { global_id: '3cUkl32yn9qRSPvBJVyWYp' }]) => ({ version: 1, changes: [{ kind: 'move_levels_together', levels, by }] });
+  const zero = checkChangeList(list({ value: 0, unit: 'ft' }));
+  assert.match(zero.ok ? '' : zero.errors.join(' '), /changes\.0\.by: a move by zero moves nothing/);
+  const far = checkChangeList(list({ value: 40_000, unit: 'm' }));
+  assert.match(far.ok ? '' : far.errors.join(' '), /changes\.0\.by: beyond Revit's model extent/);
+  const twice = checkChangeList(list({ value: 1, unit: 'ft' }, [{ level_name: 'Level 1' }, { level_name: 'Level 1' }]));
+  assert.equal(twice.ok, false, 'the schema names each level once');
+  const ok = checkChangeList(list({ value: -250, unit: 'mm' }));
+  assert.ok(ok.ok, ok.ok ? '' : ok.errors.join('; '));
+  assert.equal(ok.ok && ok.references, 1, 'a level by its storey GlobalId counts as one reference');
 });
