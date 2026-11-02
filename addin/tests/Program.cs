@@ -5,7 +5,11 @@
 // (on the first live edit's c3 among others) and the report's invariants, the storey Revit's
 // IFC exporter files an element under, why an element is left on a level, model elements
 // counted apart from the others, and report.json's shape (round-tripped through the add-in's
-// own contract, against the made-up report the server's tests serve).
+// own contract, against the made-up report the server's tests serve). Since add-in 0.5.0, levels
+// moved together: what a move keeps in shape and what it reshapes, which model groups are
+// expected to move whole with their levels and which are in the way, which group instances a
+// failure names for ungrouping, when a rolled-back move is tried again with them ungrouped (only
+// on the list's groups_in_the_way "ungroup"), and the report's move, attempts and groups.
 
 using System;
 using System.Collections.Generic;
@@ -154,6 +158,22 @@ namespace Flo2Rvt.Addin.Tests
                 Is(!ChangeListCheck.Read(new byte[0]).Ok, "empty");
                 Is(!ChangeListCheck.Read(Encoding.UTF8.GetBytes("not json")).Ok, "not JSON");
                 Is(!ChangeListCheck.Read(new byte[ChangeListCheck.MaxBytes + 1]).Ok, "too big");
+            });
+            Test("a list that uses what version 1 added says version 1, and a move by zero is refused", () =>
+            {
+                CheckedList r = ChangeListCheck.Read(Encoding.UTF8.GetBytes("{\"version\":0,\"changes\":[{\"kind\":\"move_levels_together\",\"levels\":[{\"level_name\":\"Level 1\"}],\"by\":{\"value\":-250,\"unit\":\"mm\"}}]}"));
+                Is(!r.Ok && r.Errors.Any(e => e.StartsWith("changes[0].kind") && e.Contains("needs version 1")), string.Join("; ", r.Errors));
+                r = ChangeListCheck.Read(Encoding.UTF8.GetBytes("{\"version\":0,\"changes\":[{\"kind\":\"set_level_elevation\",\"level\":{\"level_name\":\"Roof Line\"},\"elevation\":{\"value\":5700,\"unit\":\"mm\"},\"relative_to\":\"project_origin\",\"groups_in_the_way\":\"ungroup\"}]}"));
+                Is(!r.Ok && r.Errors.Any(e => e.StartsWith("changes[0].groups_in_the_way") && e.Contains("needs version 1")), string.Join("; ", r.Errors));
+                r = ChangeListCheck.Read(Encoding.UTF8.GetBytes("{\"version\":1,\"changes\":[{\"kind\":\"move_levels_together\",\"levels\":[{\"level_name\":\"Level 1\"}],\"by\":{\"value\":0,\"unit\":\"ft\"}}]}"));
+                Is(!r.Ok && r.Errors.Any(e => e.StartsWith("changes[0].by") && e.Contains("a move by zero moves nothing")), string.Join("; ", r.Errors));
+                r = ChangeListCheck.Read(Encoding.UTF8.GetBytes("{\"version\":1,\"changes\":[{\"kind\":\"move_levels_together\",\"id\":\"c1\",\"levels\":[{\"level_name\":\"Level 1\"},{\"global_id\":\"3cUkl32yn9qRSPvBJVyWYp\"}],\"by\":{\"value\":-250,\"unit\":\"mm\"},\"groups_in_the_way\":\"ungroup\"}]}"));
+                Is(r.Ok, string.Join("; ", r.Errors));
+                Eq(2, r.List.Changes[0].Levels.Count, "levels");
+                Eq("3cUkl32yn9qRSPvBJVyWYp", r.List.Changes[0].Levels[1].GlobalId, "a level by its storey GlobalId");
+                Eq(-250.0, r.List.Changes[0].By.Value, "by");
+                Eq(GroupsInTheWayValues.Ungroup, r.List.Changes[0].GroupsInTheWay, "groups_in_the_way");
+                Eq(1L, r.List.Version, "version");
             });
             Test("a list naming more than 20,000 elements in all is refused", () =>
             {
@@ -630,9 +650,224 @@ namespace Flo2Rvt.Addin.Tests
                 Eq(1, totals.ElementsDeletedWithHost, "with their host");
             });
 
+            // ─── levels moved together, and the model groups in the way (since add-in 0.5.0)
+            // Made-up levels, ids in feet: a basement (5, not moved) and Level 1 to Level 3 (10, 20,
+            // 30), all three moved down by half a foot: the uniform shift that keeps what lies
+            // between them in shape.
+            var down = LevelMoves.Offsets(new Dictionary<long, double> { { 10, -0.5 }, { 20, -0.5 }, { 30, -0.5 } });
+            Test("a move names each level once, and moves by more than nothing", () =>
+            {
+                Eq(null, LevelMoves.Check(new[] { Lv(10, "Level 1", "level_name"), Lv(20, "Level 2", "storey") }, -0.5), "two levels, half a foot down");
+                Is(LevelMoves.Check(new[] { Lv(10, "Level 1", "level_name") }, 0).Contains("a move by zero moves nothing"), "zero");
+                string twice = LevelMoves.Check(new[] { Lv(10, "Level 1", "level_name"), Lv(20, "Level 2", "level_name"), Lv(10, "Level 1", "storey") }, 1);
+                Is(twice != null && twice.Contains("\"Level 1\"") && twice.Contains("named twice"), "the same level by name and by its storey GlobalId: " + twice);
+                Is(LevelMoves.Check(new LevelRef[0], 1).Contains("names no level"), "none");
+            });
+            Test("under a move, what is tied only to moved levels moves whole; what ties a moved level to one not moved is reshaped", () =>
+            {
+                Eq(LevelMoves.MovesWhole, LevelMoves.ShapeUnder(new long[] { 10, 20 }, down), "a wall from Level 1 to Level 2");
+                Eq(LevelMoves.MovesWhole, LevelMoves.ShapeUnder(new long[] { 30 }, down), "a floor on Level 3");
+                Eq(LevelMoves.Reshaped, LevelMoves.ShapeUnder(new long[] { 5, 10 }, down), "a wall from the basement to Level 1");
+                Eq(LevelMoves.NotMoved, LevelMoves.ShapeUnder(new long[] { 5 }, down), "the basement's own");
+                Eq(LevelMoves.NotMoved, LevelMoves.ShapeUnder(new long[0], down), "tied to no level");
+                // The same wall when the levels move one at a time, as set_level_elevation does: each move reshapes it.
+                var one = LevelMoves.Offsets(new Dictionary<long, double> { { 10, -0.5 } });
+                Eq(LevelMoves.Reshaped, LevelMoves.ShapeUnder(new long[] { 10, 20 }, one), "Level 1 moved alone stretches what spans it and Level 2");
+                var uneven = LevelMoves.Offsets(new Dictionary<long, double> { { 10, -0.5 }, { 20, -0.25 } });
+                Eq(LevelMoves.Reshaped, LevelMoves.ShapeUnder(new long[] { 10, 20 }, uneven), "two levels moved by different amounts");
+            });
+            Test("a model group is expected to move whole with its levels, to be reshaped where its type has one instance, or to be in the way", () =>
+            {
+                Eq(GroupsInTheWay.MovesWithItsLevels, GroupsInTheWay.Expect(Group(1, 2, 10, 20), down), "spanning Level 1 and Level 2, two copies");
+                Eq(GroupsInTheWay.ReshapedOneInstance, GroupsInTheWay.Expect(Group(2, 1, 5, 10), down), "spanning the basement and Level 1, the only copy: Revit allows it and updates the type");
+                Eq(GroupsInTheWay.InTheWay, GroupsInTheWay.Expect(Group(3, 3, 5, 10), down), "spanning the basement and Level 1, three copies");
+                Eq(GroupsInTheWay.NotMoved, GroupsInTheWay.Expect(Group(4, 2, 5), down), "on the basement alone");
+                var one = LevelMoves.Offsets(new Dictionary<long, double> { { 10, -0.5 } });
+                Eq(GroupsInTheWay.InTheWay, GroupsInTheWay.Expect(Group(1, 2, 10, 20), one), "the same two copies when Level 1 moves alone");
+            });
+            Test("the groups to ungroup are the outermost groups of what Revit names, each once, in the order named", () =>
+            {
+                // 101 and 102 are members of group 1; 201 of group 2, which is nested in group 3; 301 is in no group.
+                var parent = new Dictionary<long, long> { { 101, 1 }, { 102, 1 }, { 201, 2 }, { 2, 3 } };
+                var groups = new HashSet<long> { 1, 2, 3 };
+                List<long> named = GroupsInTheWay.Named(new long[] { 101, 102, 301, 201, 3 }, id => parent.ContainsKey(id) ? parent[id] : 0, groups.Contains);
+                Is(named.SequenceEqual(new long[] { 1, 3 }), "1 and 3: " + string.Join(", ", named));
+                Eq(0, GroupsInTheWay.Named(new long[] { 301 }, id => 0, groups.Contains).Count, "an element in no group names none");
+            });
+            Test("a rolled-back move is tried again with groups ungrouped only when the list says ungroup, and only groups were in the way", () =>
+            {
+                var groupsOnly = new[] { Failure(true, "Changes to groups are allowed only in group edit mode.") };
+                var withSketch = new[] { Failure(true, "Changes to groups are allowed only in group edit mode."), Failure(false, "Ends of an open loop in sketch splitting face do not lie on an edge of the face to split.") };
+                RetryDecision d = GroupsInTheWay.Retry(GroupsInTheWayValues.Refuse, groupsOnly, new HashSet<long>(), new long[] { 1 }, 1);
+                Is(!d.Retry, "refuse never ungroups");
+                d = GroupsInTheWay.Retry(GroupsInTheWayValues.Ungroup, groupsOnly, new HashSet<long>(), new long[] { 1 }, 1);
+                Is(d.Retry && d.Ungroup.SequenceEqual(new long[] { 1 }), "ungroup: group 1, which Revit named");
+                d = GroupsInTheWay.Retry(GroupsInTheWayValues.Ungroup, withSketch, new HashSet<long>(), new long[] { 1 }, 1);
+                Is(!d.Retry && d.Why.Contains("another error"), "another error stops it: ungrouping would not let it through: " + d.Why);
+                d = GroupsInTheWay.Retry(GroupsInTheWayValues.Ungroup, groupsOnly, new HashSet<long> { 1 }, new long[] { 1 }, 2);
+                Is(!d.Retry, "no group named that is not ungrouped already");
+                d = GroupsInTheWay.Retry(GroupsInTheWayValues.Ungroup, groupsOnly, new HashSet<long> { 1 }, new long[] { 3 }, 2);
+                Is(d.Retry && d.Ungroup.SequenceEqual(new long[] { 1, 3 }), "a nested group named next is added: " + string.Join(", ", d.Ungroup));
+                d = GroupsInTheWay.Retry(GroupsInTheWayValues.Ungroup, groupsOnly, new HashSet<long> { 1 }, new long[] { 3 }, GroupsInTheWay.MaxAttempts);
+                Is(!d.Retry, "at most " + GroupsInTheWay.MaxAttempts + " attempts");
+                Is(!GroupsInTheWay.Retry(GroupsInTheWayValues.Ungroup, new RevitFailure[0], new HashSet<long>(), new long[] { 1 }, 1).Retry, "no error: nothing to let through");
+                Is(!GroupsInTheWay.Retry(null, groupsOnly, new HashSet<long>(), new long[] { 1 }, 1).Retry, "unsaid is refuse");
+            });
+            Test("a move refused for groups in the way says which, and how a person can let it through", () =>
+            {
+                string why = GroupsInTheWay.RolledBackWhy(GroupsInTheWayValues.Refuse, 2, 0, "Revit raised an error: Changes to groups are allowed only in group edit mode.");
+                Is(why.Contains("2 model group(s)") && why.Contains("groups.in_the_way") && why.Contains("groups_in_the_way \"ungroup\"") && why.Contains("agrees"), why);
+                why = GroupsInTheWay.RolledBackWhy(GroupsInTheWayValues.Ungroup, 1, 1, "Revit raised an error: Ends of an open loop in sketch splitting face do not lie on an edge of the face to split.");
+                Is(why.Contains("another error") && why.Contains("nothing was ungrouped") && why.Contains("Ends of an open loop"), why);
+                Eq("Revit raised an error: x", GroupsInTheWay.RolledBackWhy(GroupsInTheWayValues.Refuse, 0, 1, "Revit raised an error: x"), "no group in the way: Revit's own words");
+            });
+            Test("a kept move reads applied when every level is where it was asked to be, and names any that is not", () =>
+            {
+                MoveOutcome o = LevelMoves.Committed(new[] { Landing("Level 1", -0.5, -0.5), Landing("Level 2", 9.5, 9.5000004) });
+                Eq(ChangeStatus.Applied, o.Status, "both landed");
+                Eq(null, o.Why, "nothing undone");
+                o = LevelMoves.Committed(new[] { Landing("Level 1", -0.5, -0.5), Landing("Level 2", 9.5, 10) });
+                Eq(ChangeStatus.AppliedInPart, o.Status, "Level 2 did not move");
+                Is(o.Why.Contains("\"Level 2\"") && o.Why.Contains("10") && !o.Why.Contains("\"Level 1\""), o.Why);
+            });
+            Test("an ungrouped group is reported by name, type and instance, and the report says its copies are no longer linked", () =>
+            {
+                GroupFacts kept = Group(1, 2, 10, 20), ungrouped = Group(3, 3, 5, 10), basement = Group(4, 2, 5);
+                GroupsReport g = GroupsInTheWay.Collect(GroupsInTheWayValues.Ungroup, new[] { kept, ungrouped, basement }, new[] { ungrouped }, id => id != 3, new GroupFacts[0], true, down);
+                Eq(1, g.Ungrouped.Count, "one ungrouped");
+                GroupRef u = g.Ungrouped[0];
+                Eq(3L, u.ElementId, "the instance");
+                Eq("Unit A", u.Name, "its name");
+                Eq("Unit A", u.TypeName, "its type");
+                Eq(1003L, u.TypeId, "its type id");
+                Eq(3, u.InstancesOfType, "copies of the type before");
+                Eq(false, u.Linked, "no longer linked");
+                Is(g.Note.Contains("no longer linked") && g.Note.Contains("editing one later does not update the others") && g.Note.Contains("original model"), g.Note);
+                Is(g.MovedWithLevels.Select(x => x.ElementId).SequenceEqual(new long[] { 1 }), "the group moved whole is kept, the basement's is not listed as moved");
+                Eq(GroupsInTheWay.MovesWithItsLevels, g.MovedWithLevels[0].Expected, "and why");
+                Eq(GroupsInTheWayValues.Ungroup, g.GroupsInTheWayOption, "what the list said");
+                GroupsReport none = GroupsInTheWay.Collect(GroupsInTheWayValues.Refuse, new[] { kept }, new GroupFacts[0], id => true, new GroupFacts[0], true, down);
+                Eq(0, none.Ungrouped.Count, "refuse ungroups nothing");
+                Is(none.Note == null || !none.Note.Contains("no longer linked"), "and says nothing of links");
+                Eq(null, GroupsInTheWay.Collect(GroupsInTheWayValues.Refuse, new GroupFacts[0], new GroupFacts[0], id => true, new GroupFacts[0], true, down), "no group tied to a moved level: no section");
+                GroupsReport back = GroupsInTheWay.Collect(GroupsInTheWayValues.Refuse, new[] { kept, ungrouped }, new GroupFacts[0], id => true, new[] { ungrouped }, false, down);
+                Is(back.InTheWay.Select(x => x.ElementId).SequenceEqual(new long[] { 3 }) && back.MovedWithLevels.Count == 0, "rolled back: the group Revit named is in the way, and nothing moved");
+            });
+            Test("the report check: a kept move reads applied only when its levels landed; a group is never both kept and ungrouped; a rolled-back change ungrouped nothing", () =>
+            {
+                ChangeReport good = MoveReport(ChangeStatus.Applied, 9.5);
+                good.Groups = GroupsInTheWay.Collect(GroupsInTheWayValues.Ungroup, new[] { Group(1, 2, 10, 20), Group(3, 3, 5, 10) }, new[] { Group(3, 3, 5, 10) }, id => id != 3, new GroupFacts[0], true, down);
+                Eq(0, ReportCheck.Violations(good).Count, "keeps them: " + string.Join("; ", ReportCheck.Violations(good)));
+                ChangeReport off = MoveReport(ChangeStatus.Applied, 10);
+                Is(ReportCheck.Violations(off).Any(v => v.Contains("reads applied though level \"Level 2\"")), string.Join("; ", ReportCheck.Violations(off)));
+                ChangeReport both = MoveReport(ChangeStatus.Applied, 9.5);
+                both.Groups = new GroupsReport { MovedWithLevels = { new GroupRef { ElementId = 7 } }, Ungrouped = { new GroupRef { ElementId = 7 } } };
+                Is(ReportCheck.Violations(both).Any(v => v.Contains("group 7 is both moved with its levels and ungrouped")), string.Join("; ", ReportCheck.Violations(both)));
+                ChangeReport back = MoveReport(ChangeStatus.RolledBack, 10);
+                back.Groups = new GroupsReport { Ungrouped = { new GroupRef { ElementId = 8 } } };
+                Is(ReportCheck.Violations(back).Any(v => v.Contains("group 8 is listed as ungrouped, though the change was not kept")), string.Join("; ", ReportCheck.Violations(back)));
+                ChangeReport moved = MoveReport(ChangeStatus.RolledBack, 9.5);
+                Is(ReportCheck.Violations(moved).Any(v => v.Contains("level \"Level 2\" reads moved, though the change was not kept")), string.Join("; ", ReportCheck.Violations(moved)));
+                var set = new ChangeReport { Id = "c4", Kind = ChangeKinds.SetLevelElevation, Status = ChangeStatus.Applied, Committed = true,
+                    Elevation = new ElevationChange { RelativeTo = SetLevelElevationRelativeToValues.ProjectOrigin, RequestedFt = 18.7, Before = Elev(19.5), After = Elev(19.5) } };
+                Is(ReportCheck.Violations(set).Any(v => v.Contains("reads applied though the level is at")), string.Join("; ", ReportCheck.Violations(set)));
+                set.Elevation.After = Elev(18.7);
+                Eq(0, ReportCheck.Violations(set).Count, "landed");
+            });
+            Test("report.json carries a move's levels, its attempts and its groups, and reads them back", () =>
+            {
+                var report = new EditReport();
+                ChangeReport c = MoveReport(ChangeStatus.Applied, 9.5);
+                c.Groups = GroupsInTheWay.Collect(GroupsInTheWayValues.Ungroup, new[] { Group(1, 2, 10, 20), Group(3, 3, 5, 10) }, new[] { Group(3, 3, 5, 10) }, id => id != 3, new GroupFacts[0], true, down);
+                c.Attempts = new List<MoveAttempt>
+                {
+                    new MoveAttempt { Attempt = 1, Committed = false, Why = "Revit raised an error: Changes to groups are allowed only in group edit mode.", RevitMessages = new List<RevitMessage> { new RevitMessage { Severity = "Error", Text = "Changes to groups are allowed only in group edit mode.", Handled = "rolled_back", Kind = RevitMessage.GroupInTheWay, ElementIds = { 301, 302 } } } },
+                    new MoveAttempt { Attempt = 2, Committed = true, UngroupedFirst = new List<long> { 3 } },
+                };
+                report.Changes.Add(c);
+                report.Totals.Count(c);
+                Eq(1, report.Totals.GroupsUngrouped, "totals count the groups ungrouped");
+                var buffer = new MemoryStream();
+                report.WriteTo(buffer);
+                string json = Encoding.UTF8.GetString(buffer.ToArray());
+                foreach (string key in new[] { "\"move\"", "\"by_ft\"", "\"levels\"", "\"requested_elevation_ft\"", "\"attempts\"", "\"ungrouped_first\"", "\"groups\"", "\"groups_in_the_way\"", "\"moved_with_levels\"", "\"ungrouped\"", "\"linked\"", "\"type_name\"", "\"note\"", "\"group_in_the_way\"", "\"groups_ungrouped\"" })
+                    Is(json.Contains(key), "report.json names " + key);
+                buffer.Position = 0;
+                EditReport read = EditReport.ReadFrom(buffer);
+                ChangeReport r = read.Changes[0];
+                Eq(2, r.Move.Levels.Count, "levels read back");
+                Eq(9.5, r.Move.Levels[1].After.ElevationFt, "after read back");
+                Eq(3L, r.Groups.Ungrouped[0].ElementId, "ungrouped read back");
+                Eq(false, r.Groups.Ungrouped[0].Linked, "ungrouped reads no longer linked");
+                Eq(true, r.Groups.MovedWithLevels[0].Linked, "a group moved whole is still linked");
+                Eq(2, r.Attempts.Count, "attempts read back");
+                Eq(RevitMessage.GroupInTheWay, r.Attempts[0].RevitMessages[0].Kind, "the message's kind read back");
+                Eq(2, read.Version, "the report's version is still 2");
+            });
+            Test("the uniform shift: every level from the first floor to the roof moved by one offset keeps the groups spanning them; only what reaches down to the basement is reshaped", () =>
+            {
+                // Nine made-up levels (ids 1 to 9) moved together by one offset, the basement (0) not moved.
+                var nine = new Dictionary<long, double>();
+                for (long id = 1; id <= 9; id++) nine[id] = -0.25;
+                var shift = LevelMoves.Offsets(nine);
+                Eq(GroupsInTheWay.MovesWithItsLevels, GroupsInTheWay.Expect(Group(11, 4, 3, 4), shift), "a group spanning the third and fourth floors, four copies");
+                Eq(GroupsInTheWay.MovesWithItsLevels, GroupsInTheWay.Expect(Group(12, 2, 8, 9), shift), "a group up to the roof");
+                Eq(GroupsInTheWay.InTheWay, GroupsInTheWay.Expect(Group(13, 2, 0, 1), shift), "a group from the basement to the first floor is still in the way");
+                // Moved one level at a time, the first of those moves already reshapes the group spanning the third and fourth floors.
+                Eq(GroupsInTheWay.InTheWay, GroupsInTheWay.Expect(Group(11, 4, 3, 4), LevelMoves.Offsets(new Dictionary<long, double> { { 3, -0.25 } })), "one at a time");
+            });
+
             Console.WriteLine();
             Console.WriteLine(passed + " passed, " + failed.Count + " failed");
             return failed.Count == 0 ? 0 : 1;
+        }
+
+        private static LevelRef Lv(long id, string name, string matchedBy)
+        {
+            return new LevelRef { ElementId = id, Name = name, MatchedBy = matchedBy };
+        }
+
+        private static GroupFacts Group(long id, int instancesOfType, params long[] tiedLevels)
+        {
+            return new GroupFacts { Id = id, Name = "Unit A", TypeId = 1000 + id, TypeName = "Unit A", InstancesOfType = instancesOfType, Members = 4, ReferenceLevel = "Level 1", TiedLevels = tiedLevels.ToList() };
+        }
+
+        private static RevitFailure Failure(bool groupInTheWay, string text)
+        {
+            return new RevitFailure { Error = true, GroupInTheWay = groupInTheWay, Text = text };
+        }
+
+        private static LevelLanding Landing(string name, double requestedFt, double afterFt)
+        {
+            return new LevelLanding { Name = name, RequestedFt = requestedFt, AfterFt = afterFt };
+        }
+
+        private static LevelElevation Elev(double ft)
+        {
+            return new LevelElevation { ElevationFt = ft, ElevationMm = Lengths.Round(Lengths.ToMm(ft)), ProjectElevationFt = ft, ProjectElevationMm = Lengths.Round(Lengths.ToMm(ft)) };
+        }
+
+        /// <summary>A move_levels_together of Level 1 (0 to -0.5 ft) and Level 2 (10 to 9.5 ft), Level 2 found at <paramref name="level2After"/>.</summary>
+        private static ChangeReport MoveReport(string status, double level2After)
+        {
+            bool kept = ChangeStatus.Kept(status);
+            return new ChangeReport
+            {
+                Id = "c1",
+                Kind = ChangeKinds.MoveLevelsTogether,
+                Status = status,
+                Committed = kept,
+                Move = new LevelsMove
+                {
+                    ByFt = -0.5,
+                    ByMm = -152.4,
+                    Levels =
+                    {
+                        new LevelMoved { Level = Lv(10, "Level 1", "level_name"), Before = Elev(0), RequestedElevationFt = -0.5, After = Elev(kept ? -0.5 : 0) },
+                        new LevelMoved { Level = Lv(20, "Level 2", "level_name"), Before = Elev(10), RequestedElevationFt = 9.5, After = Elev(level2After) },
+                    },
+                },
+            };
         }
 
         private static CouldNot Refusal(long id, string category)

@@ -76,10 +76,46 @@ describe('rvt_edit_start', () => {
     assert.equal(h.aps.calls.length, 0, 'nothing reached Autodesk');
   });
 
+  test('the levels moved together, and groups in the way ungrouped only when the list says so, are in the vocabulary the agent sees', async () => {
+    const r = await rpc(h.url, { jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} });
+    const edit = ((r.json as Rpc).result?.tools ?? []).find((t) => t.name === 'rvt_edit_start') as { inputSchema: { properties: Record<string, unknown> }; description: string };
+    const schema = JSON.stringify(edit.inputSchema.properties.change_list);
+    assert.ok(schema.includes('move_levels_together'), 'the new change kind');
+    assert.ok(schema.includes('groups_in_the_way') && schema.includes('ungroup') && schema.includes('refuse'));
+    assert.match(edit.description, /move_levels_together/);
+    assert.match(edit.description, /ONE transaction/);
+    assert.match(edit.description, /groups_in_the_way "ungroup"/);
+  });
+
   test('refuses without the hidden job context, and without the model', async () => {
     assert.match(refusal(await call(h, 'rvt_edit_start', { file: 'x.rvt', change_list: LIST })), /reached only through flo2\.io/);
     assert.match(refusal(await call(h, 'rvt_edit_start', { file: 'x.rvt', change_list: LIST }, jobMeta(h.aps, { input: false }))), /did not hand over the file to edit/);
     assert.equal(h.aps.workItems.length, 0);
+  });
+});
+
+describe('an edit that moves levels together', () => {
+  let h: Harness;
+  before(async () => {
+    h = await startHarness();
+  });
+  after(() => h.close());
+
+  test('a version 1 list with move_levels_together and groups_in_the_way is uploaded as it was approved', async () => {
+    const list = {
+      version: 1,
+      list_id: 'sample-2',
+      changes: [
+        { kind: 'move_levels_together', id: 'c1', levels: [{ level_name: 'Level 1' }, { level_name: 'Level 2' }, { level_name: 'Roof Line' }], by: { value: -250, unit: 'mm' }, groups_in_the_way: 'ungroup' },
+      ],
+    };
+    const r = await call(h, 'rvt_edit_start', { file: 'rac_basic_sample_project.rvt', change_list: list }, jobMeta(h.aps));
+    const out = r.result?.structuredContent as { job_id: string; state: string; change_list_sha256: string };
+    assert.equal(out.state, 'submitted', JSON.stringify(r));
+    const bucket = `flo2rvt-${CLIENT_ID.toLowerCase()}-t`;
+    const uploaded = h.aps.objects.get(`${bucket}/${out.job_id}/changes.json`);
+    assert.equal(uploaded?.bytes.toString('utf8'), canonicalJson(list));
+    assert.equal(out.change_list_sha256, sha(uploaded!.bytes));
   });
 });
 

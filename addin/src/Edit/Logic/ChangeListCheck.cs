@@ -5,7 +5,9 @@
 // It walks the JSON itself (closed key sets, types, lengths, counts, the GlobalId pattern,
 // the units and datums), because the typed reader, DataContractJsonSerializer, skips a key
 // it does not know and a list must never mean more to its author than to the add-in. Then
-// it reads the list into the generated classes (addin/Generated/ChangeList.g.cs).
+// it reads the list into the generated classes (addin/Generated/ChangeList.g.cs). Beside the
+// schema it holds what the schema's keywords cannot say, as the server does: a move by zero is
+// refused, and a list that uses what version 1 added says version 1.
 //
 // PURE LOGIC: no Revit type here, so addin/tests runs it on any OS.
 
@@ -41,6 +43,8 @@ namespace Flo2Rvt.Addin.Edit.Logic
         /// <summary>The most element references (GlobalIds) one list may carry, over all its changes.</summary>
         public const int MaxReferences = 20000;
         public const int MaxErrors = 50;
+        /// <summary>The first change-list version that reads move_levels_together and groups_in_the_way.</summary>
+        public const long MoveLevelsVersion = 1;
 
         private static readonly Regex GlobalIdPattern = new Regex(ChangeListSchema.IfcGlobalIdPattern, RegexOptions.CultureInvariant);
         private static readonly Regex IdPattern = new Regex(ChangeListSchema.ChangeIdPattern, RegexOptions.CultureInvariant);
@@ -107,6 +111,8 @@ namespace Flo2Rvt.Addin.Edit.Logic
         {
             private readonly List<string> errors;
             private int references;
+            /// <summary>The list's version, once read; what version 1 added is refused under an earlier one.</summary>
+            private double version = ChangeList.VersionValues.Max();
 
             public Walk(List<string> errors)
             {
@@ -224,7 +230,9 @@ namespace Flo2Rvt.Addin.Edit.Logic
                 if (m.TryGetValue("version", out e))
                 {
                     double? v = Number(e, "version");
-                    if (v.HasValue && v.Value != ChangeList.VersionValue) Fail("version", "must be " + ChangeList.VersionValue + "; this add-in reads version " + ChangeList.VersionValue + " only");
+                    string read = string.Join(" or ", ChangeList.VersionValues);
+                    if (v.HasValue && !ChangeList.VersionValues.Any(x => x == v.Value)) Fail("version", "must be " + read + "; this add-in reads versions " + read);
+                    else if (v.HasValue) version = v.Value;
                 }
                 if (m.TryGetValue("list_id", out e)) Text(e, "list_id", 1, 64, IdPattern);
                 if (m.TryGetValue("description", out e)) Text(e, "description", 0, 2000, null);
@@ -266,7 +274,7 @@ namespace Flo2Rvt.Addin.Edit.Logic
                         if (m.TryGetValue("elements", out x)) Elements(x, at + ".elements");
                         break;
                     case ChangeKinds.SetLevelElevation:
-                        m = Object(e, at, new[] { "kind", "id", "level", "elevation", "relative_to" }, new[] { "kind", "level", "elevation", "relative_to" });
+                        m = Object(e, at, new[] { "kind", "id", "level", "elevation", "relative_to", "groups_in_the_way" }, new[] { "kind", "level", "elevation", "relative_to" });
                         if (m == null) return;
                         if (m.TryGetValue("level", out x)) Level(x, at + ".level");
                         if (m.TryGetValue("elevation", out x)) Length(x, at + ".elevation");
@@ -275,12 +283,47 @@ namespace Flo2Rvt.Addin.Edit.Logic
                             string datum = Text(x, at + ".relative_to", 1, 64, null);
                             if (datum != null && Array.IndexOf(Datums, datum) < 0) Fail(at + ".relative_to", "must be one of " + string.Join(", ", Datums));
                         }
+                        if (m.TryGetValue("groups_in_the_way", out x)) GroupsInTheWay(x, at + ".groups_in_the_way");
+                        break;
+                    case ChangeKinds.MoveLevelsTogether:
+                        m = Object(e, at, new[] { "kind", "id", "levels", "by", "groups_in_the_way" }, new[] { "kind", "levels", "by" });
+                        if (m == null) return;
+                        if (version < MoveLevelsVersion) Fail(at + ".kind", ChangeKinds.MoveLevelsTogether + " needs version " + MoveLevelsVersion + "; say \"version\": " + MoveLevelsVersion);
+                        if (m.TryGetValue("levels", out x)) Levels(x, at + ".levels");
+                        if (m.TryGetValue("by", out x))
+                        {
+                            double? by = Length(x, at + ".by");
+                            if (by.HasValue && by.Value == 0) Fail(at + ".by", "a move by zero moves nothing");
+                        }
+                        if (m.TryGetValue("groups_in_the_way", out x)) GroupsInTheWay(x, at + ".groups_in_the_way");
                         break;
                     default:
                         Fail(at, "kind " + Quote(kind) + " is not in the vocabulary (" + string.Join(", ", ChangeKinds.All) + ")");
                         return;
                 }
                 if (m.TryGetValue("id", out x)) Text(x, at + ".id", 1, 64, IdPattern);
+            }
+
+            private void GroupsInTheWay(XElement e, string at)
+            {
+                if (version < MoveLevelsVersion) Fail(at, "needs version " + MoveLevelsVersion + "; say \"version\": " + MoveLevelsVersion);
+                string v = Text(e, at, 1, 16, null);
+                if (v != null && v != GroupsInTheWayValues.Refuse && v != GroupsInTheWayValues.Ungroup) Fail(at, "must be one of " + GroupsInTheWayValues.Refuse + ", " + GroupsInTheWayValues.Ungroup);
+            }
+
+            private void Levels(XElement e, string at)
+            {
+                List<XElement> items = ArrayOf(e, at, 1, 500);
+                if (items == null) return;
+                var seen = new HashSet<string>(StringComparer.Ordinal);
+                for (int i = 0; i < items.Count; i++)
+                {
+                    string here = at + "[" + i + "]";
+                    Level(items[i], here);
+                    // A level reference is one key and its text: the same key and text are the same item.
+                    XElement only = items[i].Elements().Count() == 1 ? items[i].Elements().First() : null;
+                    if (only != null && !seen.Add(Key(only) + "\u0000" + only.Value)) Fail(here, "names the same level a second time");
+                }
             }
 
             private void Level(XElement e, string at)
@@ -318,10 +361,11 @@ namespace Flo2Rvt.Addin.Edit.Logic
                 }
             }
 
-            private void Length(XElement e, string at)
+            /// <summary>The length in feet, when it is one; null (and a failure) otherwise.</summary>
+            private double? Length(XElement e, string at)
             {
                 var m = Object(e, at, new[] { "value", "unit" }, new[] { "value", "unit" });
-                if (m == null) return;
+                if (m == null) return null;
                 XElement x;
                 double? value = null;
                 string unit = null;
@@ -337,7 +381,13 @@ namespace Flo2Rvt.Addin.Edit.Logic
                 }
                 double feet;
                 string why;
-                if (value.HasValue && unit != null && !Lengths.TryToFeet(value.Value, unit, out feet, out why)) Fail(at, why);
+                if (!value.HasValue || unit == null) return null;
+                if (!Lengths.TryToFeet(value.Value, unit, out feet, out why))
+                {
+                    Fail(at, why);
+                    return null;
+                }
+                return feet;
             }
         }
     }

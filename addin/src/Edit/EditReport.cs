@@ -19,7 +19,12 @@
 // deleted_with_host or left_on_level, and counted every element together in `totals`. Add-in
 // 0.4.0 writes version 2 still, with fields added and none changed: left_on_level lists the
 // parts of kept elements under their owner (`parts_of_kept_elements`) and what Revit's IFC
-// exporter does not export on its own (`not_exported`) apart from what is left.
+// exporter does not export on its own (`not_exported`) apart from what is left. Add-in 0.5.0
+// writes version 2 still, with fields added and none changed: a level move's `move` (each
+// level's elevation before and after, for move_levels_together), its `attempts` (every try, and
+// every message Revit raised in each), its `groups` (the model groups tied to a moved level:
+// moved whole with their levels, ungrouped on the list's word, or in the way), a Revit
+// message's `kind`, and `totals.groups_ungrouped`.
 
 using System.Collections.Generic;
 using System.Linq;
@@ -146,6 +151,8 @@ namespace Flo2Rvt.Addin.Edit
         /// <summary>Model elements still tied to a level a kept delete_elements_on_level emptied (left_on_level).</summary>
         [DataMember(Name = "elements_left_on_level", Order = 13)] public int ElementsLeftOnLevel;
         [DataMember(Name = "other_elements_left_on_level", Order = 14)] public int OtherElementsLeftOnLevel;
+        /// <summary>Since add-in 0.5.0: model group instances the kept level moves ungrouped, on the list's groups_in_the_way "ungroup".</summary>
+        [DataMember(Name = "groups_ungrouped", Order = 15)] public int GroupsUngrouped;
 
         public void Count(ChangeReport c)
         {
@@ -180,6 +187,7 @@ namespace Flo2Rvt.Addin.Edit
                 ElementsLeftOnLevel += c.LeftOnLevel.ModelElements;
                 OtherElementsLeftOnLevel += c.LeftOnLevel.OtherElements;
             }
+            if (c.Groups != null && c.Groups.Ungrouped != null) GroupsUngrouped += c.Groups.Ungrouped.Count;
         }
     }
 
@@ -216,10 +224,18 @@ namespace Flo2Rvt.Addin.Edit
         [DataMember(Name = "modified_by_revit", Order = 14, EmitDefaultValue = false)] public ReportedElements ModifiedByRevit;
         [DataMember(Name = "added_by_revit", Order = 15, EmitDefaultValue = false)] public ReportedElements AddedByRevit;
         [DataMember(Name = "elevation", Order = 16, EmitDefaultValue = false)] public ElevationChange Elevation;
+        /// <summary>move_levels_together: the offset, and each level's elevation before and after.</summary>
+        [DataMember(Name = "move", Order = 16, EmitDefaultValue = false)] public LevelsMove Move;
         /// <summary>set_level_elevation: the elements whose base or reference level it is, which move with it.</summary>
         [DataMember(Name = "attached", Order = 17, EmitDefaultValue = false)] public ReportedElements Attached;
         /// <summary>set_level_elevation: the elements whose top is constrained to the level, which change height.</summary>
         [DataMember(Name = "top_constrained", Order = 18, EmitDefaultValue = false)] public ReportedElements TopConstrained;
+        /// <summary>A level move: the model groups tied to a moved level, and what came of each (Logic/GroupsInTheWay.cs).</summary>
+        [DataMember(Name = "groups", Order = 18, EmitDefaultValue = false)] public GroupsReport Groups;
+        /// <summary>A level move: why the model groups tied to its levels could not be read; the groups section then lists only what Revit named.</summary>
+        [DataMember(Name = "groups_unread", Order = 18, EmitDefaultValue = false)] public string GroupsUnread;
+        /// <summary>A level move tried more than once (groups_in_the_way "ungroup"): every try, with every message Revit raised in it. revit_messages is the last try's.</summary>
+        [DataMember(Name = "attempts", Order = 19, EmitDefaultValue = false)] public List<MoveAttempt> Attempts;
         [DataMember(Name = "revit_messages", Order = 19, EmitDefaultValue = false)] public List<RevitMessage> RevitMessages;
         [DataMember(Name = "seconds", Order = 20)] public double Seconds;
 
@@ -440,9 +456,79 @@ namespace Flo2Rvt.Addin.Edit
         [DataMember(Name = "project_elevation_mm", Order = 3)] public double ProjectElevationMm;
     }
 
+    /// <summary>move_levels_together: what every level moved by, and where each is before and after.</summary>
+    [DataContract]
+    public sealed class LevelsMove
+    {
+        [DataMember(Name = "by_ft", Order = 0)] public double ByFt;
+        [DataMember(Name = "by_mm", Order = 1)] public double ByMm;
+        [DataMember(Name = "levels", Order = 2)] public List<LevelMoved> Levels = new List<LevelMoved>();
+    }
+
+    [DataContract]
+    public sealed class LevelMoved
+    {
+        [DataMember(Name = "level", Order = 0)] public LevelRef Level;
+        [DataMember(Name = "before", Order = 1)] public LevelElevation Before;
+        /// <summary>The Level.Elevation asked for: before plus the move.</summary>
+        [DataMember(Name = "requested_elevation_ft", Order = 2)] public double RequestedElevationFt;
+        /// <summary>As the model has it once the change ran (rolled back: as before).</summary>
+        [DataMember(Name = "after", Order = 3, EmitDefaultValue = false)] public LevelElevation After;
+    }
+
+    /// <summary>One try of a level move, in its own transaction.</summary>
+    [DataContract]
+    public sealed class MoveAttempt
+    {
+        [DataMember(Name = "attempt", Order = 0)] public int Attempt;
+        /// <summary>The group instances this try ungrouped before it moved the levels.</summary>
+        [DataMember(Name = "ungrouped_first", Order = 1, EmitDefaultValue = false)] public List<long> UngroupedFirst;
+        [DataMember(Name = "committed", Order = 2)] public bool Committed;
+        [DataMember(Name = "why", Order = 3, EmitDefaultValue = false)] public string Why;
+        [DataMember(Name = "revit_messages", Order = 4, EmitDefaultValue = false)] public List<RevitMessage> RevitMessages;
+    }
+
+    /// <summary>A level move's model groups (Logic/GroupsInTheWay.cs), read from the model after the change.</summary>
+    [DataContract]
+    public sealed class GroupsReport
+    {
+        /// <summary>What the change said: refuse (also when it said nothing) or ungroup.</summary>
+        [DataMember(Name = "groups_in_the_way", Order = 0)] public string GroupsInTheWayOption;
+        /// <summary>Kept change: groups tied to a moved level, still groups in the model, moved with it.</summary>
+        [DataMember(Name = "moved_with_levels", Order = 1)] public List<GroupRef> MovedWithLevels = new List<GroupRef>();
+        /// <summary>Kept change: the group instances ungrouped (groups_in_the_way "ungroup"), each no longer linked.</summary>
+        [DataMember(Name = "ungrouped", Order = 2)] public List<GroupRef> Ungrouped = new List<GroupRef>();
+        /// <summary>Rolled-back change: the groups Revit named in the way.</summary>
+        [DataMember(Name = "in_the_way", Order = 3)] public List<GroupRef> InTheWay = new List<GroupRef>();
+        /// <summary>In plain words, when any group was ungrouped: what that means for its copies, and that the original is untouched.</summary>
+        [DataMember(Name = "note", Order = 4, EmitDefaultValue = false)] public string Note;
+    }
+
+    [DataContract]
+    public sealed class GroupRef
+    {
+        /// <summary>The group instance's element id.</summary>
+        [DataMember(Name = "element_id", Order = 0)] public long ElementId;
+        [DataMember(Name = "global_id", Order = 1, EmitDefaultValue = false)] public string GlobalId;
+        [DataMember(Name = "name", Order = 2, EmitDefaultValue = false)] public string Name;
+        [DataMember(Name = "type_id", Order = 3)] public long TypeId;
+        [DataMember(Name = "type_name", Order = 4, EmitDefaultValue = false)] public string TypeName;
+        /// <summary>Instances of its type in the model before the change.</summary>
+        [DataMember(Name = "instances_of_type", Order = 5)] public int InstancesOfType;
+        [DataMember(Name = "reference_level", Order = 6, EmitDefaultValue = false)] public string ReferenceLevel;
+        [DataMember(Name = "members", Order = 7)] public int Members;
+        /// <summary>What the move was expected to do to it: moves_with_its_levels, reshaped_one_instance, in_the_way.</summary>
+        [DataMember(Name = "expected", Order = 8, EmitDefaultValue = false)] public string Expected;
+        /// <summary>Still a copy linked to its type: false for a group ungrouped.</summary>
+        [DataMember(Name = "linked", Order = 9)] public bool Linked = true;
+    }
+
     [DataContract]
     public sealed class RevitMessage
     {
+        /// <summary>The kind of failure, when the add-in acts on it: group_in_the_way (BuiltInFailures.GroupFailures.AtomViolationWhenMultiPlacedInstances).</summary>
+        public const string GroupInTheWay = "group_in_the_way";
+
         /// <summary>Revit's FailureSeverity: Warning, Error or DocumentCorruption.</summary>
         [DataMember(Name = "severity", Order = 0)] public string Severity;
         [DataMember(Name = "text", Order = 1)] public string Text;
@@ -450,6 +536,8 @@ namespace Flo2Rvt.Addin.Edit
         [DataMember(Name = "handled", Order = 2)] public string Handled;
         /// <summary>The elements Revit names in it, the first 50.</summary>
         [DataMember(Name = "element_ids", Order = 3)] public List<long> ElementIds = new List<long>();
+        /// <summary>Since add-in 0.5.0: group_in_the_way, or absent.</summary>
+        [DataMember(Name = "kind", Order = 4, EmitDefaultValue = false)] public string Kind;
     }
 
     [DataContract]

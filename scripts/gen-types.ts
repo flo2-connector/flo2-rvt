@@ -64,6 +64,8 @@ interface Prop {
   required: boolean;
   description?: string;
   constValue?: string | number;
+  /** An integer enum's values (the envelope's version), written as a <cs>Values array. */
+  intValues?: number[];
 }
 
 class CSharpWriter {
@@ -107,6 +109,7 @@ class CSharpWriter {
       const p: Prop = { json, cs: pascal(json), type: this.typeOf(s, required), required };
       if (typeof s.description === 'string') p.description = s.description;
       if (s.const !== undefined && !allOptional) p.constValue = s.const as string | number;
+      if (s.type === 'integer' && Array.isArray(s.enum) && !allOptional) p.intValues = s.enum as number[];
       return p;
     });
   }
@@ -147,6 +150,10 @@ class CSharpWriter {
         this.line(`        public const ${t} ${p.cs}Value = ${lit};`);
         this.line();
       }
+      if (p.intValues) {
+        this.line(`        public static readonly long[] ${p.cs}Values = { ${p.intValues.join(', ')} };`);
+        this.line();
+      }
       this.doc(p.description, '        ');
       // A required member always writes its value (a required 0 must not vanish); an optional one is left out when unset.
       const flags = p.required ? 'IsRequired = true, EmitDefaultValue = true' : 'IsRequired = false, EmitDefaultValue = false';
@@ -159,7 +166,7 @@ class CSharpWriter {
   }
 
   private enumValues(owner: string, json: string, values: string[]): void {
-    this.line(`    /// <summary>The values ${owner}.${pascal(json)} may take.</summary>`);
+    this.line(`    /// <summary>The values ${json ? `${owner}.${pascal(json)}` : owner} may take.</summary>`);
     this.line(`    public static class ${owner}${pascal(json)}Values`);
     this.line('    {');
     for (const v of values) this.line(`        public const string ${pascal(v)} = ${JSON.stringify(v)};`);
@@ -190,7 +197,11 @@ class CSharpWriter {
     const kinds: string[] = [];
     this.klass('ChangeList', this.schema.description as string, this.propsOf(this.schema, false));
     for (const [name, d] of Object.entries(this.defs)) {
-      if (this.isScalarDef(name)) continue;
+      if (this.isScalarDef(name)) {
+        // A string enum held in $defs (groups_in_the_way) is a string where it is used, with its values here.
+        if (Array.isArray(d.enum)) this.enumValues(pascal(name), '', d.enum as string[]);
+        continue;
+      }
       if (Array.isArray(d.oneOf)) {
         this.klass(pascal(name), d.description as string, this.unionProps(d), 'One class holds every variant\'s fields; the schema says which may appear together.');
         continue;

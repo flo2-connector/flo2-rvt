@@ -193,7 +193,7 @@ describe('rvt_setup_check', () => {
       );
       const setup = out.setup as { available: boolean; addin_version: string; bundle_sha256: string; bundle_bytes: number; nickname: { now: string | null; will_set: string | null }; deletes_nothing: boolean };
       assert.equal(setup.available, true);
-      assert.equal(setup.addin_version, '0.4.0');
+      assert.equal(setup.addin_version, '0.5.0');
       assert.equal(setup.bundle_sha256, BUNDLE_SHA);
       assert.equal(setup.bundle_bytes, BUNDLE_BYTES.length);
       assert.deepEqual(setup.nickname, { now: null, will_set: null, keeps_client_id: true }, 'a setup sets no nickname: the client id names everything');
@@ -231,6 +231,22 @@ describe('rvt_setup_check', () => {
       assert.equal(out.state, 'outdated');
       assert.match(String(out.why), /earlier flo2-rvt/);
       assert.ok((out.found as Array<{ state: string; kind: string }>).filter((f) => f.kind === 'activity').every((f) => f.state === 'outdated'));
+    } finally {
+      await h.close();
+    }
+  });
+
+  test('on an app set up by flo2-rvt 0.5.x, whose Activities run add-in 0.4.0: outdated, and a setup brings it to this add-in', async () => {
+    const h = await startHarness({ setUp: 'addin-0.4.0' }, undefined, { bundle });
+    try {
+      const out = ok(await call(h, 'rvt_setup_check', {}, setupMeta(h)));
+      assert.equal(out.ready, false, 'an app whose add-in cannot read move_levels_together is not ready');
+      assert.equal(out.state, 'outdated');
+      assert.match(String(out.why), /runs add-in 0\.4\.0, not 0\.5\.0/);
+      assert.ok((out.found as Array<{ state: string; kind: string; addin_version?: string }>).filter((f) => f.kind === 'activity').every((f) => f.state === 'outdated' && f.addin_version === '0.4.0'));
+      const run = ok(await call(h, 'rvt_setup_run', {}, setupMeta(h, approved)));
+      assert.equal(run.addin_version, '0.5.0');
+      assert.equal((run.check as { ready: boolean }).ready, true);
     } finally {
       await h.close();
     }
@@ -304,7 +320,7 @@ describe('rvt_setup_run', () => {
         assert.equal(out.state, 'set_up');
         assert.equal(out.owner, CLIENT_ID);
         assert.equal(out.owner_how, 'client_id');
-        assert.equal(out.addin_version, '0.4.0');
+        assert.equal(out.addin_version, '0.5.0');
         assert.equal(out.bundle_sha256, BUNDLE_SHA);
         assert.deepEqual(out.monthly_hours, { requested: 3, reported: 3 });
         assert.equal((out.appbundle as { id: string }).id, `${CLIENT_ID}.Flo2RvtProbe+prod`);
