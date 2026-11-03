@@ -220,7 +220,7 @@
       "schema": false,
       "accepted": false,
       "list": {
-        "version": 2,
+        "version": 3,
         "list_id": "sample-1",
         "description": "Made-up changes to a public sample model.",
         "changes": [
@@ -1096,6 +1096,199 @@
               "value": -250,
               "unit": "mm"
             }
+          }
+        ]
+      }
+    },
+    {
+      "why": "version 2: levels moved together with constraints in the way removed, and groups in the way ungrouped, on the list's word",
+      "schema": true,
+      "accepted": true,
+      "list": {
+        "version": 2,
+        "list_id": "lower-to-grade-2",
+        "changes": [
+          {
+            "kind": "move_levels_together",
+            "levels": [
+              {
+                "level_name": "Foundation"
+              },
+              {
+                "level_name": "Level 1"
+              },
+              {
+                "level_name": "Level 2"
+              },
+              {
+                "level_name": "Roof Line"
+              }
+            ],
+            "by": {
+              "value": -9.375,
+              "unit": "in"
+            },
+            "id": "c1",
+            "groups_in_the_way": "ungroup",
+            "constraints_in_the_way": "remove"
+          }
+        ]
+      }
+    },
+    {
+      "why": "version 2: set_level_elevation that refuses constraints in the way, and a move that says nothing of them",
+      "schema": true,
+      "accepted": true,
+      "list": {
+        "version": 2,
+        "changes": [
+          {
+            "kind": "set_level_elevation",
+            "level": {
+              "level_name": "Roof Line"
+            },
+            "elevation": {
+              "value": 5700,
+              "unit": "mm"
+            },
+            "relative_to": "project_origin",
+            "id": "c1",
+            "constraints_in_the_way": "refuse"
+          },
+          {
+            "kind": "move_levels_together",
+            "levels": [
+              {
+                "level_name": "Foundation"
+              },
+              {
+                "level_name": "Level 1"
+              },
+              {
+                "level_name": "Level 2"
+              },
+              {
+                "level_name": "Roof Line"
+              }
+            ],
+            "by": {
+              "value": -9.375,
+              "unit": "in"
+            },
+            "id": "c2"
+          }
+        ]
+      }
+    },
+    {
+      "why": "version 2 reads a list of version 1's vocabulary as it did",
+      "schema": true,
+      "accepted": true,
+      "list": {
+        "version": 2,
+        "changes": [
+          {
+            "kind": "move_levels_together",
+            "levels": [
+              {
+                "level_name": "Foundation"
+              },
+              {
+                "level_name": "Level 1"
+              },
+              {
+                "level_name": "Level 2"
+              },
+              {
+                "level_name": "Roof Line"
+              }
+            ],
+            "by": {
+              "value": -9.375,
+              "unit": "in"
+            },
+            "groups_in_the_way": "refuse"
+          }
+        ]
+      }
+    },
+    {
+      "why": "version 1 naming constraints_in_the_way, which needs version 2",
+      "schema": true,
+      "accepted": false,
+      "list": {
+        "version": 1,
+        "changes": [
+          {
+            "kind": "move_levels_together",
+            "levels": [
+              {
+                "level_name": "Foundation"
+              },
+              {
+                "level_name": "Level 1"
+              },
+              {
+                "level_name": "Level 2"
+              },
+              {
+                "level_name": "Roof Line"
+              }
+            ],
+            "by": {
+              "value": -9.375,
+              "unit": "in"
+            },
+            "constraints_in_the_way": "remove"
+          }
+        ]
+      }
+    },
+    {
+      "why": "constraints_in_the_way outside its set",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 2,
+        "changes": [
+          {
+            "kind": "move_levels_together",
+            "levels": [
+              {
+                "level_name": "Foundation"
+              },
+              {
+                "level_name": "Level 1"
+              },
+              {
+                "level_name": "Level 2"
+              },
+              {
+                "level_name": "Roof Line"
+              }
+            ],
+            "by": {
+              "value": -9.375,
+              "unit": "in"
+            },
+            "constraints_in_the_way": "unlock"
+          }
+        ]
+      }
+    },
+    {
+      "why": "constraints_in_the_way on a change kind that moves no level",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 2,
+        "changes": [
+          {
+            "kind": "delete_elements_on_level",
+            "level": {
+              "level_name": "Level 2"
+            },
+            "constraints_in_the_way": "remove"
           }
         ]
       }

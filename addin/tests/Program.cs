@@ -9,7 +9,10 @@
 // moved together: what a move keeps in shape and what it reshapes, which model groups are
 // expected to move whole with their levels and which are in the way, which group instances a
 // failure names for ungrouping, when a rolled-back move is tried again with them ungrouped (only
-// on the list's groups_in_the_way "ungroup"), and the report's move, attempts and groups.
+// on the list's groups_in_the_way "ungroup"), and the report's move, attempts and groups. Since
+// add-in 0.6.0, constraints in the way: which named elements are constraints, when a move is
+// tried again with them removed (only on constraints_in_the_way "remove", and with groups only
+// when the list says both), why it was refused, and the report's constraints and messages.
 
 using System;
 using System.Collections.Generic;
@@ -804,6 +807,106 @@ namespace Flo2Rvt.Addin.Tests
                 Eq(RevitMessage.GroupInTheWay, r.Attempts[0].RevitMessages[0].Kind, "the message's kind read back");
                 Eq(2, read.Version, "the report's version is still 2");
             });
+            // ── Since add-in 0.6.0: constraints in the way of a level move (Logic/ConstraintsInTheWay.cs).
+            Test("the constraints among the elements Revit names are those in its Constraints category, each once", () =>
+            {
+                // As the sample house's refusal named them: the Foundation level, two pile caps, a floor, and two constraints.
+                var constraints = new HashSet<long> { 518091, 518093 };
+                List<long> named = ConstraintsInTheWay.Named(new long[] { 511122, 512297, 518091, 512277, 512683, 518093, 518091 }, constraints.Contains);
+                Is(named.SequenceEqual(new long[] { 518091, 518093 }), "518091 and 518093: " + string.Join(", ", named));
+                Eq(0, ConstraintsInTheWay.Named(new long[] { 512297 }, constraints.Contains).Count, "a pile cap is not a constraint");
+            });
+            Test("a move refused for constraints is tried again with them removed only when the list says remove, and nothing else Revit raised stands in the way", () =>
+            {
+                var constraintsOnly = new[] { Constraint(), Constraint() };
+                var none = new HashSet<long>();
+                MoveRetryDecision d = ConstraintsInTheWay.Decide(null, ConstraintsInTheWayValues.Refuse, constraintsOnly, none, new long[0], none, new long[] { 518091, 518093 }, 1);
+                Is(!d.Retry && d.Why.Contains("constraints_in_the_way \"remove\""), "refuse never removes: " + d.Why);
+                Is(!ConstraintsInTheWay.Decide(null, null, constraintsOnly, none, new long[0], none, new long[] { 518091 }, 1).Retry, "unsaid is refuse");
+                d = ConstraintsInTheWay.Decide(null, ConstraintsInTheWayValues.Remove, constraintsOnly, none, new long[0], none, new long[] { 518091, 518093 }, 1);
+                Is(d.Retry && d.Remove.SequenceEqual(new long[] { 518091, 518093 }) && d.Ungroup.Count == 0, "remove: the two Revit named, nothing ungrouped: " + d.Why);
+                var withWall = new[] { Constraint(), Failure(false, "Wall is too short.") };
+                d = ConstraintsInTheWay.Decide(null, ConstraintsInTheWayValues.Remove, withWall, none, new long[0], none, new long[] { 518091 }, 1);
+                Is(!d.Retry && d.Why.Contains("another error") && d.Why.Contains("Wall is too short"), "another error stops it: " + d.Why);
+                d = ConstraintsInTheWay.Decide(null, ConstraintsInTheWayValues.Remove, constraintsOnly, new HashSet<long>(), new long[0], new HashSet<long> { 518091 }, new long[] { 518091 }, 2);
+                Is(!d.Retry && d.Why.Contains("not removed already"), "named again after it was removed: no new try: " + d.Why);
+                d = ConstraintsInTheWay.Decide(null, ConstraintsInTheWayValues.Remove, constraintsOnly, none, new long[0], new HashSet<long> { 518091 }, new long[] { 518093 }, 2);
+                Is(d.Retry && d.Remove.SequenceEqual(new long[] { 518091, 518093 }), "one named next is added to those removed before: " + string.Join(", ", d.Remove));
+                d = ConstraintsInTheWay.Decide(null, ConstraintsInTheWayValues.Remove, constraintsOnly, none, new long[0], none, new long[] { 518091 }, ConstraintsInTheWay.MaxAttempts);
+                Is(!d.Retry, "at most " + ConstraintsInTheWay.MaxAttempts + " attempts");
+                d = ConstraintsInTheWay.Decide(null, ConstraintsInTheWayValues.Remove, constraintsOnly, none, new long[0], none, new long[0], 1);
+                Is(!d.Retry, "nothing Revit named is a constraint: nothing to remove");
+            });
+            Test("constraints and groups in the way together are cleared together only when the list says both", () =>
+            {
+                var both = new[] { Constraint(), Failure(true, "Changes to groups are allowed only in group edit mode.") };
+                var none = new HashSet<long>();
+                MoveRetryDecision d = ConstraintsInTheWay.Decide(GroupsInTheWayValues.Refuse, ConstraintsInTheWayValues.Remove, both, none, new long[] { 7 }, none, new long[] { 518091 }, 1);
+                Is(!d.Retry && d.Why.Contains("groups_in_the_way \"ungroup\""), "a group in the way the list keeps stops it: " + d.Why);
+                d = ConstraintsInTheWay.Decide(GroupsInTheWayValues.Ungroup, ConstraintsInTheWayValues.Remove, both, none, new long[] { 7 }, none, new long[] { 518091 }, 1);
+                Is(d.Retry && d.Ungroup.SequenceEqual(new long[] { 7 }) && d.Remove.SequenceEqual(new long[] { 518091 }), "both cleared in one new try: " + d.Why);
+                // A group named after the constraints were removed: the removal is kept for the next try (each try starts from the model as it was).
+                var groupsOnly = new[] { Failure(true, "Changes to groups are allowed only in group edit mode.") };
+                d = ConstraintsInTheWay.Decide(GroupsInTheWayValues.Ungroup, ConstraintsInTheWayValues.Remove, groupsOnly, none, new long[] { 7 }, new HashSet<long> { 518091 }, new long[0], 2);
+                Is(d.Retry && d.Ungroup.SequenceEqual(new long[] { 7 }) && d.Remove.SequenceEqual(new long[] { 518091 }), "the groups rule, the constraints removed before kept: " + d.Why);
+            });
+            Test("with no constraint in the way the retry is exactly the groups rule, so a move that meets none behaves as before", () =>
+            {
+                var groupsOnly = new[] { Failure(true, "Changes to groups are allowed only in group edit mode.") };
+                var none = new HashSet<long>();
+                foreach (string groups in new[] { GroupsInTheWayValues.Refuse, GroupsInTheWayValues.Ungroup, null })
+                    foreach (int attempt in new[] { 1, GroupsInTheWay.MaxAttempts })
+                    {
+                        RetryDecision g = GroupsInTheWay.Retry(groups, groupsOnly, none, new long[] { 1 }, attempt);
+                        MoveRetryDecision m = ConstraintsInTheWay.Decide(groups, ConstraintsInTheWayValues.Remove, groupsOnly, none, new long[] { 1 }, none, new long[0], attempt);
+                        Is(g.Retry == m.Retry && g.Why == m.Why && (!g.Retry || g.Ungroup.SequenceEqual(m.Ungroup)), "the same verdict for " + (groups ?? "unsaid") + ", try " + attempt);
+                    }
+            });
+            Test("a move refused for constraints says which, and how a person can let it through", () =>
+            {
+                string why = ConstraintsInTheWay.RolledBackWhy(ConstraintsInTheWayValues.Refuse, 2, 0, "Revit raised an error: Constraints are not satisfied");
+                Is(why.StartsWith("Revit raised an error: Constraints are not satisfied. 2 constraint(s)") && why.Contains("constraints.in_the_way") && why.Contains("constraints_in_the_way \"remove\"") && why.Contains("agrees") && why.Contains("architect"), why);
+                why = ConstraintsInTheWay.RolledBackWhy(ConstraintsInTheWayValues.Remove, 1, 1, "Revit raised an error: Constraints are not satisfied");
+                Is(why.Contains("another error") && why.Contains("nothing was removed"), why);
+                why = ConstraintsInTheWay.RolledBackWhy(ConstraintsInTheWayValues.Remove, 1, 0, "Revit raised an error: Constraints are not satisfied");
+                Is(why.Contains("still in the way") && why.Contains("nothing was removed"), why);
+            });
+            Test("the constraints section: removed when kept, with what each tied and a note; in the way when rolled back; absent when none", () =>
+            {
+                ConstraintRef c = ConstraintCap(518091, 512297);
+                ConstraintsReport kept = ConstraintsInTheWay.Collect(ConstraintsInTheWayValues.Remove, new[] { c, c }, new ConstraintRef[0], true);
+                Eq(1, kept.Removed.Count, "each once");
+                Eq(ConstraintsInTheWayValues.Remove, kept.ConstraintsInTheWayOption, "the list's word");
+                Is(kept.Note == ConstraintsInTheWay.RemovedNote && kept.Note.Contains("NEW model only") && kept.Note.Contains("untouched"), "the note says what removing means");
+                ConstraintsReport refused = ConstraintsInTheWay.Collect(null, new ConstraintRef[0], new[] { c }, false);
+                Is(refused.InTheWay.Count == 1 && refused.Removed.Count == 0 && refused.Note == null && refused.ConstraintsInTheWayOption == ConstraintsInTheWayValues.Refuse, "rolled back: in the way, nothing removed, unsaid reads refuse");
+                Is(ConstraintsInTheWay.Collect(ConstraintsInTheWayValues.Remove, new[] { c }, new ConstraintRef[0], false) == null, "rolled back: what was to be removed was not, and none named");
+                Is(ConstraintsInTheWay.Collect(null, new ConstraintRef[0], new ConstraintRef[0], true) == null, "none: no section");
+            });
+            Test("report.json carries a move's constraints and what Revit's messages name, and reads them back", () =>
+            {
+                var report = new EditReport();
+                ChangeReport c = MoveReport(ChangeStatus.Applied, 9.5);
+                c.Constraints = ConstraintsInTheWay.Collect(ConstraintsInTheWayValues.Remove, new[] { ConstraintCap(518091, 512297) }, new ConstraintRef[0], true);
+                c.Attempts = new List<MoveAttempt>
+                {
+                    new MoveAttempt { Attempt = 1, Committed = false, Why = "Revit raised an error: Constraints are not satisfied", RevitMessages = new List<RevitMessage> { new RevitMessage { Severity = "Error", Text = "Constraints are not satisfied", Handled = "rolled_back", Kind = RevitMessage.ConstraintInTheWay, ElementIds = { 511122, 512297, 518091 }, ElementCategories = new List<string> { "Levels", "Structural Foundations", "Constraints" }, Definition = "00000000-0000-0000-0000-000000000000", RevitOffers = "Remove Constraints" } } },
+                    new MoveAttempt { Attempt = 2, Committed = true, RemovedFirst = new List<long> { 518091 } },
+                };
+                report.Changes.Add(c);
+                var buffer = new MemoryStream();
+                report.WriteTo(buffer);
+                string json = Encoding.UTF8.GetString(buffer.ToArray());
+                foreach (string key in new[] { "\"constraints\"", "\"constraints_in_the_way\"", "\"removed\"", "\"ties\"", "\"removed_first\"", "\"constraint_in_the_way\"", "\"element_categories\"", "\"definition\"", "\"revit_offers\"", "\"locked\"" })
+                    Is(json.Contains(key), "report.json names " + key);
+                buffer.Position = 0;
+                ChangeReport r = EditReport.ReadFrom(buffer).Changes[0];
+                Eq(518091L, r.Constraints.Removed[0].ElementId, "removed read back");
+                Eq(512297L, r.Constraints.Removed[0].Ties[0].ElementId, "what it tied read back");
+                Eq("Structural Foundations", r.Attempts[0].RevitMessages[0].ElementCategories[1], "a named element's category read back");
+                Eq("Remove Constraints", r.Attempts[0].RevitMessages[0].RevitOffers, "what Revit offers read back");
+                Eq(518091L, r.Attempts[1].RemovedFirst[0], "what a try removed first read back");
+            });
             Test("the uniform shift: every level from the first floor to the roof moved by one offset keeps the groups spanning them; only what reaches down to the basement is reshaped", () =>
             {
                 // Nine made-up levels (ids 1 to 9) moved together by one offset, the basement (0) not moved.
@@ -835,6 +938,18 @@ namespace Flo2Rvt.Addin.Tests
         private static RevitFailure Failure(bool groupInTheWay, string text)
         {
             return new RevitFailure { Error = true, GroupInTheWay = groupInTheWay, Text = text };
+        }
+
+        /// <summary>Revit's "Constraints are not satisfied" error (DimensionFailures.RegenConstraintUnsatisfied).</summary>
+        private static RevitFailure Constraint()
+        {
+            return new RevitFailure { Error = true, ConstraintInTheWay = true, Text = "Constraints are not satisfied" };
+        }
+
+        /// <summary>A locked dimension tying a pile cap, as Edit/Constraints.cs reads one.</summary>
+        private static ConstraintRef ConstraintCap(long id, long cap)
+        {
+            return new ConstraintRef { ElementId = id, Category = "Constraints", Kind = "dimension", Locked = true, Ties = new List<TiedElement> { new TiedElement { ElementId = cap, Name = "Pile Cap", Category = "Structural Foundations" } } };
         }
 
         private static LevelLanding Landing(string name, double requestedFt, double afterFt)

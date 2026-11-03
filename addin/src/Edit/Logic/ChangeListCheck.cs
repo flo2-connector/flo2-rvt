@@ -7,7 +7,7 @@
 // it does not know and a list must never mean more to its author than to the add-in. Then
 // it reads the list into the generated classes (addin/Generated/ChangeList.g.cs). Beside the
 // schema it holds what the schema's keywords cannot say, as the server does: a move by zero is
-// refused, and a list that uses what version 1 added says version 1.
+// refused, and a list that uses what version 1 added says version 1 (version 2's constraints_in_the_way, version 2).
 //
 // PURE LOGIC: no Revit type here, so addin/tests runs it on any OS.
 
@@ -45,6 +45,8 @@ namespace Flo2Rvt.Addin.Edit.Logic
         public const int MaxErrors = 50;
         /// <summary>The first change-list version that reads move_levels_together and groups_in_the_way.</summary>
         public const long MoveLevelsVersion = 1;
+        /// <summary>The first change-list version that reads a level move's constraints_in_the_way (add-in 0.6.0).</summary>
+        public const long ConstraintsVersion = 2;
 
         private static readonly Regex GlobalIdPattern = new Regex(ChangeListSchema.IfcGlobalIdPattern, RegexOptions.CultureInvariant);
         private static readonly Regex IdPattern = new Regex(ChangeListSchema.ChangeIdPattern, RegexOptions.CultureInvariant);
@@ -274,7 +276,7 @@ namespace Flo2Rvt.Addin.Edit.Logic
                         if (m.TryGetValue("elements", out x)) Elements(x, at + ".elements");
                         break;
                     case ChangeKinds.SetLevelElevation:
-                        m = Object(e, at, new[] { "kind", "id", "level", "elevation", "relative_to", "groups_in_the_way" }, new[] { "kind", "level", "elevation", "relative_to" });
+                        m = Object(e, at, new[] { "kind", "id", "level", "elevation", "relative_to", "groups_in_the_way", "constraints_in_the_way" }, new[] { "kind", "level", "elevation", "relative_to" });
                         if (m == null) return;
                         if (m.TryGetValue("level", out x)) Level(x, at + ".level");
                         if (m.TryGetValue("elevation", out x)) Length(x, at + ".elevation");
@@ -284,9 +286,10 @@ namespace Flo2Rvt.Addin.Edit.Logic
                             if (datum != null && Array.IndexOf(Datums, datum) < 0) Fail(at + ".relative_to", "must be one of " + string.Join(", ", Datums));
                         }
                         if (m.TryGetValue("groups_in_the_way", out x)) GroupsInTheWay(x, at + ".groups_in_the_way");
+                        if (m.TryGetValue("constraints_in_the_way", out x)) ConstraintsInTheWay(x, at + ".constraints_in_the_way");
                         break;
                     case ChangeKinds.MoveLevelsTogether:
-                        m = Object(e, at, new[] { "kind", "id", "levels", "by", "groups_in_the_way" }, new[] { "kind", "levels", "by" });
+                        m = Object(e, at, new[] { "kind", "id", "levels", "by", "groups_in_the_way", "constraints_in_the_way" }, new[] { "kind", "levels", "by" });
                         if (m == null) return;
                         if (version < MoveLevelsVersion) Fail(at + ".kind", ChangeKinds.MoveLevelsTogether + " needs version " + MoveLevelsVersion + "; say \"version\": " + MoveLevelsVersion);
                         if (m.TryGetValue("levels", out x)) Levels(x, at + ".levels");
@@ -296,6 +299,7 @@ namespace Flo2Rvt.Addin.Edit.Logic
                             if (by.HasValue && by.Value == 0) Fail(at + ".by", "a move by zero moves nothing");
                         }
                         if (m.TryGetValue("groups_in_the_way", out x)) GroupsInTheWay(x, at + ".groups_in_the_way");
+                        if (m.TryGetValue("constraints_in_the_way", out x)) ConstraintsInTheWay(x, at + ".constraints_in_the_way");
                         break;
                     default:
                         Fail(at, "kind " + Quote(kind) + " is not in the vocabulary (" + string.Join(", ", ChangeKinds.All) + ")");
@@ -309,6 +313,13 @@ namespace Flo2Rvt.Addin.Edit.Logic
                 if (version < MoveLevelsVersion) Fail(at, "needs version " + MoveLevelsVersion + "; say \"version\": " + MoveLevelsVersion);
                 string v = Text(e, at, 1, 16, null);
                 if (v != null && v != GroupsInTheWayValues.Refuse && v != GroupsInTheWayValues.Ungroup) Fail(at, "must be one of " + GroupsInTheWayValues.Refuse + ", " + GroupsInTheWayValues.Ungroup);
+            }
+
+            private void ConstraintsInTheWay(XElement e, string at)
+            {
+                if (version < ConstraintsVersion) Fail(at, "needs version " + ConstraintsVersion + "; say \"version\": " + ConstraintsVersion);
+                string v = Text(e, at, 1, 16, null);
+                if (v != null && v != ConstraintsInTheWayValues.Refuse && v != ConstraintsInTheWayValues.Remove) Fail(at, "must be one of " + ConstraintsInTheWayValues.Refuse + ", " + ConstraintsInTheWayValues.Remove);
             }
 
             private void Levels(XElement e, string at)

@@ -1,4 +1,4 @@
-// GENERATED from schema/change-list.schema.json (sha256 a6dd5a5a5925070219d5ce356e9c35b32b20273f6fb8247f6094fb73a2778912) by scripts/gen-types.ts.
+// GENERATED from schema/change-list.schema.json (sha256 cd561f37d7163dfcae278e8b478c5ddced6b35644d02ef512e0b99e2096dece9) by scripts/gen-types.ts.
 // Do not edit: change the schema and run `npm run gen`.
 
 /**
@@ -36,9 +36,16 @@ export type IfcGlobalId = string;
  * via the `definition` "GroupsInTheWay".
  */
 export type GroupsInTheWay = 'refuse' | 'ungroup';
+/**
+ * What a level move does when Revit refuses it because constraints would no longer be satisfied ("Constraints are not satisfied", Revit's DimensionFailures.RegenConstraintUnsatisfied): a locked dimension or alignment (a padlock in Revit) that ties an element to something the move would pull it away from, such as a pile cap locked to a level and to a floor that move by different amounts. refuse, what a change that says nothing does: the move is rolled back, nothing is removed, and the report names the constraints in the way and what each ties. remove: the move is tried first with every constraint kept; if Revit refuses it for constraints in the way (and for model groups, when groups_in_the_way says ungroup) and for nothing else, it is tried again with ONLY the constraint elements Revit named removed first, in the new model alone. The elements they tied stay where they are, and are no longer held to each other: the architect may want to lock them again. The report names every constraint removed and what it tied. Say remove only once the person has agreed to it. Needs change-list version 2.
+ *
+ * This interface was referenced by `ChangeList`'s JSON-Schema
+ * via the `definition` "ConstraintsInTheWay".
+ */
+export type ConstraintsInTheWay = 'refuse' | 'remove';
 
 /**
- * A list of changes for one Revit model, in flo2-rvt's fixed vocabulary. The agent writes only this data; one reviewed add-in maps each change kind to the Revit API. Version 0 defined the envelope, the element reference and three change kinds; version 1 adds move_levels_together and set_level_elevation's groups_in_the_way. flo2-rvt's edit job runs the changes in order, each in its own transaction, saving the result as a NEW .rvt and never changing the input.
+ * A list of changes for one Revit model, in flo2-rvt's fixed vocabulary. The agent writes only this data; one reviewed add-in maps each change kind to the Revit API. Version 0 defined the envelope, the element reference and three change kinds; version 1 adds move_levels_together and set_level_elevation's groups_in_the_way; version 2 adds a level move's constraints_in_the_way. flo2-rvt's edit job runs the changes in order, each in its own transaction, saving the result as a NEW .rvt and never changing the input.
  */
 export interface ChangeList {
   /**
@@ -46,9 +53,9 @@ export interface ChangeList {
    */
   $schema?: string;
   /**
-   * The change-list format version. A new change kind or field that an older add-in could not read bumps it. Version 1 (flo2-rvt 0.6.0, add-in 0.5.0) adds move_levels_together and set_level_elevation's groups_in_the_way, and a list that uses either says 1; a list of version 0's vocabulary reads as it always did, as version 0 or 1.
+   * The change-list format version. A new change kind or field that an older add-in could not read bumps it. Version 1 (flo2-rvt 0.6.0, add-in 0.5.0) adds move_levels_together and set_level_elevation's groups_in_the_way, and a list that uses either says 1; a list of version 0's vocabulary reads as it always did, as version 0 or 1. Version 2 (flo2-rvt 0.7.0, add-in 0.6.0) adds a level move's constraints_in_the_way, and a list that uses it says 2; every list of version 1 reads as it did, as version 1 or 2.
    */
-  version: 0 | 1;
+  version: 0 | 1 | 2;
   /**
    * An optional id the author gives the list, echoed in the job's report.
    */
@@ -110,7 +117,7 @@ export interface DeleteElementsByGlobalId {
   elements: [GlobalIdReference, ...GlobalIdReference[]];
 }
 /**
- * Set a level's elevation. What is on the level moves with it, as it does in Revit: elements whose base or reference level it is keep their offset from it, elements whose top is constrained to it change height, and hosted elements follow their hosts. Each set_level_elevation runs alone, so what spans this level and one not yet moved is stretched or compressed meanwhile; to shift several levels by one amount, use move_levels_together. A model group in the way is handled as groups_in_the_way says.
+ * Set a level's elevation. What is on the level moves with it, as it does in Revit: elements whose base or reference level it is keep their offset from it, elements whose top is constrained to it change height, and hosted elements follow their hosts. Each set_level_elevation runs alone, so what spans this level and one not yet moved is stretched or compressed meanwhile; to shift several levels by one amount, use move_levels_together. A model group in the way is handled as groups_in_the_way says, and a constraint in the way as constraints_in_the_way says.
  *
  * This interface was referenced by `ChangeList`'s JSON-Schema
  * via the `definition` "SetLevelElevation".
@@ -125,6 +132,7 @@ export interface SetLevelElevation {
    */
   relative_to: 'project_origin' | 'elevation_base';
   groups_in_the_way?: GroupsInTheWay;
+  constraints_in_the_way?: ConstraintsInTheWay;
 }
 /**
  * A length with its unit. The add-in converts it to Revit's internal feet (1 ft = 304.8 mm exactly).
@@ -137,7 +145,7 @@ export interface Length {
   unit: 'mm' | 'm' | 'ft' | 'in';
 }
 /**
- * Move several levels by one vertical offset, together, in ONE transaction: every level named moves by `by`, and Revit regenerates the model once, at the commit, with all of them moved. So what lies between two moved levels keeps its shape and moves whole (a wall from one to the other keeps its height, a stair its rise, a model group spanning them its definition), and only what ties a moved level to one that is not moved changes height (a wall from an unmoved level up to a moved one; the report lists it as top_constrained). Each level is named once, and a move by zero is refused. The report gives each level's elevation before and after, and every message Revit raised. A model group in the way is handled as groups_in_the_way says. Needs change-list version 1.
+ * Move several levels by one vertical offset, together, in ONE transaction: every level named moves by `by`, and Revit regenerates the model once, at the commit, with all of them moved. So what lies between two moved levels keeps its shape and moves whole (a wall from one to the other keeps its height, a stair its rise, a model group spanning them its definition), and only what ties a moved level to one that is not moved changes height (a wall from an unmoved level up to a moved one; the report lists it as top_constrained). Each level is named once, and a move by zero is refused. The report gives each level's elevation before and after, and every message Revit raised. A model group in the way is handled as groups_in_the_way says, and a constraint in the way as constraints_in_the_way says. Needs change-list version 1.
  *
  * This interface was referenced by `ChangeList`'s JSON-Schema
  * via the `definition` "MoveLevelsTogether".
@@ -154,6 +162,7 @@ export interface MoveLevelsTogether {
   levels: [LevelReference, ...LevelReference[]];
   by: Length1;
   groups_in_the_way?: GroupsInTheWay;
+  constraints_in_the_way?: ConstraintsInTheWay;
 }
 /**
  * A length with its unit. The add-in converts it to Revit's internal feet (1 ft = 304.8 mm exactly).

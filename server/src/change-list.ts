@@ -31,6 +31,8 @@ export const MODEL_EXTENT_FEET = 105_600;
 const MM_PER_FOOT = 304.8;
 /** The first change-list version that reads move_levels_together and groups_in_the_way. */
 export const MOVE_LEVELS_VERSION = 1;
+/** The first change-list version that reads a level move's constraints_in_the_way (flo2-rvt 0.7.0). */
+export const CONSTRAINTS_VERSION = 2;
 
 /** JSON with every object's keys sorted, no whitespace: the bytes uploaded and hashed. */
 export function canonicalJson(value: unknown): string {
@@ -91,6 +93,9 @@ export function checkChangeList(value: unknown): CheckedChangeList {
       if ((c.kind === 'set_level_elevation' || c.kind === 'move_levels_together') && c.groups_in_the_way !== undefined) {
         errors.push(`changes.${i}.groups_in_the_way needs version ${MOVE_LEVELS_VERSION}; say "version": ${MOVE_LEVELS_VERSION}`);
       }
+    }
+    if (list.version < CONSTRAINTS_VERSION && (c.kind === 'set_level_elevation' || c.kind === 'move_levels_together') && c.constraints_in_the_way !== undefined) {
+      errors.push(`changes.${i}.constraints_in_the_way needs version ${CONSTRAINTS_VERSION}; say "version": ${CONSTRAINTS_VERSION}`);
     }
   });
   if (references > MAX_REFERENCES) errors.push(`the list names ${references} elements; the most one list may name is ${MAX_REFERENCES}`);

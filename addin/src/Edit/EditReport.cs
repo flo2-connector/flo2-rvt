@@ -234,6 +234,8 @@ namespace Flo2Rvt.Addin.Edit
         [DataMember(Name = "groups", Order = 18, EmitDefaultValue = false)] public GroupsReport Groups;
         /// <summary>A level move: why the model groups tied to its levels could not be read; the groups section then lists only what Revit named.</summary>
         [DataMember(Name = "groups_unread", Order = 18, EmitDefaultValue = false)] public string GroupsUnread;
+        /// <summary>Since add-in 0.6.0, a level move: the constraints Revit named in its way, or those removed on the list's word, and what each tied (Logic/ConstraintsInTheWay.cs).</summary>
+        [DataMember(Name = "constraints", Order = 18, EmitDefaultValue = false)] public ConstraintsReport Constraints;
         /// <summary>A level move tried more than once (groups_in_the_way "ungroup"): every try, with every message Revit raised in it. revit_messages is the last try's.</summary>
         [DataMember(Name = "attempts", Order = 19, EmitDefaultValue = false)] public List<MoveAttempt> Attempts;
         [DataMember(Name = "revit_messages", Order = 19, EmitDefaultValue = false)] public List<RevitMessage> RevitMessages;
@@ -483,6 +485,8 @@ namespace Flo2Rvt.Addin.Edit
         [DataMember(Name = "attempt", Order = 0)] public int Attempt;
         /// <summary>The group instances this try ungrouped before it moved the levels.</summary>
         [DataMember(Name = "ungrouped_first", Order = 1, EmitDefaultValue = false)] public List<long> UngroupedFirst;
+        /// <summary>Since add-in 0.6.0: the constraint elements this try removed before it moved the levels (constraints_in_the_way "remove").</summary>
+        [DataMember(Name = "removed_first", Order = 1, EmitDefaultValue = false)] public List<long> RemovedFirst;
         [DataMember(Name = "committed", Order = 2)] public bool Committed;
         [DataMember(Name = "why", Order = 3, EmitDefaultValue = false)] public string Why;
         [DataMember(Name = "revit_messages", Order = 4, EmitDefaultValue = false)] public List<RevitMessage> RevitMessages;
@@ -523,11 +527,53 @@ namespace Flo2Rvt.Addin.Edit
         [DataMember(Name = "linked", Order = 9)] public bool Linked = true;
     }
 
+    /// <summary>A level move's constraints (Logic/ConstraintsInTheWay.cs): those Revit named in its way, or those removed on the list's word.</summary>
+    [DataContract]
+    public sealed class ConstraintsReport
+    {
+        /// <summary>What the change said: refuse (also when it said nothing) or remove.</summary>
+        [DataMember(Name = "constraints_in_the_way", Order = 0)] public string ConstraintsInTheWayOption;
+        /// <summary>Kept change: the constraint elements removed first, each with what it tied.</summary>
+        [DataMember(Name = "removed", Order = 1)] public List<ConstraintRef> Removed = new List<ConstraintRef>();
+        /// <summary>Rolled-back change: the constraint elements Revit named in the way, each with what it ties.</summary>
+        [DataMember(Name = "in_the_way", Order = 2)] public List<ConstraintRef> InTheWay = new List<ConstraintRef>();
+        /// <summary>In plain words, when any was removed: what that means for the elements they tied, and that the original is untouched.</summary>
+        [DataMember(Name = "note", Order = 3, EmitDefaultValue = false)] public string Note;
+    }
+
+    /// <summary>One constraint element (Revit's Constraints category: a locked dimension or alignment) and the elements it ties.</summary>
+    [DataContract]
+    public sealed class ConstraintRef
+    {
+        [DataMember(Name = "element_id", Order = 0)] public long ElementId;
+        /// <summary>Its category as Revit names it (Constraints).</summary>
+        [DataMember(Name = "category", Order = 1, EmitDefaultValue = false)] public string Category;
+        /// <summary>dimension (a Dimension element, locked or with an equality), or constraint when Revit gives no more.</summary>
+        [DataMember(Name = "kind", Order = 2, EmitDefaultValue = false)] public string Kind;
+        /// <summary>Whether the dimension is locked, when it is one.</summary>
+        [DataMember(Name = "locked", Order = 3, EmitDefaultValue = false)] public bool? Locked;
+        /// <summary>The elements it ties, as its references name them.</summary>
+        [DataMember(Name = "ties", Order = 4)] public List<TiedElement> Ties = new List<TiedElement>();
+        /// <summary>Why what it ties could not be read, when it could not.</summary>
+        [DataMember(Name = "ties_unread", Order = 5, EmitDefaultValue = false)] public string TiesUnread;
+    }
+
+    [DataContract]
+    public sealed class TiedElement
+    {
+        [DataMember(Name = "element_id", Order = 0)] public long ElementId;
+        [DataMember(Name = "global_id", Order = 1, EmitDefaultValue = false)] public string GlobalId;
+        [DataMember(Name = "name", Order = 2, EmitDefaultValue = false)] public string Name;
+        [DataMember(Name = "category", Order = 3, EmitDefaultValue = false)] public string Category;
+    }
+
     [DataContract]
     public sealed class RevitMessage
     {
         /// <summary>The kind of failure, when the add-in acts on it: group_in_the_way (BuiltInFailures.GroupFailures.AtomViolationWhenMultiPlacedInstances).</summary>
         public const string GroupInTheWay = "group_in_the_way";
+        /// <summary>Since add-in 0.6.0: constraint_in_the_way (BuiltInFailures.DimensionFailures.RegenConstraintUnsatisfied, "Constraints are not satisfied").</summary>
+        public const string ConstraintInTheWay = "constraint_in_the_way";
 
         /// <summary>Revit's FailureSeverity: Warning, Error or DocumentCorruption.</summary>
         [DataMember(Name = "severity", Order = 0)] public string Severity;
@@ -536,8 +582,14 @@ namespace Flo2Rvt.Addin.Edit
         [DataMember(Name = "handled", Order = 2)] public string Handled;
         /// <summary>The elements Revit names in it, the first 50.</summary>
         [DataMember(Name = "element_ids", Order = 3)] public List<long> ElementIds = new List<long>();
-        /// <summary>Since add-in 0.5.0: group_in_the_way, or absent.</summary>
+        /// <summary>Since add-in 0.5.0: group_in_the_way, or absent; since 0.6.0, constraint_in_the_way too.</summary>
         [DataMember(Name = "kind", Order = 4, EmitDefaultValue = false)] public string Kind;
+        /// <summary>Since add-in 0.6.0: the category of each element in element_ids, in the same order ("" when it has none), so the report says what each named element is.</summary>
+        [DataMember(Name = "element_categories", Order = 5, EmitDefaultValue = false)] public List<string> ElementCategories;
+        /// <summary>Since add-in 0.6.0: Revit's id for this kind of failure (FailureDefinitionId's Guid).</summary>
+        [DataMember(Name = "definition", Order = 6, EmitDefaultValue = false)] public string Definition;
+        /// <summary>Since add-in 0.6.0: the caption of the resolution Revit offers for it (its dialog's button), when it offers one. The add-in never takes it; it is reported so a person knows one exists.</summary>
+        [DataMember(Name = "revit_offers", Order = 7, EmitDefaultValue = false)] public string RevitOffers;
     }
 
     [DataContract]
