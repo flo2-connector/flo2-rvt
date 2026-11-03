@@ -101,6 +101,22 @@ describe('the tools, as the contract names them', () => {
     assert.equal(start.inputSchema.properties.max_minutes?.default, 15);
   });
 
+  // A chat cannot pause between its own calls: told by these texts to poll "every minute or so"
+  // and "about once a minute", a fresh chat on flo2.io (2026-11-03) read them beside flo2.io's
+  // "call again right away" (flo2.io holds each status call until the job moves), and an earlier
+  // one called every 1.7 s. A tool's own text names no wait for the caller to keep.
+  test('no tool text asks the caller to wait by itself between status calls', async () => {
+    const r = await rpc(h.url, { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} });
+    const tools = (r.json as Rpc).result?.tools ?? [];
+    for (const t of tools) {
+      const text = String(t.description ?? '');
+      assert.doesNotMatch(text, /once a minute|every minute|in a minute|minute or so|poll\b/i, t.name as string);
+    }
+    const said = (name: string) => String(tools.find((t) => t.name === name)?.description ?? '');
+    for (const name of ['rvt_probe_start', 'rvt_edit_start']) assert.match(said(name), /call rvt_job_status with it, and again as soon as each answer comes/, name);
+    assert.match(said('rvt_job_status'), /again as soon as each answer comes/);
+  });
+
   test('both tools refuse a call without the hidden job context', async () => {
     assert.match(refusalText(await call(h, 'rvt_probe_start', { file: 'rac_basic_sample_project.rvt' })), /reached only through flo2\.io/);
     assert.match(refusalText(await call(h, 'rvt_job_status', { job_id: '6f1e2b3c-4d5e-4f60-8a7b-9c0d1e2f3a4b' })), /reached only through flo2\.io/);

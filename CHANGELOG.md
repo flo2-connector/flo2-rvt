@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.1 (unreleased)
+
+A tool's own text never asks the caller to wait by itself. The owner's-change loop's first fresh-chat run on flo2.io (2026-11-03) read `rvt_edit_start`'s description, "poll rvt_job_status every minute or so", beside flo2.io's own words, "call again right away" (flo2.io holds each status call until the job moves, because a chat cannot pause between its own calls: told to wait a minute, one called every 1.7 s on 2026-11-02). flo2.io passes these descriptions to a chat unchanged, so the two texts disagreed in front of it. Recorded in flo2's design (`fact:step-7-run-1-what-a-fresh-chat-tripped-on-in-the-owners-change-loop-2026-11-03`, finding 3). The server only: the add-in is unchanged (0.6.0), so no app needs its one-time setup again; contract v3 unchanged.
+
+- **The start tools** (`rvt_probe_start`, `rvt_edit_start`): "call rvt_job_status with it, and again as soon as each answer comes, until the state is success or a failure (flo2.io holds each status call until the job moves, so add no wait of your own)".
+- **`rvt_job_status`**: "Call it again as soon as each answer comes, until the state is final", for "Poll it about once a minute".
+- **Tests**: no tool text names a wait for the caller to keep, and the three say to call again as soon as each answer comes. It failed on 0.7.0 with the very sentence the chat read.
+
 ## 0.7.0 (unreleased)
 
 A constraint in the way of a level move is named, and removed only on the list's word. The owner's-change loop's first run with a fresh chat (2026-11-03, a copy of Autodesk's sample house) lowered all six levels together by 9 3/8 in with `move_levels_together`, and Revit rolled the move back twice over with "Constraints are not satisfied" (`BuiltInFailures.DimensionFailures.RegenConstraintUnsatisfied`), naming two pile caps, the Foundation level, a timber floor and two elements the report named nowhere else; the model holds 103 constraints. The add-in had no answer for it: the report gave Revit's sentence and element ids, not which element was a constraint or what it tied, and a change list could not say what to do about it. Root cause in flo2-rvt's design (`fact:root-cause-a-level-move-blocked-by-revits-constraints-is-rolled-back-with-no-path-2026-11-03`). Change-list schema version 2 (versions 0 and 1 read as before); add-in 0.6.0; report version 2 still (fields added, none changed); contract v3 unchanged.
