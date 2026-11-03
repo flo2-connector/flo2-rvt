@@ -153,6 +153,8 @@ namespace Flo2Rvt.Addin.Edit
         [DataMember(Name = "other_elements_left_on_level", Order = 14)] public int OtherElementsLeftOnLevel;
         /// <summary>Since add-in 0.5.0: model group instances the kept level moves ungrouped, on the list's groups_in_the_way "ungroup".</summary>
         [DataMember(Name = "groups_ungrouped", Order = 15)] public int GroupsUngrouped;
+        /// <summary>Since add-in 0.7.0: elements the kept level moves reshaped that nothing in the list asked for (reshaped_by_revit.unexpected).</summary>
+        [DataMember(Name = "elements_reshaped_unexpected", Order = 16)] public int ElementsReshapedUnexpected;
 
         public void Count(ChangeReport c)
         {
@@ -188,6 +190,7 @@ namespace Flo2Rvt.Addin.Edit
                 OtherElementsLeftOnLevel += c.LeftOnLevel.OtherElements;
             }
             if (c.Groups != null && c.Groups.Ungrouped != null) GroupsUngrouped += c.Groups.Ungrouped.Count;
+            if (c.ReshapedByRevit != null) ElementsReshapedUnexpected += c.ReshapedByRevit.Unexpected;
         }
     }
 
@@ -236,6 +239,10 @@ namespace Flo2Rvt.Addin.Edit
         [DataMember(Name = "groups_unread", Order = 18, EmitDefaultValue = false)] public string GroupsUnread;
         /// <summary>Since add-in 0.6.0, a level move: the constraints Revit named in its way, or those removed on the list's word, and what each tied (Logic/ConstraintsInTheWay.cs).</summary>
         [DataMember(Name = "constraints", Order = 18, EmitDefaultValue = false)] public ConstraintsReport Constraints;
+        /// <summary>Since add-in 0.7.0, a kept level move: every element Revit touched, measured before and after, and those it reshaped, each expected or not (Logic/Reshapes.cs).</summary>
+        [DataMember(Name = "reshaped_by_revit", Order = 18, EmitDefaultValue = false)] public ReshapedReport ReshapedByRevit;
+        /// <summary>Since add-in 0.7.0, a level move: why the shapes could not be measured; reshaped_by_revit is then absent and nothing is judged.</summary>
+        [DataMember(Name = "reshaped_unread", Order = 18, EmitDefaultValue = false)] public string ReshapedUnread;
         /// <summary>A level move tried more than once (groups_in_the_way "ungroup"): every try, with every message Revit raised in it. revit_messages is the last try's.</summary>
         [DataMember(Name = "attempts", Order = 19, EmitDefaultValue = false)] public List<MoveAttempt> Attempts;
         [DataMember(Name = "revit_messages", Order = 19, EmitDefaultValue = false)] public List<RevitMessage> RevitMessages;
@@ -243,6 +250,52 @@ namespace Flo2Rvt.Addin.Edit
 
         /// <summary>Not written: whether a transaction was committed for it (EditRun counts them).</summary>
         public bool Committed;
+    }
+
+    /// <summary>A kept level move's reshaped_by_revit (Logic/Reshapes.cs).</summary>
+    [DataContract]
+    public sealed class ReshapedReport
+    {
+        /// <summary>Elements Revit touched that were measured before and after.</summary>
+        [DataMember(Name = "measured", Order = 0)] public int Measured;
+        /// <summary>Elements Revit touched with no shape to measure on one side (datums, views, annotation, an element Revit added).</summary>
+        [DataMember(Name = "unmeasured", Order = 1)] public int Unmeasured;
+        /// <summary>Of the measured, those whose shape changed.</summary>
+        [DataMember(Name = "total", Order = 2)] public int Total;
+        /// <summary>Of those, the ones nothing in the change asked for.</summary>
+        [DataMember(Name = "unexpected", Order = 3)] public int Unexpected;
+        /// <summary>The first Reshapes.Cap: the unexpected first.</summary>
+        [DataMember(Name = "elements", Order = 4)] public List<ReshapedElement> Elements = new List<ReshapedElement>();
+        [DataMember(Name = "truncated", Order = 5, EmitDefaultValue = false)] public bool Truncated;
+        [DataMember(Name = "note", Order = 6, EmitDefaultValue = false)] public string Note;
+    }
+
+    [DataContract]
+    public sealed class ReshapedElement
+    {
+        [DataMember(Name = "element_id", Order = 0)] public long ElementId;
+        [DataMember(Name = "global_id", Order = 1, EmitDefaultValue = false)] public string GlobalId;
+        [DataMember(Name = "category", Order = 2, EmitDefaultValue = false)] public string Category;
+        [DataMember(Name = "revit_class", Order = 3, EmitDefaultValue = false)] public string RevitClass;
+        [DataMember(Name = "model_element", Order = 4)] public bool ModelElement;
+        [DataMember(Name = "expected", Order = 5)] public bool Expected;
+        [DataMember(Name = "why_expected", Order = 6, EmitDefaultValue = false)] public string WhyExpected;
+        /// <summary>The bounding box's size, x y z, before and after, in mm.</summary>
+        [DataMember(Name = "size_before_mm", Order = 7)] public List<double> SizeBeforeMm;
+        [DataMember(Name = "size_after_mm", Order = 8)] public List<double> SizeAfterMm;
+        [DataMember(Name = "height_change_mm", Order = 9)] public double HeightChangeMm;
+        [DataMember(Name = "stair", Order = 10, EmitDefaultValue = false)] public StairChange Stair;
+    }
+
+    [DataContract]
+    public sealed class StairChange
+    {
+        [DataMember(Name = "desired_risers_before", Order = 0)] public int DesiredRisersBefore;
+        [DataMember(Name = "desired_risers_after", Order = 1)] public int DesiredRisersAfter;
+        [DataMember(Name = "actual_risers_before", Order = 2)] public int ActualRisersBefore;
+        [DataMember(Name = "actual_risers_after", Order = 3)] public int ActualRisersAfter;
+        [DataMember(Name = "riser_height_before_mm", Order = 4)] public double RiserHeightBeforeMm;
+        [DataMember(Name = "riser_height_after_mm", Order = 5)] public double RiserHeightAfterMm;
     }
 
     [DataContract]

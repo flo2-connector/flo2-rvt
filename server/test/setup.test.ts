@@ -194,7 +194,7 @@ describe('rvt_setup_check', () => {
       );
       const setup = out.setup as { available: boolean; addin_version: string; bundle_sha256: string; bundle_bytes: number; nickname: { now: string | null; will_set: string | null }; deletes_nothing: boolean };
       assert.equal(setup.available, true);
-      assert.equal(setup.addin_version, '0.6.0');
+      assert.equal(setup.addin_version, ADDIN_VERSION);
       assert.equal(setup.bundle_sha256, BUNDLE_SHA);
       assert.equal(setup.bundle_bytes, BUNDLE_BYTES.length);
       assert.deepEqual(setup.nickname, { now: null, will_set: null, keeps_client_id: true }, 'a setup sets no nickname: the client id names everything');
@@ -246,7 +246,7 @@ describe('rvt_setup_check', () => {
       assert.match(String(out.why), new RegExp(`runs add-in 0\\.4\\.0, not ${ADDIN_VERSION.replace(/\./g, '\\.')}`));
       assert.ok((out.found as Array<{ state: string; kind: string; addin_version?: string }>).filter((f) => f.kind === 'activity').every((f) => f.state === 'outdated' && f.addin_version === '0.4.0'));
       const run = ok(await call(h, 'rvt_setup_run', {}, setupMeta(h, approved)));
-      assert.equal(run.addin_version, '0.6.0');
+      assert.equal(run.addin_version, ADDIN_VERSION);
       assert.equal((run.check as { ready: boolean }).ready, true);
     } finally {
       await h.close();
@@ -321,7 +321,7 @@ describe('rvt_setup_run', () => {
         assert.equal(out.state, 'set_up');
         assert.equal(out.owner, CLIENT_ID);
         assert.equal(out.owner_how, 'client_id');
-        assert.equal(out.addin_version, '0.6.0');
+        assert.equal(out.addin_version, ADDIN_VERSION);
         assert.equal(out.bundle_sha256, BUNDLE_SHA);
         assert.deepEqual(out.monthly_hours, { requested: 3, reported: 3 });
         assert.equal((out.appbundle as { id: string }).id, `${CLIENT_ID}.Flo2RvtProbe+prod`);

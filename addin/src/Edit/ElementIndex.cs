@@ -77,6 +77,12 @@ namespace Flo2Rvt.Addin.Edit
         private readonly Dictionary<string, List<KeyValuePair<Entry, string>>> secondary = new Dictionary<string, List<KeyValuePair<Entry, string>>>(StringComparer.Ordinal);
 
         public int Count { get { return byId.Count; } }
+
+        /// <summary>Every model element the index holds, as it was before any change ran (Edit/Shapes.cs measures them before a level move).</summary>
+        public IEnumerable<long> ModelIds()
+        {
+            foreach (Entry e in byId.Values) if (e.IsModel) yield return e.Id;
+        }
         public int Unreadable { get; private set; }
         public IndexInfo Info { get; private set; }
 

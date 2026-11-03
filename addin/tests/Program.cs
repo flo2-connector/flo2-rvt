@@ -22,6 +22,7 @@ using System.Text;
 using System.Text.Json;
 using Flo2Rvt.Addin.Edit;
 using Flo2Rvt.Addin.Edit.Logic;
+using Flo2Rvt.Addin.Probe;
 using Flo2Rvt.ChangeLists;
 
 namespace Flo2Rvt.Addin.Tests
@@ -907,6 +908,85 @@ namespace Flo2Rvt.Addin.Tests
                 Eq("Remove Constraints", r.Attempts[0].RevitMessages[0].RevitOffers, "what Revit offers read back");
                 Eq(518091L, r.Attempts[1].RemovedFirst[0], "what a try removed first read back");
             });
+            // Step 7 of the owner's-change loop, 2026-11-03 (flo2-rvt's fact:root-cause-a-level-move-
+            // reshaped-a-stair-and-the-report-could-not-say-so-2026-11-03): six levels of Autodesk's sample
+            // house down 9 3/8 in (-0.78125 ft) together; Precast Stair 513254 went from 3 to 4 desired
+            // risers and its run from 541.7 to 412.5 mm tall; Precast Stair 725045 and the assembled stair
+            // moved whole. Measures in feet, as Revit gives them, from the step's IFCs.
+            Test("a level move reports what Revit reshaped: the living-room stair is unexpected, what moved whole is not listed, a top-constrained wall is expected", () =>
+            {
+                const double By = -0.78125;
+                var before = new Dictionary<long, ShapeMeasure>
+                {
+                    [513254] = Box(-10261.6, -15508.7, -550, -7296.6, -12929.3, -8.3, new StairMeasure { DesiredRisers = 3, ActualRisers = 3, RiserHeightFt = 180.5555555556 / 304.8 }),
+                    [725045] = Box(-11053.3, -19511.1, 2500, -5659.7, -15101.6, 3000, new StairMeasure { DesiredRisers = 3, ActualRisers = 3, RiserHeightFt = 166.6666666667 / 304.8 }),
+                    [665557] = Box(-12233.4, -14382.4, 0, -7464.4, -8712, 3000, new StairMeasure { DesiredRisers = 16, ActualRisers = 16, RiserHeightFt = 187.5 / 304.8 }),
+                    [900001] = Box(0, 0, 0, 1000, 200, 2700, null),
+                };
+                var after = new Dictionary<long, ShapeMeasure>
+                {
+                    [513254] = Box(-10261.6, -15508.7, -788.1, -7296.6, -12929.3, -375.6, new StairMeasure { DesiredRisers = 4, ActualRisers = 3, RiserHeightFt = 137.5 / 304.8 }),
+                    [725045] = Shifted(before[725045], By),
+                    [665557] = Shifted(before[665557], By),
+                    [900001] = Box(0, 0, -238.125, 1000, 200, 2700, null),
+                };
+                // 1 is a level (no shape): touched, not measured.
+                ReshapedReport r = Reshapes.Collect(before, after, new long[] { 513254, 725045, 665557, 900001, 1, 513254 }, new HashSet<long> { 900001 }, id => new ElementRef { ElementId = id, Category = id == 900001 ? "Walls" : "Stairs", RevitClass = id == 900001 ? "Wall" : "Stairs", ModelElement = true });
+                Eq(4, r.Measured, "every touched element with a shape before and after, each once");
+                Eq(1, r.Unmeasured, "the level has no shape");
+                Eq(2, r.Total, "the stair and the wall changed shape; the two stairs that moved whole did not");
+                Eq(1, r.Unexpected, "only the stair is unexpected");
+                ReshapedElement stair = r.Elements[0];
+                Eq(513254L, stair.ElementId, "the unexpected first");
+                Is(!stair.Expected && stair.WhyExpected == null, "nothing in the change asked for it");
+                Eq(-129.2, Math.Round(stair.HeightChangeMm, 1), "its run 129.2 mm shorter");
+                Is(stair.Stair != null && stair.Stair.DesiredRisersBefore == 3 && stair.Stair.DesiredRisersAfter == 4 && stair.Stair.ActualRisersAfter == 3, "its risers: 3 desired became 4, 3 actual stayed");
+                Eq(137.5, stair.Stair.RiserHeightAfterMm, "its riser now 137.5 mm");
+                Is(r.Elements[1].ElementId == 900001 && r.Elements[1].Expected && r.Elements[1].WhyExpected.Contains("top_constrained"), "the wall changed height as the change said it would");
+                Is(r.Note == Reshapes.UnexpectedNote, "the note says what an unexpected reshape means");
+                ReshapedReport whole = Reshapes.Collect(before, new Dictionary<long, ShapeMeasure> { [725045] = Shifted(before[725045], By) }, new long[] { 725045 }, new HashSet<long>(), id => null);
+                Is(whole.Measured == 1 && whole.Total == 0 && whole.Unexpected == 0 && whole.Note == null && whole.Elements.Count == 0, "a move that reshaped nothing says so: measured, none reshaped");
+                ChangeReport kept = MoveReport(ChangeStatus.Applied, 9.5);
+                kept.ReshapedByRevit = r;
+                Eq(0, ReportCheck.Violations(kept).Count, "the report check holds: " + string.Join("; ", ReportCheck.Violations(kept)));
+                ChangeReport rolled = MoveReport(ChangeStatus.RolledBack, 9.5);
+                rolled.ReshapedByRevit = r;
+                Is(ReportCheck.Violations(rolled).Any(v => v.Contains("reshaped, though the change was not kept")), "a change not kept lists nothing reshaped");
+                r.Unexpected = 0;
+                Is(ReportCheck.Violations(kept).Any(v => v.Contains("unexpected element(s) but counts")), "the counts add up");
+            });
+            Test("a stair whose risers change is reshaped even when its box does not show it; rounding is not a reshape", () =>
+            {
+                ShapeMeasure b = Box(0, 0, 0, 3000, 1000, 550, new StairMeasure { DesiredRisers = 3, ActualRisers = 3, RiserHeightFt = 183.3333 / 304.8 });
+                Is(Reshapes.Reshaped(b, Box(0, 0, 0, 3000, 1000, 550, new StairMeasure { DesiredRisers = 4, ActualRisers = 3, RiserHeightFt = 183.3333 / 304.8 })), "desired risers changed");
+                Is(Reshapes.Reshaped(b, Box(0, 0, 0, 3000, 1000, 550, new StairMeasure { DesiredRisers = 3, ActualRisers = 3, RiserHeightFt = 137.5 / 304.8 })), "riser height changed");
+                Is(!Reshapes.Reshaped(b, Box(0.05, 0, 0, 3000.05, 1000, 550.05, new StairMeasure { DesiredRisers = 3, ActualRisers = 3, RiserHeightFt = 183.3333 / 304.8 })), "moved a twentieth of a mm, same size: not reshaped");
+                Is(!Reshapes.Reshaped(b, Shifted(b, -0.78125)), "moved whole: not reshaped");
+            });
+            Test("report.json carries reshaped_by_revit, its total, and the elements a stored warning flags, and reads them back", () =>
+            {
+                var report = new EditReport();
+                ChangeReport c = MoveReport(ChangeStatus.Applied, 9.5);
+                c.ReshapedByRevit = Reshapes.Collect(
+                    new Dictionary<long, ShapeMeasure> { [513254] = Box(0, 0, -550, 10, 10, -8.3, new StairMeasure { DesiredRisers = 3, ActualRisers = 3, RiserHeightFt = 0.59 }) },
+                    new Dictionary<long, ShapeMeasure> { [513254] = Box(0, 0, -788.1, 10, 10, -375.6, new StairMeasure { DesiredRisers = 4, ActualRisers = 3, RiserHeightFt = 0.45 }) },
+                    new long[] { 513254 }, new HashSet<long>(), id => new ElementRef { ElementId = id, GlobalId = "07dHKEjXj6kwcHAxpyAkMS", Category = "Stairs", ModelElement = true });
+                report.Changes.Add(c);
+                report.Totals.Count(c);
+                report.Warnings.Add(new WarningInfo { Source = "revit", Text = "Stair top end exceeds or cannot reach the top elevation of the stair.", Count = 1, Elements = new List<WarningElement> { new WarningElement { ElementId = 513254, Category = "Stairs" } } });
+                Eq(1, report.Totals.ElementsReshapedUnexpected, "the total counts the unexpected");
+                var buffer = new MemoryStream();
+                report.WriteTo(buffer);
+                string json = Encoding.UTF8.GetString(buffer.ToArray());
+                foreach (string key in new[] { "\"reshaped_by_revit\"", "\"unexpected\"", "\"size_before_mm\"", "\"height_change_mm\"", "\"desired_risers_after\"", "\"riser_height_after_mm\"", "\"elements_reshaped_unexpected\"" })
+                    Is(json.Contains(key), "report.json names " + key);
+                buffer.Position = 0;
+                EditReport back = EditReport.ReadFrom(buffer);
+                Eq(513254L, back.Changes[0].ReshapedByRevit.Elements[0].ElementId, "the reshaped stair read back");
+                Eq(4, back.Changes[0].ReshapedByRevit.Elements[0].Stair.DesiredRisersAfter, "its risers read back");
+                Eq(513254L, back.Warnings[0].Elements[0].ElementId, "the element a warning flags read back");
+                Eq(1, back.Totals.ElementsReshapedUnexpected, "the total read back");
+            });
             Test("the uniform shift: every level from the first floor to the roof moved by one offset keeps the groups spanning them; only what reaches down to the basement is reshaped", () =>
             {
                 // Nine made-up levels (ids 1 to 9) moved together by one offset, the basement (0) not moved.
@@ -947,6 +1027,19 @@ namespace Flo2Rvt.Addin.Tests
         }
 
         /// <summary>A locked dimension tying a pile cap, as Edit/Constraints.cs reads one.</summary>
+        /// <summary>A bounding box from mm, as feet; with a stair's risers when given.</summary>
+        private static ShapeMeasure Box(double x0, double y0, double z0, double x1, double y1, double z1, StairMeasure stair)
+        {
+            const double Ft = 304.8;
+            return new ShapeMeasure { Min = new[] { x0 / Ft, y0 / Ft, z0 / Ft }, Max = new[] { x1 / Ft, y1 / Ft, z1 / Ft }, Stair = stair };
+        }
+
+        /// <summary>The same box moved whole by dz feet, with the same risers.</summary>
+        private static ShapeMeasure Shifted(ShapeMeasure m, double dz)
+        {
+            return new ShapeMeasure { Min = new[] { m.Min[0], m.Min[1], m.Min[2] + dz }, Max = new[] { m.Max[0], m.Max[1], m.Max[2] + dz }, Stair = m.Stair };
+        }
+
         private static ConstraintRef ConstraintCap(long id, long cap)
         {
             return new ConstraintRef { ElementId = id, Category = "Constraints", Kind = "dimension", Locked = true, Ties = new List<TiedElement> { new TiedElement { ElementId = cap, Name = "Pile Cap", Category = "Structural Foundations" } } };

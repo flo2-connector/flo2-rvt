@@ -416,7 +416,8 @@ namespace Flo2Rvt.Addin.Jobs
             double target = fromOrigin ? level.Elevation + (feet - level.ProjectElevation) : feet;
             r.Elevation = new ElevationChange { RelativeTo = change.RelativeTo, RequestedFt = Lengths.Round(feet), RequestedMm = Lengths.Round(Lengths.ToMm(feet)), Before = Read(level) };
             r.Attached = ReportedElements.From(Tally(doc, index, LevelRules.OnLevel(doc, level.Id).Select(e => e.Id.Value)));
-            r.TopConstrained = ReportedElements.From(Tally(doc, index, LevelRules.TopConstrainedTo(doc, level.Id).Select(e => e.Id.Value)));
+            var topConstrained = new HashSet<long>(LevelRules.TopConstrainedTo(doc, level.Id).Select(e => e.Id.Value));
+            r.TopConstrained = ReportedElements.From(Tally(doc, index, topConstrained));
             if (Math.Abs(target - level.Elevation) < 1e-9)
             {
                 r.Status = ChangeStatus.NotApplied;
@@ -425,7 +426,7 @@ namespace Flo2Rvt.Addin.Jobs
                 return;
             }
             var goals = new List<LevelGoal> { new LevelGoal { Level = level, TargetFt = target } };
-            RunResult run = MoveLevels(context, index, r, goals, change.GroupsInTheWay, change.ConstraintsInTheWay, "set the elevation of level " + level.Name);
+            RunResult run = MoveLevels(context, index, r, goals, change.GroupsInTheWay, change.ConstraintsInTheWay, topConstrained, "set the elevation of level " + level.Name);
             r.Elevation.After = Read(level);
             if (!run.Committed) return;
             MoveOutcome o = LevelMoves.Committed(new[] { new LevelLanding { Name = level.Name, RequestedFt = target, AfterFt = level.Elevation } });
@@ -484,8 +485,9 @@ namespace Flo2Rvt.Addin.Jobs
             // What sits on a moved level moves with it; what only reaches a moved level from a level not moved changes height.
             var attached = new HashSet<long>(levels.SelectMany(l => LevelRules.OnLevel(doc, l.Id)).Select(e => e.Id.Value));
             r.Attached = ReportedElements.From(Tally(doc, index, attached));
-            r.TopConstrained = ReportedElements.From(Tally(doc, index, new HashSet<long>(levels.SelectMany(l => LevelRules.TopConstrainedTo(doc, l.Id)).Select(e => e.Id.Value).Where(id => !attached.Contains(id)))));
-            RunResult run = MoveLevels(context, index, r, goals, change.GroupsInTheWay, change.ConstraintsInTheWay, "move " + levels.Count + " level(s) together by " + r.Move.ByFt.ToString(CultureInfo.InvariantCulture) + " ft");
+            var topConstrained = new HashSet<long>(levels.SelectMany(l => LevelRules.TopConstrainedTo(doc, l.Id)).Select(e => e.Id.Value).Where(id => !attached.Contains(id)));
+            r.TopConstrained = ReportedElements.From(Tally(doc, index, topConstrained));
+            RunResult run = MoveLevels(context, index, r, goals, change.GroupsInTheWay, change.ConstraintsInTheWay, topConstrained, "move " + levels.Count + " level(s) together by " + r.Move.ByFt.ToString(CultureInfo.InvariantCulture) + " ft");
             for (int i = 0; i < levels.Count; i++) r.Move.Levels[i].After = Read(levels[i]);
             if (!run.Committed) return;
             MoveOutcome o = LevelMoves.Committed(goals.Select(g => new LevelLanding { Name = g.Level.Name, RequestedFt = g.TargetFt, AfterFt = g.Level.Elevation }));
@@ -500,11 +502,24 @@ namespace Flo2Rvt.Addin.Jobs
         /// kind it named, again, in a new transaction, with the group instances Revit named
         /// ungrouped and the constraint elements it named removed first (Logic/ConstraintsInTheWay.cs
         /// decides). Records the last try (Record), every try when there was more than one, and the
-        /// groups and constraints as the model is after it. Returns the last try.
+        /// groups and constraints as the model is after it, and, for a kept move, every element
+        /// Revit reshaped (Logic/Reshapes.cs: measured before the first try and after the kept one;
+        /// expectedToReshape is what the change says changes height). Returns the last try.
         /// </summary>
-        private static RunResult MoveLevels(JobContext context, ElementIndex index, ChangeReport r, List<LevelGoal> goals, string option, string constraintsOption, string name)
+        private static RunResult MoveLevels(JobContext context, ElementIndex index, ChangeReport r, List<LevelGoal> goals, string option, string constraintsOption, ISet<long> expectedToReshape, string name)
         {
             Document doc = context.Document;
+            // Every model element's shape before the move, so a kept move can say what Revit reshaped.
+            Dictionary<long, ShapeMeasure> shapesBefore = null;
+            try
+            {
+                context.Heartbeat.Step(name + ": measuring the model's shapes before the move");
+                shapesBefore = Shapes.Measure(doc, index.ModelIds());
+            }
+            catch (Exception ex)
+            {
+                r.ReshapedUnread = ex.GetType().Name + ": " + ex.Message;
+            }
             IDictionary<long, double> offsets = LevelMoves.Offsets(goals.ToDictionary(g => g.Level.Id.Value, g => g.TargetFt - g.Level.Elevation));
             List<GroupFacts> tied = new List<GroupFacts>();
             try
@@ -575,6 +590,19 @@ namespace Flo2Rvt.Addin.Jobs
             }
             // The group instances ungrouped and the constraints removed by a kept change are its own deletions, not Revit's.
             Record(doc, r, index, run, run.Committed ? ungroup.Concat(remove).ToList() : new List<long>());
+            if (run.Committed && shapesBefore != null)
+            {
+                try
+                {
+                    List<long> touched = run.Modified.Where(id => !run.Deleted.Contains(id)).ToList();
+                    Dictionary<long, ShapeMeasure> shapesAfter = Shapes.Measure(doc, touched);
+                    r.ReshapedByRevit = Reshapes.Collect(shapesBefore, shapesAfter, touched, expectedToReshape, id => ElementRef.Of(index.Facts(doc, new ElementId(id))));
+                }
+                catch (Exception ex)
+                {
+                    r.ReshapedUnread = ex.GetType().Name + ": " + ex.Message;
+                }
+            }
             if (attempts.Count > 1) r.Attempts = attempts;
             // As the model is after the change: an ungrouped group is one that is gone; a kept group is one still there.
             List<GroupFacts> ungrouped = run.Committed ? ungroup.Where(id => facts.ContainsKey(id) && !Groups.IsGroup(doc, id)).Select(id => facts[id]).ToList() : new List<GroupFacts>();

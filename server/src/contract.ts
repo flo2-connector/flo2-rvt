@@ -157,6 +157,8 @@ export const EditSummary = z.object({
   deleted_with_host: z.number().int().optional(),
   /** Model elements still tied to a level a delete_elements_on_level emptied, each listed with why in report.json. */
   left_on_level: z.number().int().optional(),
+  /** Since add-in 0.7.0: elements a kept level move reshaped that nothing in the list asked for, each listed in report.json's reshaped_by_revit; absent from an older report, which never measured it. */
+  reshaped_unexpected: z.number().int().optional(),
   model_saved: z.boolean(),
 });
 export type EditSummary = z.infer<typeof EditSummary>;
