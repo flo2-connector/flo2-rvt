@@ -13,7 +13,9 @@
 // lies between two moved levels has kept its shape. That last step is inferred from the two
 // documented ones; a real job on a model with groups spanning floors proves it.
 //
-// ⭐ THE SHAPE RULE. Whatever is tied to levels (by its base, reference or top level) MOVES WHOLE
+// ⭐ THE SHAPE RULE (what is EXPECTED; since add-in 0.7.0 Logic/Reshapes.cs measures what Revit
+// actually did, because Revit can reshape an element on its own, a stair breaking its own riser rule
+// for one). Whatever is tied to levels (by its base, reference or top level) MOVES WHOLE
 // when every level it is tied to moves by the same amount, is NOT MOVED when none of them moves,
 // and is RESHAPED otherwise: tied to a level that moves and to one that does not (a wall from an
 // unmoved basement up to a moved first floor), or to two that move by different amounts.

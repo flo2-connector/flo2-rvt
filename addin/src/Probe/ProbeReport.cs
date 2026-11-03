@@ -139,5 +139,18 @@ namespace Flo2Rvt.Addin.Probe
         [DataMember(Name = "source", Order = 0)] public string Source;
         [DataMember(Name = "text", Order = 1)] public string Text;
         [DataMember(Name = "count", Order = 2)] public int Count;
+        /// <summary>Since add-in 0.7.0, a warning stored in the model: the elements it flags (its failing and additional elements), the first WarningElement.Cap.</summary>
+        [DataMember(Name = "elements", Order = 3, EmitDefaultValue = false)] public List<WarningElement> Elements;
+        /// <summary>How many elements it flags in all, when more than are listed.</summary>
+        [DataMember(Name = "elements_total", Order = 4, EmitDefaultValue = false)] public int ElementsTotal;
+    }
+
+    /// <summary>An element a stored warning flags (FailureMessage.GetFailingElements, GetAdditionalElements). Since add-in 0.7.0.</summary>
+    [DataContract]
+    public sealed class WarningElement
+    {
+        public const int Cap = 50;
+        [DataMember(Name = "element_id", Order = 0)] public long ElementId;
+        [DataMember(Name = "category", Order = 1, EmitDefaultValue = false)] public string Category;
     }
 }

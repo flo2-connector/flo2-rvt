@@ -112,6 +112,7 @@ namespace Flo2Rvt.Addin.Edit.Logic
             Adds(r.DeletedWithHost, "deleted_with_host", at, found);
             Adds(r.ModifiedByRevit, "modified_by_revit", at, found);
             LevelMoves(r, at, found);
+            Reshaped(r, deleted, at, found);
             bool delete = r.Kind == ChangeKinds.DeleteElementsOnLevel || r.Kind == ChangeKinds.DeleteElementsByGlobalId;
             if (delete && ChangeStatus.Kept(r.Status))
             {
@@ -120,6 +121,21 @@ namespace Flo2Rvt.Addin.Edit.Logic
                 if (r.Status != should) found.Add(at + "reads " + r.Status + " though " + (undone == 0 ? "nothing it named is left undone" : undone + " of what it named is left undone"));
             }
             return found;
+        }
+
+        /// <summary>Since add-in 0.7.0: what a level move reshaped is listed only for a kept change, adds up, and is never also deleted.</summary>
+        private static void Reshaped(ChangeReport r, HashSet<long> deleted, string at, List<string> found)
+        {
+            ReshapedReport rs = r.ReshapedByRevit;
+            if (rs == null) return;
+            if (!ChangeStatus.Kept(r.Status)) found.Add(at + "lists what Revit reshaped, though the change was not kept");
+            if (!rs.Truncated && rs.Elements.Count != rs.Total) found.Add(at + "reshaped_by_revit lists " + rs.Elements.Count + " element(s) but counts " + rs.Total);
+            if (!rs.Truncated && rs.Elements.Count(e => !e.Expected) != rs.Unexpected) found.Add(at + "reshaped_by_revit lists " + rs.Elements.Count(e => !e.Expected) + " unexpected element(s) but counts " + rs.Unexpected);
+            if (rs.Unexpected > rs.Total || rs.Total > rs.Measured) found.Add(at + "reshaped_by_revit's counts do not nest (unexpected <= total <= measured)");
+            foreach (ReshapedElement e in rs.Elements)
+            {
+                if (deleted.Contains(e.ElementId)) found.Add(at + "element " + e.ElementId + " is both reshaped and deleted");
+            }
         }
 
         private static string Ft(double v)

@@ -268,6 +268,17 @@ describe("an edit's report summary", () => {
     assert.ok(EditSummary.safeParse(s).success, 'in the contract');
   });
 
+  // Step 7 of the owner's-change loop (2026-11-03): a level move kept every level and Revit reshaped a
+  // stair on its own; since add-in 0.7.0 the report counts what it reshaped that nothing asked for.
+  test('from a report of add-in 0.7.0, says how many elements Revit reshaped that nothing in the list asked for', () => {
+    const report = fixture('sample-edit-report.json');
+    const totals = { ...(report.totals as Record<string, unknown>), elements_reshaped_unexpected: 1 };
+    const s = editSummary({ ...report, totals });
+    assert.equal(s.reshaped_unexpected, 1);
+    assert.ok(EditSummary.safeParse(s).success, 'in the contract');
+    assert.equal(editSummary(fixture('sample-edit-report.json')).reshaped_unexpected, undefined, 'an older report says nothing of it, rather than 0');
+  });
+
   test('from a version-1 report (add-in 0.2.0), reads as before, without the counts it did not keep', () => {
     const s = editSummary(fixture('sample-edit-report-0.2.0.json'));
     assert.deepEqual(s, { outcome: 'partly_applied', changes: 3, applied: 1, applied_in_part: 1, rolled_back: 1, not_applied: 0, elements_deleted: 14, model_saved: true });

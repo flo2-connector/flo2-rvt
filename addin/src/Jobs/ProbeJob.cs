@@ -18,7 +18,7 @@ namespace Flo2Rvt.Addin.Jobs
     public sealed class ProbeJob : IFlo2RvtJob
     {
         public const string Name = "probe";
-        public const string AddinVersion = "0.6.0";
+        public const string AddinVersion = "0.7.0";
         public const string ReportName = "report.json";
         /// <summary>1 ft = 304.8 mm exactly; Revit's internal length unit is the foot.</summary>
         private const double MmPerFoot = 304.8;
@@ -231,8 +231,39 @@ namespace Flo2Rvt.Addin.Jobs
                 .OrderByDescending(g => g.Count())
                 .ThenBy(g => g.Key, StringComparer.Ordinal)
                 .Take(maxKinds)
-                .Select(g => new WarningInfo { Source = "revit", Text = g.Key, Count = g.Count() }));
+                .Select(g => Flagging(doc, new WarningInfo { Source = "revit", Text = g.Key, Count = g.Count() }, g)));
             return list;
+        }
+
+        /// <summary>
+        /// Since add-in 0.7.0: the elements a kind of stored warning flags, each once, so a warning
+        /// already standing before an edit can be tied to the element an edit then changes (a stair
+        /// that cannot reach its top, flo2-rvt's fact:root-cause-a-level-move-reshaped-a-stair-and-
+        /// the-report-could-not-say-so-2026-11-03).
+        /// </summary>
+        private static WarningInfo Flagging(Document doc, WarningInfo w, IEnumerable<FailureMessage> messages)
+        {
+            var ids = new List<long>();
+            var seen = new HashSet<long>();
+            foreach (FailureMessage m in messages)
+            {
+                try
+                {
+                    foreach (ElementId id in m.GetFailingElements().Concat(m.GetAdditionalElements())) if (seen.Add(id.Value)) ids.Add(id.Value);
+                }
+                catch (Exception)
+                {
+                    // A message whose elements cannot be read is still counted by its text.
+                }
+            }
+            if (ids.Count == 0) return w;
+            w.Elements = ids.Take(WarningElement.Cap).Select(id =>
+            {
+                Element e = doc.GetElement(new ElementId(id));
+                return new WarningElement { ElementId = id, Category = e != null && e.Category != null ? e.Category.Name : null };
+            }).ToList();
+            if (ids.Count > WarningElement.Cap) w.ElementsTotal = ids.Count;
+            return w;
         }
     }
 }

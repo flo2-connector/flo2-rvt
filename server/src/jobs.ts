@@ -128,6 +128,9 @@ export function editSummary(report: Record<string, unknown>): EditSummary {
     not_applied: n('not_applied'),
     elements_deleted: n('elements_deleted'),
     ...(v2 ? { other_elements_deleted: n('other_elements_deleted'), deleted_with_host: n('elements_deleted_with_host'), left_on_level: n('elements_left_on_level') } : {}),
+    // Since add-in 0.7.0: what a kept level move reshaped that nothing in the list asked for. Left out
+    // for an older report, which never measured it, rather than read as 0.
+    ...(typeof totals.elements_reshaped_unexpected === 'number' ? { reshaped_unexpected: n('elements_reshaped_unexpected') } : {}),
     model_saved: rvt.written === true,
   };
 }

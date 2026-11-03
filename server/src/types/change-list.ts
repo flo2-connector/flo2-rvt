@@ -1,4 +1,4 @@
-// GENERATED from schema/change-list.schema.json (sha256 cd561f37d7163dfcae278e8b478c5ddced6b35644d02ef512e0b99e2096dece9) by scripts/gen-types.ts.
+// GENERATED from schema/change-list.schema.json (sha256 d9fc30ad1a664ed186a881ec8a481cf62760a2937dec29071a0dfd2d9567021d) by scripts/gen-types.ts.
 // Do not edit: change the schema and run `npm run gen`.
 
 /**
@@ -145,7 +145,7 @@ export interface Length {
   unit: 'mm' | 'm' | 'ft' | 'in';
 }
 /**
- * Move several levels by one vertical offset, together, in ONE transaction: every level named moves by `by`, and Revit regenerates the model once, at the commit, with all of them moved. So what lies between two moved levels keeps its shape and moves whole (a wall from one to the other keeps its height, a stair its rise, a model group spanning them its definition), and only what ties a moved level to one that is not moved changes height (a wall from an unmoved level up to a moved one; the report lists it as top_constrained). Each level is named once, and a move by zero is refused. The report gives each level's elevation before and after, and every message Revit raised. A model group in the way is handled as groups_in_the_way says, and a constraint in the way as constraints_in_the_way says. Needs change-list version 1.
+ * Move several levels by one vertical offset, together, in ONE transaction: every level named moves by `by`, and Revit regenerates the model once, at the commit, with all of them moved. So what lies between two moved levels is meant to keep its shape and move whole (a wall from one to the other keeps its height, a model group spanning them its definition), and only what ties a moved level to one that is not moved changes height (a wall from an unmoved level up to a moved one; the report lists it as top_constrained). Revit may still reshape an element on its own as it regenerates (a stair already breaking its own riser rule is given new risers): the report measures every element Revit touched and lists each one reshaped, expected or not (reshaped_by_revit). Each level is named once, and a move by zero is refused. The report gives each level's elevation before and after, and every message Revit raised. A model group in the way is handled as groups_in_the_way says, and a constraint in the way as constraints_in_the_way says. Needs change-list version 1.
  *
  * This interface was referenced by `ChangeList`'s JSON-Schema
  * via the `definition` "MoveLevelsTogether".
