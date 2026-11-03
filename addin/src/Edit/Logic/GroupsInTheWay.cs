@@ -56,6 +56,8 @@ namespace Flo2Rvt.Addin.Edit.Logic
         public bool Error;
         /// <summary>BuiltInFailures.GroupFailures.AtomViolationWhenMultiPlacedInstances: a group placed more than once would change.</summary>
         public bool GroupInTheWay;
+        /// <summary>Since add-in 0.6.0: BuiltInFailures.DimensionFailures.RegenConstraintUnsatisfied, "Constraints are not satisfied" (Logic/ConstraintsInTheWay.cs).</summary>
+        public bool ConstraintInTheWay;
         public string Text;
     }
 

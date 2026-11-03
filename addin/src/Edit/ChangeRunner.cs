@@ -43,6 +43,8 @@ namespace Flo2Rvt.Addin.Edit
         public readonly List<RevitFailure> Failures = new List<RevitFailure>();
         /// <summary>Every element a group-in-the-way failure named, failing or additional, uncapped.</summary>
         public readonly HashSet<long> GroupInTheWayIds = new HashSet<long>();
+        /// <summary>Since add-in 0.6.0: every element a constraint-in-the-way failure named, failing or additional, uncapped (Logic/ConstraintsInTheWay.cs keeps the constraints among them).</summary>
+        public readonly HashSet<long> ConstraintInTheWayIds = new HashSet<long>();
     }
 
     internal sealed class RecordingPreprocessor : IFailuresPreprocessor
@@ -60,12 +62,26 @@ namespace Flo2Rvt.Addin.Edit
         public FailureProcessingResult PreprocessFailures(FailuresAccessor failures)
         {
             bool error = false;
+            Document doc = failures.GetDocument();
             foreach (FailureMessageAccessor m in failures.GetFailureMessages())
             {
                 FailureSeverity severity = m.GetSeverity();
                 bool warning = severity == FailureSeverity.Warning;
                 string text = m.GetDescriptionText();
-                bool groupInTheWay = m.GetFailureDefinitionId().Guid == BuiltInFailures.GroupFailures.AtomViolationWhenMultiPlacedInstances.Guid;
+                Guid definition = m.GetFailureDefinitionId().Guid;
+                bool groupInTheWay = definition == BuiltInFailures.GroupFailures.AtomViolationWhenMultiPlacedInstances.Guid;
+                // "Constraints are not satisfied" (Logic/ConstraintsInTheWay.cs). Revit's own
+                // resolution is reported, never taken (RevitOffers).
+                bool constraintInTheWay = definition == BuiltInFailures.DimensionFailures.RegenConstraintUnsatisfied.Guid;
+                string offers = null;
+                try
+                {
+                    if (m.HasResolutions()) offers = m.GetDefaultResolutionCaption();
+                }
+                catch (Exception)
+                {
+                    offers = null;
+                }
                 if (!warning)
                 {
                     error = true;
@@ -73,15 +89,42 @@ namespace Flo2Rvt.Addin.Edit
                 }
                 List<long> named = m.GetFailingElementIds().Concat(m.GetAdditionalElementIds()).Select(id => id.Value).Distinct().ToList();
                 if (groupInTheWay) foreach (long id in named) result.GroupInTheWayIds.Add(id);
+                if (constraintInTheWay) foreach (long id in named) result.ConstraintInTheWayIds.Add(id);
                 if (result.Messages.Count < MaxMessages)
                 {
-                    result.Messages.Add(new RevitMessage { Severity = severity.ToString(), Text = text, Handled = warning ? "dismissed" : "rolled_back", ElementIds = named.Take(MaxIdsPerMessage).ToList(), Kind = groupInTheWay ? RevitMessage.GroupInTheWay : null });
+                    List<long> shown = named.Take(MaxIdsPerMessage).ToList();
+                    result.Messages.Add(new RevitMessage
+                    {
+                        Severity = severity.ToString(),
+                        Text = text,
+                        Handled = warning ? "dismissed" : "rolled_back",
+                        ElementIds = shown,
+                        Kind = groupInTheWay ? RevitMessage.GroupInTheWay : constraintInTheWay ? RevitMessage.ConstraintInTheWay : null,
+                        // What each named element is, so a report says it without a second job.
+                        ElementCategories = shown.Select(id => CategoryOf(doc, id)).ToList(),
+                        Definition = definition.ToString(),
+                        RevitOffers = offers,
+                    });
                 }
-                // Every error, uncapped (whether ungrouping could clear them all is judged on all of them); warnings within the cap.
-                if (!warning || result.Failures.Count < MaxMessages) result.Failures.Add(new RevitFailure { Error = !warning, GroupInTheWay = groupInTheWay, Text = text });
+                // Every error, uncapped (whether ungrouping or removing constraints could clear them all is judged on all of them); warnings within the cap.
+                if (!warning || result.Failures.Count < MaxMessages) result.Failures.Add(new RevitFailure { Error = !warning, GroupInTheWay = groupInTheWay, ConstraintInTheWay = constraintInTheWay, Text = text });
                 if (warning) failures.DeleteWarning(m);
             }
             return error ? FailureProcessingResult.ProceedWithRollBack : FailureProcessingResult.Continue;
+        }
+
+        /// <summary>An element's category as Revit names it; "" when it has none or cannot be read.</summary>
+        private static string CategoryOf(Document doc, long id)
+        {
+            try
+            {
+                Element e = doc != null ? doc.GetElement(new ElementId(id)) : null;
+                return e != null && e.Category != null ? e.Category.Name : "";
+            }
+            catch (Exception)
+            {
+                return "";
+            }
         }
     }
 

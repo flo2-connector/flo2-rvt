@@ -14,6 +14,9 @@
 // rolls it back for groups in the way and the change says groups_in_the_way "ungroup", it is
 // tried again, in a new transaction, with only the group instances Revit named ungrouped first
 // (Group.UngroupMembers), at most GroupsInTheWay.MaxAttempts tries (Logic/GroupsInTheWay.cs).
+// Since 0.6.0 the same for constraints in the way ("Constraints are not satisfied") and the
+// change's constraints_in_the_way "remove": only the constraint elements Revit named are removed
+// first (Document.Delete), at most ConstraintsInTheWay.MaxAttempts tries (Logic/ConstraintsInTheWay.cs).
 // The report gives every try and every message Revit raised, each level before and after, and
 // the groups: moved whole with their levels, ungrouped, or in the way, as the model is after.
 
@@ -422,7 +425,7 @@ namespace Flo2Rvt.Addin.Jobs
                 return;
             }
             var goals = new List<LevelGoal> { new LevelGoal { Level = level, TargetFt = target } };
-            RunResult run = MoveLevels(context, index, r, goals, change.GroupsInTheWay, "set the elevation of level " + level.Name);
+            RunResult run = MoveLevels(context, index, r, goals, change.GroupsInTheWay, change.ConstraintsInTheWay, "set the elevation of level " + level.Name);
             r.Elevation.After = Read(level);
             if (!run.Committed) return;
             MoveOutcome o = LevelMoves.Committed(new[] { new LevelLanding { Name = level.Name, RequestedFt = target, AfterFt = level.Elevation } });
@@ -482,7 +485,7 @@ namespace Flo2Rvt.Addin.Jobs
             var attached = new HashSet<long>(levels.SelectMany(l => LevelRules.OnLevel(doc, l.Id)).Select(e => e.Id.Value));
             r.Attached = ReportedElements.From(Tally(doc, index, attached));
             r.TopConstrained = ReportedElements.From(Tally(doc, index, new HashSet<long>(levels.SelectMany(l => LevelRules.TopConstrainedTo(doc, l.Id)).Select(e => e.Id.Value).Where(id => !attached.Contains(id)))));
-            RunResult run = MoveLevels(context, index, r, goals, change.GroupsInTheWay, "move " + levels.Count + " level(s) together by " + r.Move.ByFt.ToString(CultureInfo.InvariantCulture) + " ft");
+            RunResult run = MoveLevels(context, index, r, goals, change.GroupsInTheWay, change.ConstraintsInTheWay, "move " + levels.Count + " level(s) together by " + r.Move.ByFt.ToString(CultureInfo.InvariantCulture) + " ft");
             for (int i = 0; i < levels.Count; i++) r.Move.Levels[i].After = Read(levels[i]);
             if (!run.Committed) return;
             MoveOutcome o = LevelMoves.Committed(goals.Select(g => new LevelLanding { Name = g.Level.Name, RequestedFt = g.TargetFt, AfterFt = g.Level.Elevation }));
@@ -491,13 +494,15 @@ namespace Flo2Rvt.Addin.Jobs
         }
 
         /// <summary>
-        /// Sets each level's Elevation in one transaction: first with every group kept, then, only
-        /// when Revit rolled it back for groups in the way alone and the change says
-        /// groups_in_the_way "ungroup", again with the group instances Revit named ungrouped first.
-        /// Records the last try (Record), every try when there was more than one, and the groups
-        /// as the model is after it. Returns the last try.
+        /// Sets each level's Elevation in one transaction: first with every group and constraint
+        /// kept; then, only when Revit rolled it back for groups or constraints in the way alone and
+        /// the change says groups_in_the_way "ungroup" or constraints_in_the_way "remove" for each
+        /// kind it named, again, in a new transaction, with the group instances Revit named
+        /// ungrouped and the constraint elements it named removed first (Logic/ConstraintsInTheWay.cs
+        /// decides). Records the last try (Record), every try when there was more than one, and the
+        /// groups and constraints as the model is after it. Returns the last try.
         /// </summary>
-        private static RunResult MoveLevels(JobContext context, ElementIndex index, ChangeReport r, List<LevelGoal> goals, string option, string name)
+        private static RunResult MoveLevels(JobContext context, ElementIndex index, ChangeReport r, List<LevelGoal> goals, string option, string constraintsOption, string name)
         {
             Document doc = context.Document;
             IDictionary<long, double> offsets = LevelMoves.Offsets(goals.ToDictionary(g => g.Level.Id.Value, g => g.TargetFt - g.Level.Elevation));
@@ -511,19 +516,28 @@ namespace Flo2Rvt.Addin.Jobs
                 r.GroupsUnread = ex.GetType().Name + ": " + ex.Message;
             }
             var ungroup = new List<long>();
+            var remove = new List<long>();
             var facts = new Dictionary<long, GroupFacts>();
+            // A constraint is read before the try that removes it: once removed and kept, it is gone.
+            var constraintFacts = new Dictionary<long, ConstraintRef>();
             var attempts = new List<MoveAttempt>();
             var named = new List<long>();
+            var namedConstraints = new List<long>();
             RunResult run;
             for (int attempt = 1; ; attempt++)
             {
                 List<long> first = ungroup.ToList();
+                List<long> removeFirst = remove.ToList();
                 foreach (long id in first)
                 {
                     var g = doc.GetElement(new ElementId(id)) as Group;
                     if (g != null && !facts.ContainsKey(id)) facts[id] = Groups.Facts(doc, index, g);
                 }
-                if (attempt > 1) context.Heartbeat.Step(name + ", try " + attempt + " with " + first.Count + " group instance(s) ungrouped first");
+                foreach (long id in removeFirst)
+                {
+                    if (!constraintFacts.ContainsKey(id)) constraintFacts[id] = Constraints.Ref(doc, index, id);
+                }
+                if (attempt > 1) context.Heartbeat.Step(name + ", try " + attempt + " with " + first.Count + " group instance(s) ungrouped and " + removeFirst.Count + " constraint(s) removed first");
                 run = ChangeRunner.Run(doc, context.Data.RevitApp, name + (attempt > 1 ? " (try " + attempt + ")" : ""), d =>
                 {
                     foreach (long id in first)
@@ -532,21 +546,40 @@ namespace Flo2Rvt.Addin.Jobs
                         if (g == null) throw new InvalidOperationException("group " + id + " is no longer in the model");
                         g.UngroupMembers();
                     }
+                    if (removeFirst.Count > 0)
+                    {
+                        foreach (long id in removeFirst)
+                        {
+                            if (d.GetElement(new ElementId(id)) == null) throw new InvalidOperationException("constraint " + id + " is no longer in the model");
+                        }
+                        d.Delete(removeFirst.Select(id => new ElementId(id)).ToList());
+                    }
                     foreach (LevelGoal goal in goals) goal.Level.Elevation = goal.TargetFt;
                 });
-                attempts.Add(new MoveAttempt { Attempt = attempt, UngroupedFirst = first.Count > 0 ? first : null, Committed = run.Committed, Why = run.RolledBackBecause, RevitMessages = run.Messages.Count > 0 ? run.Messages.ToList() : null });
+                attempts.Add(new MoveAttempt
+                {
+                    Attempt = attempt,
+                    UngroupedFirst = first.Count > 0 ? first : null,
+                    RemovedFirst = removeFirst.Count > 0 ? removeFirst : null,
+                    Committed = run.Committed,
+                    Why = run.RolledBackBecause,
+                    RevitMessages = run.Messages.Count > 0 ? run.Messages.ToList() : null,
+                });
                 if (run.Committed) break;
                 named = GroupsInTheWay.Named(run.GroupInTheWayIds, id => Groups.GroupOf(doc, id), id => Groups.IsGroup(doc, id));
-                RetryDecision next = GroupsInTheWay.Retry(option, run.Failures, new HashSet<long>(ungroup), named, attempt);
+                namedConstraints = ConstraintsInTheWay.Named(run.ConstraintInTheWayIds, id => Constraints.IsConstraint(doc, id));
+                MoveRetryDecision next = ConstraintsInTheWay.Decide(option, constraintsOption, run.Failures, new HashSet<long>(ungroup), named, new HashSet<long>(remove), namedConstraints, attempt);
                 if (!next.Retry) break;
                 ungroup = next.Ungroup;
+                remove = next.Remove;
             }
-            // The group instances a kept change ungrouped are its own deletions, not Revit's.
-            Record(doc, r, index, run, run.Committed ? ungroup : new List<long>());
+            // The group instances ungrouped and the constraints removed by a kept change are its own deletions, not Revit's.
+            Record(doc, r, index, run, run.Committed ? ungroup.Concat(remove).ToList() : new List<long>());
             if (attempts.Count > 1) r.Attempts = attempts;
             // As the model is after the change: an ungrouped group is one that is gone; a kept group is one still there.
             List<GroupFacts> ungrouped = run.Committed ? ungroup.Where(id => facts.ContainsKey(id) && !Groups.IsGroup(doc, id)).Select(id => facts[id]).ToList() : new List<GroupFacts>();
             var inTheWay = new List<GroupFacts>();
+            var constraintsInTheWay = new List<ConstraintRef>();
             if (!run.Committed)
             {
                 foreach (long id in named)
@@ -554,12 +587,25 @@ namespace Flo2Rvt.Addin.Jobs
                     var g = doc.GetElement(new ElementId(id)) as Group;
                     if (g != null) inTheWay.Add(Groups.Facts(doc, index, g));
                 }
+                // Rolled back, so every constraint Revit named is still in the model to read.
+                foreach (long id in namedConstraints) constraintsInTheWay.Add(Constraints.Ref(doc, index, id));
             }
             r.Groups = GroupsInTheWay.Collect(option, tied, ungrouped, id => Groups.IsGroup(doc, id), inTheWay, run.Committed, offsets);
+            List<ConstraintRef> removed = run.Committed ? remove.Where(constraintFacts.ContainsKey).Select(id => constraintFacts[id]).ToList() : new List<ConstraintRef>();
+            r.Constraints = ConstraintsInTheWay.Collect(constraintsOption, removed, constraintsInTheWay, run.Committed);
             if (!run.Committed)
             {
-                int otherErrors = run.Failures.Count(f => f.Error && !f.GroupInTheWay);
-                r.Why = GroupsInTheWay.RolledBackWhy(option, inTheWay.Count, otherErrors, run.RolledBackBecause);
+                if (constraintsInTheWay.Count > 0)
+                {
+                    int otherErrors = run.Failures.Count(f => f.Error && !f.ConstraintInTheWay && !f.GroupInTheWay);
+                    r.Why = ConstraintsInTheWay.RolledBackWhy(constraintsOption, constraintsInTheWay.Count, otherErrors, run.RolledBackBecause) +
+                        (inTheWay.Count > 0 ? ". " + inTheWay.Count + " model group(s) were in the way too (groups.in_the_way)" : "");
+                }
+                else
+                {
+                    int otherErrors = run.Failures.Count(f => f.Error && !f.GroupInTheWay);
+                    r.Why = GroupsInTheWay.RolledBackWhy(option, inTheWay.Count, otherErrors, run.RolledBackBecause);
+                }
             }
             return run;
         }
