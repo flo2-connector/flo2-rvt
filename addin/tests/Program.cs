@@ -930,7 +930,7 @@ namespace Flo2Rvt.Addin.Tests
                     [490318] = Box(0, 0, 0, 25923.235989, 10649.998773, 2395.159616, null),
                     [490319] = Box(0, 0, 2400, 23023.05, 18656.1, 2700, null),
                     [513254] = Box(0, 0, 0, 2959, 1000, 722.222222, new StairMeasure { DesiredRisers = 3, ActualRisers = 3, RiserHeightFt = 180.5555555556 / 304.8 }),
-                    [513309] = Box(0, 0, 0, 2959, 1000, 722.222222, null),
+                    [513309] = Runs(Box(0, 0, 0, 2959, 1000, 722.222222, null), 3, 541.6666666667, 513254),
                     [523063] = Box(0, 0, 0, 34168.696939, 12328.062625, 3778.101366, null),
                     [523064] = Box(0, 0, -1800, 33172.92, 20575.36, -1500, null),
                     [857209] = Rooms(Box(0, 0, 0, 11905, 6115, 5913.059657, null), "201", "Entry Hall", "Level 2", 30 * SqFtPerM2),
@@ -944,7 +944,7 @@ namespace Flo2Rvt.Addin.Tests
                     [490318] = Box(0, 0, -238.125, 25923.235989, 10649.998773, 2395.159616, null),
                     [490319] = Shifted(before[490319], By),
                     [513254] = Box(0, 0, -238.125, 2959, 1000, 550 - 238.125, new StairMeasure { DesiredRisers = 4, ActualRisers = 3, RiserHeightFt = 137.5 / 304.8 }),
-                    [513309] = Box(0, 0, -238.125, 2959, 1000, 550 - 238.125, null),
+                    [513309] = Runs(Box(0, 0, -238.125, 2959, 1000, 550 - 238.125, null), 3, 412.5, 513254),
                     [523063] = Box(0, 0, -238.125, 34168.696939, 12328.062625, 3778.101366, null),
                     [523064] = Shifted(before[523064], By),
                     [857209] = Rooms(Box(0, 0, -238.125, 12005, 6115, 6500 - 238.125, null), "201", "Entry Hall", "Level 2", 31 * SqFtPerM2),
@@ -973,6 +973,20 @@ namespace Flo2Rvt.Addin.Tests
                 Eq(541.666667, stair.Stair.ClimbBeforeMm, "its climb before: 3 actual risers of 180.556 mm");
                 Eq(412.5, stair.Stair.ClimbAfterMm, "its climb after: 3 actual risers of 137.5 mm");
                 Is(stair.Stair.DesiredRisersBefore == 3 && stair.Stair.DesiredRisersAfter == 4 && stair.Stair.ActualRisersAfter == 3, "its risers: 3 desired became 4, 3 actual stayed");
+                // The stair's run (2026-11-04, rvtj_70f663c31917b1c1: flo2-rvt's fact:a-reshaped-stairs-run-is-still-named-by-
+                // its-box-not-its-climb-2026-11-04): add-in 0.8.0 gave a climb only to Revit's Stairs class, so the run was
+                // named by its box, 172.2 mm, beside its stair's climb. Its climb is Revit's StairsRun.Height, 3 risers of
+                // 180.556 then 137.5 mm in Revit's own IFC of it; it names the stair it belongs to (StairsRun.GetStairs).
+                ReshapedElement run = r.Elements.First(e => e.ElementId == 513309);
+                Is(!run.Expected && run.Run != null, "the run is unexpected and gives its climb");
+                Eq(541.666667, run.Run.ClimbBeforeMm, "its climb before");
+                Eq(412.5, run.Run.ClimbAfterMm, "its climb after, the stair's");
+                Is(run.Run.ActualRisersBefore == 3 && run.Run.ActualRisersAfter == 3, "its 3 risers");
+                Eq(513254L, run.PartOfElementId, "it belongs to the stair");
+                // THE CLASS: anything that climbs is given its climb, never its box alone; which elements those are is not a
+                // list of Revit classes a person reads, so every stair and stair run here carries one.
+                foreach (ReshapedElement e in r.Elements.Where(x => x.Category == "Stairs" || x.Category == "Runs"))
+                    Is(e.Stair != null || e.Run != null, e.Category + " " + e.ElementId + " climbs and is given its climb");
                 ReshapedElement room = r.Elements.First(e => e.ElementId == 857209);
                 Is(!room.Expected && room.Room != null, "the room is unexpected and says which room it is");
                 Is(room.Room.Number == "201" && room.Room.Name == "Entry Hall" && room.Room.Level == "Level 2", "room 201 Entry Hall on Level 2");
@@ -1012,6 +1026,10 @@ namespace Flo2Rvt.Addin.Tests
                 Is(Reshapes.Reshaped(b, Box(0, 0, 0, 3000, 1000, 550, new StairMeasure { DesiredRisers = 3, ActualRisers = 3, RiserHeightFt = 137.5 / 304.8 })), "riser height changed");
                 Is(!Reshapes.Reshaped(b, Box(0.05, 0, 0, 3000.05, 1000, 550.05, new StairMeasure { DesiredRisers = 3, ActualRisers = 3, RiserHeightFt = 183.3333 / 304.8 })), "moved a twentieth of a mm, same size: not reshaped");
                 Is(!Reshapes.Reshaped(b, Shifted(b, -0.78125)), "moved whole: not reshaped");
+                ShapeMeasure runBefore = Runs(Box(0, 0, 0, 3000, 1000, 550, null), 3, 550, 7);
+                Is(Reshapes.Reshaped(runBefore, Runs(Box(0, 0, 0, 3000, 1000, 550, null), 3, 412.5, 7)), "a run whose climb changed inside the same box");
+                Is(Reshapes.Reshaped(runBefore, Runs(Box(0, 0, 0, 3000, 1000, 550, null), 4, 550, 7)), "a run whose risers changed");
+                Is(!Reshapes.Reshaped(runBefore, Runs(Shifted(runBefore, -0.78125), 3, 550.05, 7)), "a run moved whole, its height rounded: not reshaped");
                 ShapeMeasure room = Rooms(Box(0, 0, 0, 6000, 5000, 2700, null), "105", "Office", "Level 1", 300);
                 Is(Reshapes.Reshaped(room, Rooms(Box(0, 0, 0, 6000, 5000, 2700, null), "105", "Office", "Level 1", 290)), "a room bounded anew inside the same box");
                 Is(!Reshapes.Reshaped(room, Rooms(Shifted(room, -0.78125), "105", "Office", "Level 1", 300.0001)), "a room moved whole, its area rounded: not reshaped");
@@ -1060,23 +1078,25 @@ namespace Flo2Rvt.Addin.Tests
                         [513254] = Box(0, 0, 0, 2959, 1000, 722.222222, new StairMeasure { DesiredRisers = 3, ActualRisers = 3, RiserHeightFt = 180.5555555556 / 304.8 }),
                         [857209] = Rooms(Box(0, 0, 0, 11905, 6115, 5913.059657, null), "201", "Entry Hall", "Level 2", 30 / 0.09290304),
                         [490318] = Box(0, 0, 0, 25923.235989, 10649.998773, 2395.159616, null),
+                        [513309] = Runs(Box(0, 0, 0, 2959, 1000, 722.222222, null), 3, 541.6666666667, 513254),
                     },
                     new Dictionary<long, ShapeMeasure>
                     {
                         [513254] = Box(0, 0, 0, 2959, 1000, 550, new StairMeasure { DesiredRisers = 4, ActualRisers = 3, RiserHeightFt = 137.5 / 304.8 }),
                         [857209] = Rooms(Box(0, 0, 0, 12005, 6115, 6500, null), "201", "Entry Hall", "Level 2", 31 / 0.09290304),
                         [490318] = Box(0, 0, -238.125, 25923.235989, 10649.998773, 2395.159616, null),
+                        [513309] = Runs(Box(0, 0, 0, 2959, 1000, 550, null), 3, 412.5, 513254),
                     },
-                    new long[] { 513254, 857209, 490318 }, new Dictionary<long, ExpectedReshape> { [490318] = ExpectedReshape.BuildingPadSurface(490319) }, id => new ElementRef { ElementId = id, GlobalId = "07dHKEjXj6kwcHAxpyAkMS", Category = "Stairs", ModelElement = true });
+                    new long[] { 513254, 857209, 490318, 513309 }, new Dictionary<long, ExpectedReshape> { [490318] = ExpectedReshape.BuildingPadSurface(490319) }, id => new ElementRef { ElementId = id, GlobalId = "07dHKEjXj6kwcHAxpyAkMS", Category = "Stairs", ModelElement = true });
                 c.WarningsAdded = new List<WarningInfo> { new WarningInfo { Source = "revit", Text = "A wall and a room separation line overlap.", Count = 1, Elements = new List<WarningElement> { new WarningElement { ElementId = 198694, Category = "Walls" }, new WarningElement { ElementId = 1000807, Category = "<Room Separation>" } } } };
                 report.Changes.Add(c);
                 report.Totals.Count(c);
                 report.Warnings.Add(new WarningInfo { Source = "revit", Text = "Stair top end exceeds or cannot reach the top elevation of the stair.", Count = 1, Elements = new List<WarningElement> { new WarningElement { ElementId = 513254, Category = "Stairs" } } });
-                Eq(2, report.Totals.ElementsReshapedUnexpected, "the total counts the unexpected");
+                Eq(3, report.Totals.ElementsReshapedUnexpected, "the total counts the unexpected");
                 var buffer = new MemoryStream();
                 report.WriteTo(buffer);
                 string json = Encoding.UTF8.GetString(buffer.ToArray());
-                foreach (string key in new[] { "\"reshaped_by_revit\"", "\"unexpected\"", "\"size_before_mm\"", "\"size_change_mm\"", "\"height_change_mm\"", "\"desired_risers_after\"", "\"riser_height_after_mm\"", "\"climb_before_mm\"", "\"climb_after_mm\"", "\"room\"", "\"area_before_m2\"", "\"area_after_m2\"", "\"expected_as\"", "\"because_of_element_id\"", "\"warnings_added\"", "\"elements_reshaped_unexpected\"" })
+                foreach (string key in new[] { "\"reshaped_by_revit\"", "\"unexpected\"", "\"size_before_mm\"", "\"size_change_mm\"", "\"height_change_mm\"", "\"desired_risers_after\"", "\"riser_height_after_mm\"", "\"climb_before_mm\"", "\"climb_after_mm\"", "\"run\"", "\"part_of_element_id\"", "\"room\"", "\"area_before_m2\"", "\"area_after_m2\"", "\"expected_as\"", "\"because_of_element_id\"", "\"warnings_added\"", "\"elements_reshaped_unexpected\"" })
                     Is(json.Contains(key), "report.json names " + key);
                 buffer.Position = 0;
                 EditReport back = EditReport.ReadFrom(buffer);
@@ -1086,9 +1106,11 @@ namespace Flo2Rvt.Addin.Tests
                 Eq("201", rs.Elements.First(e => e.ElementId == 857209).Room.Number, "the room's number read back");
                 Eq(31.0, rs.Elements.First(e => e.ElementId == 857209).Room.AreaAfterM2, "its area read back");
                 Eq(490319L, rs.Elements.First(e => e.ElementId == 490318).BecauseOfElementId, "the pad a surface follows read back");
+                Eq(412.5, rs.Elements.First(e => e.ElementId == 513309).Run.ClimbAfterMm, "a run's climb read back");
+                Eq(513254L, rs.Elements.First(e => e.ElementId == 513309).PartOfElementId, "the stair a run belongs to read back");
                 Eq(1000807L, back.Changes[0].WarningsAdded[0].Elements[1].ElementId, "a warning the move added read back");
                 Eq(513254L, back.Warnings[0].Elements[0].ElementId, "the element a warning flags read back");
-                Eq(2, back.Totals.ElementsReshapedUnexpected, "the total read back");
+                Eq(3, back.Totals.ElementsReshapedUnexpected, "the total read back");
             });
             Test("the uniform shift: every level from the first floor to the roof moved by one offset keeps the groups spanning them; only what reaches down to the basement is reshaped", () =>
             {
@@ -1141,6 +1163,14 @@ namespace Flo2Rvt.Addin.Tests
         private static ShapeMeasure Rooms(ShapeMeasure box, string number, string name, string level, double areaSqFt)
         {
             box.Room = new RoomMeasure { Number = number, Name = name, Level = level, AreaSqFt = areaSqFt };
+            return box;
+        }
+
+        /// <summary>A stair run's measure: its box, its actual risers, its height (its climb) in mm, and the stair it belongs to.</summary>
+        private static ShapeMeasure Runs(ShapeMeasure box, int risers, double heightMm, long stair)
+        {
+            box.Run = new RunMeasure { ActualRisers = risers, HeightFt = heightMm / 304.8 };
+            box.PartOf = stair;
             return box;
         }
 
