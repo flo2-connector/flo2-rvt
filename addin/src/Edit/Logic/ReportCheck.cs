@@ -123,9 +123,14 @@ namespace Flo2Rvt.Addin.Edit.Logic
             return found;
         }
 
-        /// <summary>Since add-in 0.7.0: what a level move reshaped is listed only for a kept change, adds up, and is never also deleted.</summary>
+        /// <summary>
+        /// Since add-in 0.7.0: what a level move reshaped is listed only for a kept change, adds up,
+        /// and is never also deleted; since 0.8.0 an expected element says why and an unexpected one
+        /// does not, and the warnings a move added are listed only for a kept change.
+        /// </summary>
         private static void Reshaped(ChangeReport r, HashSet<long> deleted, string at, List<string> found)
         {
+            if (r.WarningsAdded != null && !ChangeStatus.Kept(r.Status)) found.Add(at + "lists warnings it added, though the change was not kept");
             ReshapedReport rs = r.ReshapedByRevit;
             if (rs == null) return;
             if (!ChangeStatus.Kept(r.Status)) found.Add(at + "lists what Revit reshaped, though the change was not kept");
@@ -135,6 +140,8 @@ namespace Flo2Rvt.Addin.Edit.Logic
             foreach (ReshapedElement e in rs.Elements)
             {
                 if (deleted.Contains(e.ElementId)) found.Add(at + "element " + e.ElementId + " is both reshaped and deleted");
+                if (e.Expected && (string.IsNullOrEmpty(e.ExpectedAs) || string.IsNullOrEmpty(e.WhyExpected))) found.Add(at + "element " + e.ElementId + " is expected but says not why");
+                if (!e.Expected && (e.ExpectedAs != null || e.WhyExpected != null || e.BecauseOfElementId != 0)) found.Add(at + "element " + e.ElementId + " is unexpected but says why it was expected");
             }
         }
 

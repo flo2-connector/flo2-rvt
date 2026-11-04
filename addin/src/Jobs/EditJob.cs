@@ -415,7 +415,8 @@ namespace Flo2Rvt.Addin.Jobs
             // offset, so a target from the origin moves Elevation by the same amount.
             double target = fromOrigin ? level.Elevation + (feet - level.ProjectElevation) : feet;
             r.Elevation = new ElevationChange { RelativeTo = change.RelativeTo, RequestedFt = Lengths.Round(feet), RequestedMm = Lengths.Round(Lengths.ToMm(feet)), Before = Read(level) };
-            r.Attached = ReportedElements.From(Tally(doc, index, LevelRules.OnLevel(doc, level.Id).Select(e => e.Id.Value)));
+            var onLevel = new HashSet<long>(LevelRules.OnLevel(doc, level.Id).Select(e => e.Id.Value));
+            r.Attached = ReportedElements.From(Tally(doc, index, onLevel));
             var topConstrained = new HashSet<long>(LevelRules.TopConstrainedTo(doc, level.Id).Select(e => e.Id.Value));
             r.TopConstrained = ReportedElements.From(Tally(doc, index, topConstrained));
             if (Math.Abs(target - level.Elevation) < 1e-9)
@@ -426,12 +427,28 @@ namespace Flo2Rvt.Addin.Jobs
                 return;
             }
             var goals = new List<LevelGoal> { new LevelGoal { Level = level, TargetFt = target } };
-            RunResult run = MoveLevels(context, index, r, goals, change.GroupsInTheWay, change.ConstraintsInTheWay, topConstrained, "set the elevation of level " + level.Name);
+            RunResult run = MoveLevels(context, index, r, goals, change.GroupsInTheWay, change.ConstraintsInTheWay, ExpectedToReshape(doc, topConstrained, onLevel), "set the elevation of level " + level.Name);
             r.Elevation.After = Read(level);
             if (!run.Committed) return;
             MoveOutcome o = LevelMoves.Committed(new[] { new LevelLanding { Name = level.Name, RequestedFt = target, AfterFt = level.Elevation } });
             r.Status = o.Status;
             r.Why = o.Why;
+        }
+
+        /// <summary>
+        /// What a level move makes change shape, and why (Logic/Reshapes.cs ExpectedReshape): each
+        /// element top-constrained to a moved level from one not moved, and, since add-in 0.8.0, the
+        /// ground surface each building pad on a moved level cuts (Edit/LevelRules.cs PadSurfaces).
+        /// </summary>
+        private static Dictionary<long, ExpectedReshape> ExpectedToReshape(Document doc, IEnumerable<long> topConstrained, IEnumerable<long> onMovedLevels)
+        {
+            var expected = new Dictionary<long, ExpectedReshape>();
+            foreach (long id in topConstrained) expected[id] = ExpectedReshape.TopConstrained();
+            foreach (KeyValuePair<long, long> s in LevelRules.PadSurfaces(doc, onMovedLevels))
+            {
+                if (!expected.ContainsKey(s.Key)) expected[s.Key] = ExpectedReshape.BuildingPadSurface(s.Value);
+            }
+            return expected;
         }
 
         /// <summary>One level a move sets, and the Level.Elevation it is set to.</summary>
@@ -487,7 +504,7 @@ namespace Flo2Rvt.Addin.Jobs
             r.Attached = ReportedElements.From(Tally(doc, index, attached));
             var topConstrained = new HashSet<long>(levels.SelectMany(l => LevelRules.TopConstrainedTo(doc, l.Id)).Select(e => e.Id.Value).Where(id => !attached.Contains(id)));
             r.TopConstrained = ReportedElements.From(Tally(doc, index, topConstrained));
-            RunResult run = MoveLevels(context, index, r, goals, change.GroupsInTheWay, change.ConstraintsInTheWay, topConstrained, "move " + levels.Count + " level(s) together by " + r.Move.ByFt.ToString(CultureInfo.InvariantCulture) + " ft");
+            RunResult run = MoveLevels(context, index, r, goals, change.GroupsInTheWay, change.ConstraintsInTheWay, ExpectedToReshape(doc, topConstrained, attached), "move " + levels.Count + " level(s) together by " + r.Move.ByFt.ToString(CultureInfo.InvariantCulture) + " ft");
             for (int i = 0; i < levels.Count; i++) r.Move.Levels[i].After = Read(levels[i]);
             if (!run.Committed) return;
             MoveOutcome o = LevelMoves.Committed(goals.Select(g => new LevelLanding { Name = g.Level.Name, RequestedFt = g.TargetFt, AfterFt = g.Level.Elevation }));
@@ -504,11 +521,22 @@ namespace Flo2Rvt.Addin.Jobs
         /// decides). Records the last try (Record), every try when there was more than one, and the
         /// groups and constraints as the model is after it, and, for a kept move, every element
         /// Revit reshaped (Logic/Reshapes.cs: measured before the first try and after the kept one;
-        /// expectedToReshape is what the change says changes height). Returns the last try.
+        /// expectedToReshape is what the change makes change shape, and why) and, since add-in 0.8.0,
+        /// every warning it added to the model (Logic/WarningsAdded.cs). Returns the last try.
         /// </summary>
-        private static RunResult MoveLevels(JobContext context, ElementIndex index, ChangeReport r, List<LevelGoal> goals, string option, string constraintsOption, ISet<long> expectedToReshape, string name)
+        private static RunResult MoveLevels(JobContext context, ElementIndex index, ChangeReport r, List<LevelGoal> goals, string option, string constraintsOption, IDictionary<long, ExpectedReshape> expectedToReshape, string name)
         {
             Document doc = context.Document;
+            // The warnings standing before the move, so a kept move can say which ones it added.
+            List<StoredWarning> warningsBefore = null;
+            try
+            {
+                warningsBefore = ProbeJob.Stored(doc);
+            }
+            catch (Exception ex)
+            {
+                r.WarningsUnread = ex.GetType().Name + ": " + ex.Message;
+            }
             // Every model element's shape before the move, so a kept move can say what Revit reshaped.
             Dictionary<long, ShapeMeasure> shapesBefore = null;
             try
@@ -601,6 +629,21 @@ namespace Flo2Rvt.Addin.Jobs
                 catch (Exception ex)
                 {
                     r.ReshapedUnread = ex.GetType().Name + ": " + ex.Message;
+                }
+            }
+            if (run.Committed && warningsBefore != null)
+            {
+                try
+                {
+                    r.WarningsAdded = WarningsAdded.Grouped(WarningsAdded.Added(warningsBefore, ProbeJob.Stored(doc)), id =>
+                    {
+                        Element e = doc.GetElement(new ElementId(id));
+                        return e != null && e.Category != null ? e.Category.Name : null;
+                    });
+                }
+                catch (Exception ex)
+                {
+                    r.WarningsUnread = ex.GetType().Name + ": " + ex.Message;
                 }
             }
             if (attempts.Count > 1) r.Attempts = attempts;
