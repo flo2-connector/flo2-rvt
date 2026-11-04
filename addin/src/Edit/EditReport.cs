@@ -297,6 +297,20 @@ namespace Flo2Rvt.Addin.Edit
         [DataMember(Name = "stair", Order = 13, EmitDefaultValue = false)] public StairChange Stair;
         /// <summary>Since add-in 0.8.0, a room: which room, and its area before and after.</summary>
         [DataMember(Name = "room", Order = 14, EmitDefaultValue = false)] public RoomChange Room;
+        /// <summary>Since add-in 0.9.0, a stair run: its risers and its climb (StairsRun.Height) before and after.</summary>
+        [DataMember(Name = "run", Order = 15, EmitDefaultValue = false)] public RunChange Run;
+        /// <summary>Since add-in 0.9.0: the element it is a part of, when it is one (a stair run's or landing's stair, from GetStairs()).</summary>
+        [DataMember(Name = "part_of_element_id", Order = 16, EmitDefaultValue = false)] public long PartOfElementId;
+    }
+
+    /// <summary>Since add-in 0.9.0: a reshaped stair run's risers and climb (its height, StairsRun.Height), in mm.</summary>
+    [DataContract]
+    public sealed class RunChange
+    {
+        [DataMember(Name = "actual_risers_before", Order = 0)] public int ActualRisersBefore;
+        [DataMember(Name = "actual_risers_after", Order = 1)] public int ActualRisersAfter;
+        [DataMember(Name = "climb_before_mm", Order = 2)] public double ClimbBeforeMm;
+        [DataMember(Name = "climb_after_mm", Order = 3)] public double ClimbAfterMm;
     }
 
     [DataContract]

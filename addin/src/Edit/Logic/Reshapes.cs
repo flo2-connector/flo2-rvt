@@ -30,6 +30,13 @@
 // its size change on every axis, a stair its climb (actual risers times riser height), and a room
 // its number, name, level and area.
 //
+// ⭐ ANYTHING THAT CLIMBS IS GIVEN ITS CLIMB (since add-in 0.9.0; flo2-rvt's fact:a-reshaped-stairs-
+// run-is-still-named-by-its-box-not-its-climb-2026-11-04): 0.8.0 gave a climb only to Revit's Stairs
+// class, so the same proof's stair run (a StairsRun) was named by its box, 172.2 mm, beside its
+// stair's climb of 541.7 to 412.5 mm. A run now gives its own climb (StairsRun.Height, "the elevation
+// span between run's base elevation and top elevation") and its risers, and a run or a landing names
+// the stair it belongs to (part_of_element_id, from GetStairs()), so the words can say it with it.
+//
 // PURE LOGIC: no Revit type here, so addin/tests runs it on any OS. Edit/Shapes.cs measures.
 
 using System;
@@ -53,6 +60,13 @@ namespace Flo2Rvt.Addin.Edit.Logic
         public string Name;
         public string Level;
         public double AreaSqFt;
+    }
+
+    /// <summary>A stair run as Revit reports it (Autodesk.Revit.DB.Architecture.StairsRun): its actual risers, and its height, which is its climb.</summary>
+    public sealed class RunMeasure
+    {
+        public int ActualRisers;
+        public double HeightFt;
     }
 
     /// <summary>Why the change makes an element change shape: as (a code), why (in words), and the element it follows, if any.</summary>
@@ -83,6 +97,9 @@ namespace Flo2Rvt.Addin.Edit.Logic
         public double[] Max;
         public StairMeasure Stair;
         public RoomMeasure Room;
+        public RunMeasure Run;
+        /// <summary>The element it is a part of, 0 when none: a stair run's or landing's stair.</summary>
+        public long PartOf;
 
         public double[] Size()
         {
@@ -115,6 +132,7 @@ namespace Flo2Rvt.Addin.Edit.Logic
                 if (Math.Abs(before.Stair.RiserHeightFt - after.Stair.RiserHeightFt) > RiserToleranceFt) return true;
             }
             if (before.Room != null && after.Room != null && Math.Abs(before.Room.AreaSqFt - after.Room.AreaSqFt) > AreaToleranceSqFt) return true;
+            if (before.Run != null && after.Run != null && (before.Run.ActualRisers != after.Run.ActualRisers || Math.Abs(before.Run.HeightFt - after.Run.HeightFt) > ToleranceFt)) return true;
             return false;
         }
 
@@ -170,6 +188,14 @@ namespace Flo2Rvt.Addin.Edit.Logic
                         ClimbBeforeMm = Mm(b.Stair.ActualRisers * b.Stair.RiserHeightFt),
                         ClimbAfterMm = Mm(a.Stair.ActualRisers * a.Stair.RiserHeightFt),
                     } : null,
+                    Run = b.Run != null && a.Run != null ? new RunChange
+                    {
+                        ActualRisersBefore = b.Run.ActualRisers,
+                        ActualRisersAfter = a.Run.ActualRisers,
+                        ClimbBeforeMm = Mm(b.Run.HeightFt),
+                        ClimbAfterMm = Mm(a.Run.HeightFt),
+                    } : null,
+                    PartOfElementId = a.PartOf != 0 ? a.PartOf : b.PartOf,
                     Room = b.Room != null && a.Room != null ? new RoomChange
                     {
                         Number = a.Room.Number,
