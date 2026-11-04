@@ -4,8 +4,10 @@
 // An element's shape is its bounding box in model coordinates (Element.get_BoundingBox(null)), and
 // for a stair also its risers (Autodesk.Revit.DB.Architecture.Stairs: DesiredRisersNumber,
 // ActualRisersNumber, ActualRiserHeight), because Revit can change a stair's risers without its box
-// showing all of it. An element with no bounding box (a datum, a view, most annotation) has no
-// measure and is counted as unmeasured.
+// showing all of it. Since add-in 0.8.0 a room also gives its number, name, level and area
+// (Autodesk.Revit.DB.Architecture.Room: Number, the ROOM_NAME parameter, Level, Area), because a room
+// bounded anew is found on a plan by its number and its area, not by its box. An element with no
+// bounding box (a datum, a view, most annotation) has no measure and is counted as unmeasured.
 
 using System;
 using System.Collections.Generic;
@@ -50,6 +52,19 @@ namespace Flo2Rvt.Addin.Edit
                     catch (Exception)
                     {
                         m.Stair = null;
+                    }
+                }
+                var room = e as Room;
+                if (room != null)
+                {
+                    try
+                    {
+                        Parameter name = room.get_Parameter(BuiltInParameter.ROOM_NAME);
+                        m.Room = new RoomMeasure { Number = room.Number, Name = name != null ? name.AsString() : null, Level = room.Level != null ? room.Level.Name : null, AreaSqFt = room.Area };
+                    }
+                    catch (Exception)
+                    {
+                        m.Room = null;
                     }
                 }
                 measures[id] = m;

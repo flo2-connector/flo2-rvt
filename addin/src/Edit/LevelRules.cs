@@ -33,6 +33,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using Autodesk.Revit.DB;
+using Autodesk.Revit.DB.Architecture;
 
 namespace Flo2Rvt.Addin.Edit
 {
@@ -61,6 +62,30 @@ namespace Flo2Rvt.Addin.Edit
             BuiltInParameter.FAMILY_TOP_LEVEL_PARAM,
             BuiltInParameter.STAIRS_TOP_LEVEL_PARAM,
         };
+
+        /// <summary>
+        /// Since add-in 0.8.0: of these elements (those on the moved levels), each building pad's own
+        /// ground surface, keyed by the surface, with the pad. Revit's API reference: a BuildingPad's
+        /// AssociatedTopographySurfaceId is "the element id of a topography surface created by the
+        /// introduction of this building pad", and a pad is created on a level. When the pad's level
+        /// moves, its cut goes deeper or shallower with it into ground that stays, so the surface
+        /// changes height by the move (flo2-rvt's fact:root-cause-a-level-move-calls-a-building-pads-
+        /// own-ground-surface-reshaped-and-unexpected-2026-11-03: 238.125 mm on both of the sample
+        /// house's pads).
+        /// </summary>
+        public static Dictionary<long, long> PadSurfaces(Document doc, IEnumerable<long> ids)
+        {
+            var surfaces = new Dictionary<long, long>();
+            foreach (long id in ids)
+            {
+                var pad = doc.GetElement(new ElementId(id)) as BuildingPad;
+                if (pad == null) continue;
+                ElementId surface = pad.AssociatedTopographySurfaceId;
+                if (surface == null || surface == ElementId.InvalidElementId) continue;
+                if (!surfaces.ContainsKey(surface.Value)) surfaces[surface.Value] = id;
+            }
+            return surfaces;
+        }
 
         /// <summary>Null when the element is a model element a change may act on; otherwise why not.</summary>
         public static string NotAModelElement(Element e)

@@ -10,6 +10,7 @@ using System.IO;
 using System.Linq;
 using Autodesk.Revit.ApplicationServices;
 using Autodesk.Revit.DB;
+using Flo2Rvt.Addin.Edit.Logic;
 using Flo2Rvt.Addin.Probe;
 
 namespace Flo2Rvt.Addin.Jobs
@@ -18,7 +19,7 @@ namespace Flo2Rvt.Addin.Jobs
     public sealed class ProbeJob : IFlo2RvtJob
     {
         public const string Name = "probe";
-        public const string AddinVersion = "0.7.0";
+        public const string AddinVersion = "0.8.0";
         public const string ReportName = "report.json";
         /// <summary>1 ft = 304.8 mm exactly; Revit's internal length unit is the foot.</summary>
         private const double MmPerFoot = 304.8;
@@ -232,6 +233,26 @@ namespace Flo2Rvt.Addin.Jobs
                 .ThenBy(g => g.Key, StringComparer.Ordinal)
                 .Take(maxKinds)
                 .Select(g => Flagging(doc, new WarningInfo { Source = "revit", Text = g.Key, Count = g.Count() }, g)));
+            return list;
+        }
+
+        /// <summary>Since add-in 0.8.0: every warning standing in the model, each with the elements it flags, for Logic/WarningsAdded.cs.</summary>
+        public static List<StoredWarning> Stored(Document doc)
+        {
+            var list = new List<StoredWarning>();
+            foreach (FailureMessage m in doc.GetWarnings())
+            {
+                var w = new StoredWarning { Text = m.GetDescriptionText() };
+                try
+                {
+                    w.ElementIds = m.GetFailingElements().Concat(m.GetAdditionalElements()).Select(id => id.Value).ToList();
+                }
+                catch (Exception)
+                {
+                    // A warning whose elements cannot be read is still compared by its text.
+                }
+                list.Add(w);
+            }
             return list;
         }
 

@@ -243,6 +243,10 @@ namespace Flo2Rvt.Addin.Edit
         [DataMember(Name = "reshaped_by_revit", Order = 18, EmitDefaultValue = false)] public ReshapedReport ReshapedByRevit;
         /// <summary>Since add-in 0.7.0, a level move: why the shapes could not be measured; reshaped_by_revit is then absent and nothing is judged.</summary>
         [DataMember(Name = "reshaped_unread", Order = 18, EmitDefaultValue = false)] public string ReshapedUnread;
+        /// <summary>Since add-in 0.8.0, a kept level move: the warnings standing in the model after it that did not before, each with the elements it flags (Logic/WarningsAdded.cs); empty when it added none, absent when they could not be read.</summary>
+        [DataMember(Name = "warnings_added", Order = 18, EmitDefaultValue = false)] public List<WarningInfo> WarningsAdded;
+        /// <summary>Since add-in 0.8.0, a level move: why the warnings could not be compared; warnings_added is then absent.</summary>
+        [DataMember(Name = "warnings_unread", Order = 18, EmitDefaultValue = false)] public string WarningsUnread;
         /// <summary>A level move tried more than once (groups_in_the_way "ungroup"): every try, with every message Revit raised in it. revit_messages is the last try's.</summary>
         [DataMember(Name = "attempts", Order = 19, EmitDefaultValue = false)] public List<MoveAttempt> Attempts;
         [DataMember(Name = "revit_messages", Order = 19, EmitDefaultValue = false)] public List<RevitMessage> RevitMessages;
@@ -280,11 +284,19 @@ namespace Flo2Rvt.Addin.Edit
         [DataMember(Name = "model_element", Order = 4)] public bool ModelElement;
         [DataMember(Name = "expected", Order = 5)] public bool Expected;
         [DataMember(Name = "why_expected", Order = 6, EmitDefaultValue = false)] public string WhyExpected;
+        /// <summary>Since add-in 0.8.0, an expected element: why, as a code (Logic/Reshapes.cs ExpectedReshape): top_constrained, or building_pad_surface.</summary>
+        [DataMember(Name = "expected_as", Order = 7, EmitDefaultValue = false)] public string ExpectedAs;
+        /// <summary>Since add-in 0.8.0: the element it changed with, when it follows one (a building pad's own ground surface: the pad).</summary>
+        [DataMember(Name = "because_of_element_id", Order = 8, EmitDefaultValue = false)] public long BecauseOfElementId;
         /// <summary>The bounding box's size, x y z, before and after, in mm.</summary>
-        [DataMember(Name = "size_before_mm", Order = 7)] public List<double> SizeBeforeMm;
-        [DataMember(Name = "size_after_mm", Order = 8)] public List<double> SizeAfterMm;
-        [DataMember(Name = "height_change_mm", Order = 9)] public double HeightChangeMm;
-        [DataMember(Name = "stair", Order = 10, EmitDefaultValue = false)] public StairChange Stair;
+        [DataMember(Name = "size_before_mm", Order = 9)] public List<double> SizeBeforeMm;
+        [DataMember(Name = "size_after_mm", Order = 10)] public List<double> SizeAfterMm;
+        /// <summary>Since add-in 0.8.0: after less before on each axis, x y z, in mm (a line 36 mm longer is 0, 36, 0).</summary>
+        [DataMember(Name = "size_change_mm", Order = 11, EmitDefaultValue = false)] public List<double> SizeChangeMm;
+        [DataMember(Name = "height_change_mm", Order = 12)] public double HeightChangeMm;
+        [DataMember(Name = "stair", Order = 13, EmitDefaultValue = false)] public StairChange Stair;
+        /// <summary>Since add-in 0.8.0, a room: which room, and its area before and after.</summary>
+        [DataMember(Name = "room", Order = 14, EmitDefaultValue = false)] public RoomChange Room;
     }
 
     [DataContract]
@@ -296,6 +308,20 @@ namespace Flo2Rvt.Addin.Edit
         [DataMember(Name = "actual_risers_after", Order = 3)] public int ActualRisersAfter;
         [DataMember(Name = "riser_height_before_mm", Order = 4)] public double RiserHeightBeforeMm;
         [DataMember(Name = "riser_height_after_mm", Order = 5)] public double RiserHeightAfterMm;
+        /// <summary>Since add-in 0.8.0: how far it climbs, its actual risers times its riser height, in mm. Its box is not its climb: Revit's box of a stair can be a riser taller.</summary>
+        [DataMember(Name = "climb_before_mm", Order = 6)] public double ClimbBeforeMm;
+        [DataMember(Name = "climb_after_mm", Order = 7)] public double ClimbAfterMm;
+    }
+
+    /// <summary>Since add-in 0.8.0: a reshaped room, as a person finds it on a plan.</summary>
+    [DataContract]
+    public sealed class RoomChange
+    {
+        [DataMember(Name = "number", Order = 0, EmitDefaultValue = false)] public string Number;
+        [DataMember(Name = "name", Order = 1, EmitDefaultValue = false)] public string Name;
+        [DataMember(Name = "level", Order = 2, EmitDefaultValue = false)] public string Level;
+        [DataMember(Name = "area_before_m2", Order = 3)] public double AreaBeforeM2;
+        [DataMember(Name = "area_after_m2", Order = 4)] public double AreaAfterM2;
     }
 
     [DataContract]
