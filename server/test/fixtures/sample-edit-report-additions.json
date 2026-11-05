@@ -1,0 +1,652 @@
+{
+  "_note": "A made-up report of add-in 0.10.0 (report version 2, fields added), shaped as flo2's own fixtures of a list and its report, for change_list, a version-3 list, on a made-up model: four walls of a small room, the room inside them, a door into the first wall, a walkway floor, and a door into a wall the model does not have (not applied). Points are in mm in the list; the report gives each in feet in shared and internal coordinates, related by a made-up frame (coordinates): shared = R(36.99 deg) internal + (-65.03, -61.7) ft. The room is bounded at the walls' faces (100 mm thick), 2.9 by 2.4 m. Read by server/test/edit.test.ts and addin/tests, and copied unchanged into flo2 (services/edge-gateway/test/fixtures/rvt-edit-report-additions.json) for its check.",
+  "change_list": {
+    "version": 3,
+    "list_id": "mech-room-and-walkway-1",
+    "description": "Made-up: a small plant room inside a ground-floor room, and a walkway floor, on a public sample model.",
+    "changes": [
+      {
+        "kind": "add_wall",
+        "id": "w1",
+        "level": {
+          "level_name": "Level 1"
+        },
+        "start": {
+          "x": 1000,
+          "y": 2000,
+          "unit": "mm"
+        },
+        "end": {
+          "x": 4000,
+          "y": 2000,
+          "unit": "mm"
+        },
+        "coordinates": "shared",
+        "wall_type": {
+          "family": "Basic Wall",
+          "type": "Interior - Partition"
+        },
+        "top": {
+          "height": {
+            "value": 2700,
+            "unit": "mm"
+          }
+        }
+      },
+      {
+        "kind": "add_wall",
+        "id": "w2",
+        "level": {
+          "level_name": "Level 1"
+        },
+        "start": {
+          "x": 4000,
+          "y": 2000,
+          "unit": "mm"
+        },
+        "end": {
+          "x": 4000,
+          "y": 4500,
+          "unit": "mm"
+        },
+        "coordinates": "shared",
+        "wall_type": {
+          "family": "Basic Wall",
+          "type": "Interior - Partition"
+        },
+        "top": {
+          "top_level": {
+            "level_name": "Level 2"
+          }
+        }
+      },
+      {
+        "kind": "add_wall",
+        "id": "w3",
+        "level": {
+          "level_name": "Level 1"
+        },
+        "start": {
+          "x": 4000,
+          "y": 4500,
+          "unit": "mm"
+        },
+        "end": {
+          "x": 1000,
+          "y": 4500,
+          "unit": "mm"
+        },
+        "coordinates": "shared",
+        "wall_type": {
+          "family": "Basic Wall",
+          "type": "Interior - Partition"
+        },
+        "top": {
+          "height": {
+            "value": 2700,
+            "unit": "mm"
+          }
+        }
+      },
+      {
+        "kind": "add_wall",
+        "id": "w4",
+        "level": {
+          "level_name": "Level 1"
+        },
+        "start": {
+          "x": 1000,
+          "y": 4500,
+          "unit": "mm"
+        },
+        "end": {
+          "x": 1000,
+          "y": 2000,
+          "unit": "mm"
+        },
+        "coordinates": "shared",
+        "wall_type": {
+          "family": "Basic Wall",
+          "type": "Interior - Partition"
+        },
+        "top": {
+          "height": {
+            "value": 2700,
+            "unit": "mm"
+          }
+        },
+        "joins": "do_not_join"
+      },
+      {
+        "kind": "add_room",
+        "id": "r1",
+        "level": {
+          "level_name": "Level 1"
+        },
+        "point": {
+          "x": 2500,
+          "y": 3250,
+          "unit": "mm"
+        },
+        "coordinates": "shared",
+        "name": "Mech. / Elec.",
+        "number": "109"
+      },
+      {
+        "kind": "add_door",
+        "id": "d1",
+        "host": {
+          "wall_change": "w1"
+        },
+        "point": {
+          "x": 2500,
+          "y": 2000,
+          "unit": "mm"
+        },
+        "coordinates": "shared",
+        "door_type": {
+          "family": "Single-Flush",
+          "type": "800 x 2100"
+        }
+      },
+      {
+        "kind": "add_floor",
+        "id": "f1",
+        "level": {
+          "level_name": "Level 1"
+        },
+        "outline": [
+          {
+            "x": 6000,
+            "y": 0,
+            "unit": "mm"
+          },
+          {
+            "x": 10000,
+            "y": 0,
+            "unit": "mm"
+          },
+          {
+            "x": 10000,
+            "y": 1500,
+            "unit": "mm"
+          },
+          {
+            "x": 6000,
+            "y": 1500,
+            "unit": "mm"
+          }
+        ],
+        "coordinates": "shared",
+        "floor_type": {
+          "family": "Floor",
+          "type": "Generic 150mm"
+        }
+      },
+      {
+        "kind": "add_door",
+        "id": "d2",
+        "host": {
+          "global_id": "2O2Fr$t4X7Zf8NOew3FLOH"
+        },
+        "point": {
+          "x": 0,
+          "y": 0,
+          "unit": "mm"
+        },
+        "coordinates": "shared",
+        "door_type": {
+          "family": "Single-Flush",
+          "type": "800 x 2100"
+        }
+      }
+    ]
+  },
+  "report": {
+    "schema": "flo2-rvt/edit-report",
+    "version": 2,
+    "edit": {
+      "addin_version": "0.10.0",
+      "started_at": "2026-11-05T12:00:00.0000000Z",
+      "finished_at": "2026-11-05T12:01:40.0000000Z",
+      "transactions_committed": 7,
+      "transactions_rolled_back": 0,
+      "saved": true,
+      "on_failure": "rolls_back_alone"
+    },
+    "engine": {
+      "version_name": "Autodesk Revit 2024",
+      "version_number": "2024",
+      "sub_version_number": "2024.3",
+      "build": "24.3.0.0"
+    },
+    "file": {
+      "format": "2024",
+      "is_workshared": false,
+      "is_central": false,
+      "saved_in_current_version": true,
+      "saved_in_later_version": false,
+      "opened_detached": false
+    },
+    "change_list": {
+      "list_id": "mech-room-and-walkway-1",
+      "description": "Made-up: a small plant room inside a ground-floor room, and a walkway floor, on a public sample model.",
+      "sha256": "4755d81e69aafde2895fc50a2baff422a535183c805e6196cf36d8aa224237f0",
+      "bytes": 2111,
+      "changes": 8
+    },
+    "outcome": "partly_applied",
+    "totals": {
+      "changes": 8,
+      "applied": 7,
+      "applied_in_part": 0,
+      "rolled_back": 0,
+      "not_applied": 1,
+      "elements_deleted": 0,
+      "other_elements_deleted": 0,
+      "elements_deleted_by_revit": 0,
+      "other_elements_deleted_by_revit": 0,
+      "elements_deleted_with_host": 0,
+      "elements_modified_by_revit": 3,
+      "other_elements_modified_by_revit": 0,
+      "elements_could_not": 0,
+      "elements_left_on_level": 0,
+      "other_elements_left_on_level": 0,
+      "groups_ungrouped": 0,
+      "elements_reshaped_unexpected": 0,
+      "elements_added": 7
+    },
+    "changes": [
+      {
+        "index": 0,
+        "id": "w1",
+        "kind": "add_wall",
+        "status": "applied",
+        "level": {
+          "name": "Level 1",
+          "element_id": 311,
+          "matched_by": "level_name"
+        },
+        "added": [
+          {
+            "element_id": 990001,
+            "global_id": "0MadeUpWall00000000001",
+            "category": "Walls",
+            "revit_class": "Wall",
+            "model_element": true,
+            "family": "Basic Wall",
+            "type": "Interior - Partition",
+            "type_id": 4321,
+            "level": "Level 1",
+            "coordinates": "shared",
+            "wall": {
+              "start": {
+                "shared_ft": [
+                  3.28084,
+                  6.56168
+                ],
+                "internal_ft": [
+                  95.634026,
+                  13.422403
+                ]
+              },
+              "end": {
+                "shared_ft": [
+                  13.12336,
+                  6.56168
+                ],
+                "internal_ft": [
+                  103.495645,
+                  7.500399
+                ]
+              },
+              "length_ft": 9.84252,
+              "length_mm": 3000.0,
+              "height_ft": 8.858268,
+              "height_mm": 2700,
+              "width_mm": 100,
+              "location_line": "wall_centerline",
+              "joins": "join"
+            }
+          }
+        ],
+        "seconds": 0.4
+      },
+      {
+        "index": 1,
+        "id": "w2",
+        "kind": "add_wall",
+        "status": "applied",
+        "level": {
+          "name": "Level 1",
+          "element_id": 311,
+          "matched_by": "level_name"
+        },
+        "added": [
+          {
+            "element_id": 990002,
+            "global_id": "0MadeUpWall00000000002",
+            "category": "Walls",
+            "revit_class": "Wall",
+            "model_element": true,
+            "family": "Basic Wall",
+            "type": "Interior - Partition",
+            "type_id": 4321,
+            "level": "Level 1",
+            "coordinates": "shared",
+            "wall": {
+              "start": {
+                "shared_ft": [
+                  13.12336,
+                  6.56168
+                ],
+                "internal_ft": [
+                  103.495645,
+                  7.500399
+                ]
+              },
+              "end": {
+                "shared_ft": [
+                  13.12336,
+                  14.76378
+                ],
+                "internal_ft": [
+                  108.430649,
+                  14.051749
+                ]
+              },
+              "length_ft": 8.2021,
+              "length_mm": 2500.0,
+              "height_ft": 9.84252,
+              "height_mm": 3000,
+              "width_mm": 100,
+              "location_line": "wall_centerline",
+              "joins": "join",
+              "top_level": "Level 2"
+            }
+          }
+        ],
+        "seconds": 0.4
+      },
+      {
+        "index": 2,
+        "id": "w3",
+        "kind": "add_wall",
+        "status": "applied",
+        "level": {
+          "name": "Level 1",
+          "element_id": 311,
+          "matched_by": "level_name"
+        },
+        "added": [
+          {
+            "element_id": 990003,
+            "global_id": "0MadeUpWall00000000003",
+            "category": "Walls",
+            "revit_class": "Wall",
+            "model_element": true,
+            "family": "Basic Wall",
+            "type": "Interior - Partition",
+            "type_id": 4321,
+            "level": "Level 1",
+            "coordinates": "shared",
+            "wall": {
+              "start": {
+                "shared_ft": [
+                  13.12336,
+                  14.76378
+                ],
+                "internal_ft": [
+                  108.430649,
+                  14.051749
+                ]
+              },
+              "end": {
+                "shared_ft": [
+                  3.28084,
+                  14.76378
+                ],
+                "internal_ft": [
+                  100.569029,
+                  19.973753
+                ]
+              },
+              "length_ft": 9.84252,
+              "length_mm": 3000.0,
+              "height_ft": 8.858268,
+              "height_mm": 2700,
+              "width_mm": 100,
+              "location_line": "wall_centerline",
+              "joins": "join"
+            }
+          }
+        ],
+        "seconds": 0.4
+      },
+      {
+        "index": 3,
+        "id": "w4",
+        "kind": "add_wall",
+        "status": "applied",
+        "level": {
+          "name": "Level 1",
+          "element_id": 311,
+          "matched_by": "level_name"
+        },
+        "added": [
+          {
+            "element_id": 990004,
+            "global_id": "0MadeUpWall00000000004",
+            "category": "Walls",
+            "revit_class": "Wall",
+            "model_element": true,
+            "family": "Basic Wall",
+            "type": "Interior - Partition",
+            "type_id": 4321,
+            "level": "Level 1",
+            "coordinates": "shared",
+            "wall": {
+              "start": {
+                "shared_ft": [
+                  3.28084,
+                  14.76378
+                ],
+                "internal_ft": [
+                  100.569029,
+                  19.973753
+                ]
+              },
+              "end": {
+                "shared_ft": [
+                  3.28084,
+                  6.56168
+                ],
+                "internal_ft": [
+                  95.634026,
+                  13.422403
+                ]
+              },
+              "length_ft": 8.2021,
+              "length_mm": 2500.0,
+              "height_ft": 8.858268,
+              "height_mm": 2700,
+              "width_mm": 100,
+              "location_line": "wall_centerline",
+              "joins": "do_not_join"
+            }
+          }
+        ],
+        "seconds": 0.4
+      },
+      {
+        "index": 4,
+        "id": "r1",
+        "kind": "add_room",
+        "status": "applied",
+        "level": {
+          "name": "Level 1",
+          "element_id": 311,
+          "matched_by": "level_name"
+        },
+        "added": [
+          {
+            "element_id": 990005,
+            "global_id": "0MadeUpRoom00000000001",
+            "category": "Rooms",
+            "revit_class": "Room",
+            "model_element": true,
+            "level": "Level 1",
+            "coordinates": "shared",
+            "room": {
+              "number": "109",
+              "name": "Mech. / Elec.",
+              "area_ft2": 74.916817,
+              "area_m2": 6.96,
+              "perimeter_mm": 10600,
+              "location": {
+                "shared_ft": [
+                  8.2021,
+                  10.66273
+                ],
+                "internal_ft": [
+                  102.032337,
+                  13.737076
+                ]
+              }
+            }
+          }
+        ],
+        "seconds": 0.3
+      },
+      {
+        "index": 5,
+        "id": "d1",
+        "kind": "add_door",
+        "status": "applied",
+        "added": [
+          {
+            "element_id": 990006,
+            "global_id": "0MadeUpDoor00000000001",
+            "category": "Doors",
+            "revit_class": "FamilyInstance",
+            "model_element": true,
+            "family": "Single-Flush",
+            "type": "800 x 2100",
+            "type_id": 5678,
+            "level": "Level 1",
+            "coordinates": "shared",
+            "door": {
+              "host_element_id": 990001,
+              "host_global_id": "0MadeUpWall00000000001",
+              "host_change_id": "w1",
+              "location": {
+                "shared_ft": [
+                  8.2021,
+                  6.56168
+                ],
+                "internal_ft": [
+                  99.564835,
+                  10.461401
+                ]
+              },
+              "along_ft": 4.92126,
+              "along_mm": 1500,
+              "off_line_mm": 0,
+              "width_mm": 800,
+              "height_mm": 2100
+            }
+          }
+        ],
+        "seconds": 0.5
+      },
+      {
+        "index": 6,
+        "id": "f1",
+        "kind": "add_floor",
+        "status": "applied",
+        "level": {
+          "name": "Level 1",
+          "element_id": 311,
+          "matched_by": "level_name"
+        },
+        "added": [
+          {
+            "element_id": 990007,
+            "global_id": "0MadeUpFloor0000000001",
+            "category": "Floors",
+            "revit_class": "Floor",
+            "model_element": true,
+            "family": "Floor",
+            "type": "Generic 150mm",
+            "type_id": 6789,
+            "level": "Level 1",
+            "coordinates": "shared",
+            "floor": {
+              "area_ft2": 64.583463,
+              "area_m2": 6.0,
+              "outline_area_ft2": 64.583463,
+              "outline_area_m2": 6.0,
+              "thickness_mm": 150,
+              "corners": 4
+            }
+          }
+        ],
+        "seconds": 0.6
+      },
+      {
+        "index": 7,
+        "id": "d2",
+        "kind": "add_door",
+        "status": "not_applied",
+        "why": "no element has the GlobalId 2O2Fr$t4X7Zf8NOew3FLOH",
+        "seconds": 0
+      }
+    ],
+    "coordinates": {
+      "angle_deg": 36.99,
+      "offset_x_ft": -65.03,
+      "offset_y_ft": -61.7,
+      "how": "shared = R(angle) x internal + offset, from the project base point (BasePoint.Position, SharedPosition) and ProjectLocation.GetProjectPosition(...).Angle, as Revit's IFC exporter places its site for the shared coordinate base"
+    },
+    "levels_after": [
+      {
+        "name": "Level 1",
+        "elevation_ft": 0,
+        "elevation_mm": 0,
+        "project_elevation_ft": 0,
+        "project_elevation_mm": 0,
+        "element_id": 311,
+        "unique_id": "made-up-level-1"
+      },
+      {
+        "name": "Level 2",
+        "elevation_ft": 9.84252,
+        "elevation_mm": 3000,
+        "project_elevation_ft": 9.84252,
+        "project_elevation_mm": 3000,
+        "element_id": 9946,
+        "unique_id": "made-up-level-2"
+      }
+    ],
+    "element_count_total_before": 5000,
+    "element_count_total_after": 5011,
+    "exports": {
+      "model_rvt": {
+        "written": true,
+        "saved_as": "file",
+        "bytes": 1234567
+      },
+      "sheets_pdf": {
+        "written": true,
+        "sheets": 2
+      },
+      "model_ifc": {
+        "written": true,
+        "ifc_version": "IFC4DTV",
+        "base_quantities": true
+      }
+    },
+    "warnings": [],
+    "warnings_total": 0
+  }
+}

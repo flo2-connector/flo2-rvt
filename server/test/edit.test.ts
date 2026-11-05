@@ -279,6 +279,15 @@ describe("an edit's report summary", () => {
     assert.equal(editSummary(fixture('sample-edit-report.json')).reshaped_unexpected, undefined, 'an older report says nothing of it, rather than 0');
   });
 
+  // Since add-in 0.10.0 a change may add an element (change-list version 3): the summary counts them.
+  test('from a report of add-in 0.10.0, says how many elements the kept changes added', () => {
+    const s = editSummary(fixture('sample-edit-report-additions.json').report as Record<string, unknown>);
+    assert.equal(s.elements_added, 7, 'four walls, a room, a door and a floor');
+    assert.equal(s.not_applied, 1, 'the door into a wall the model does not have');
+    assert.ok(EditSummary.safeParse(s).success, 'in the contract');
+    assert.equal(editSummary(fixture('sample-edit-report.json')).elements_added, undefined, 'an older report says nothing of it, rather than 0');
+  });
+
   test('from a version-1 report (add-in 0.2.0), reads as before, without the counts it did not keep', () => {
     const s = editSummary(fixture('sample-edit-report-0.2.0.json'));
     assert.deepEqual(s, { outcome: 'partly_applied', changes: 3, applied: 1, applied_in_part: 1, rolled_back: 1, not_applied: 0, elements_deleted: 14, model_saved: true });
