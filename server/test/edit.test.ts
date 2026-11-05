@@ -2,7 +2,10 @@
 // stand-in: the change list is checked before Autodesk is asked, uploaded beside the model
 // in its canonical form and named by its SHA-256, the WorkItem names the edit Activity with
 // the change list as an input and the new model as an optional output, and the status call
-// serves an edit's four outputs and its report's counts, after a restart too.
+// serves an edit's four outputs and its report's counts, after a restart too. Since contract v4
+// (flo2-rvt 0.12.0), the family files a version 4 list names: each handed over once by flo2.io,
+// checked against the list and its limits before Autodesk is asked, uploaded by size and sha256,
+// and handed to the WorkItem as family1, family2 ... in the order the list first names them.
 
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -12,7 +15,7 @@ import { readFileSync } from 'node:fs';
 import { EditSummary } from '../src/contract.ts';
 import { JobService, editSummary } from '../src/jobs.ts';
 import { memoryLogger } from '../src/log.ts';
-import { APS_TOKEN, CLIENT_ID, jobMeta, rpc, startHarness, type Harness } from './helpers.ts';
+import { APS_TOKEN, CLIENT_ID, familyHandover, jobMeta, rpc, startHarness, type Harness } from './helpers.ts';
 
 type Rpc = { result?: { isError?: boolean; content?: Array<{ text: string }>; structuredContent?: Record<string, unknown>; _meta?: Record<string, unknown>; tools?: Array<Record<string, unknown>> } };
 
@@ -220,6 +223,97 @@ describe('an edit from start to success', () => {
   });
 });
 
+// Since contract v4: a version 4 list's family files, handed over as the model is.
+const FOUNDATIONS = {
+  version: 4,
+  list_id: 'foundation-2',
+  changes: [
+    { kind: 'add_footing', id: 'f1', level: { level_name: 'Level 1' }, point: { x: 1500, y: 3000, unit: 'mm' }, coordinates: 'shared', footing_type: { family: 'Footing-Rectangular', type: '1800 x 1200 x 450mm' }, family_file: 'Footing-Rectangular.rfa' },
+    { kind: 'add_pile', id: 'p1', level: { level_name: 'Level 1' }, point: { x: 1500, y: 3000, unit: 'mm' }, coordinates: 'shared', pile_type: { family: 'Pile-Steel Pipe', type: 'Standard' }, family_file: 'Pile-Steel Pipe.rfa', top_offset: { value: -450, unit: 'mm' } },
+    { kind: 'add_footing', id: 'f2', level: { level_name: 'Level 1' }, point: { x: 4500, y: 3000, unit: 'mm' }, coordinates: 'shared', footing_type: { family: 'Footing-Rectangular', type: '1800 x 1200 x 450mm' }, family_file: 'Footing-Rectangular.rfa' },
+  ],
+};
+/** Made-up bytes standing for two family files; a test never needs a real .rfa. */
+const FOOTING_RFA = Buffer.alloc(20_000, 'Footing-Rectangular.rfa stand-in bytes ');
+const PILE_RFA = Buffer.alloc(30_000, 'Pile-Steel Pipe.rfa stand-in bytes ');
+
+describe('an edit whose list names family files', () => {
+  let h: Harness;
+  before(async () => {
+    h = await startHarness();
+  });
+  after(() => h.close());
+  const bucket = `flo2rvt-${CLIENT_ID.toLowerCase()}-t`;
+  const withFamilies = (families: unknown[]) => {
+    const m = jobMeta(h.aps);
+    (m['flo2.io/job'] as Record<string, unknown>).families = families;
+    return m;
+  };
+
+  test('uploads each beside the model, by size and sha256, and hands it to the WorkItem in the order the list first names it', async () => {
+    // Handed over in another order than the list's: the list's order decides.
+    const pile = familyHandover(h.aps, 'Pile-Steel Pipe.rfa', PILE_RFA);
+    const footing = familyHandover(h.aps, 'Footing-Rectangular.rfa', FOOTING_RFA);
+    const r = await call(h, 'rvt_edit_start', { file: 'rac_basic_sample_project.rvt', change_list: FOUNDATIONS }, withFamilies([pile, footing]));
+    const out = r.result?.structuredContent as { job_id: string; state: string; change_list_sha256: string; family_files: Array<Record<string, unknown>> };
+    assert.equal(out.state, 'submitted', JSON.stringify(r));
+    assert.deepEqual(out.family_files, [
+      { family_file: 'Footing-Rectangular.rfa', input: 'family1', size: FOOTING_RFA.length, sha256: sha(FOOTING_RFA) },
+      { family_file: 'Pile-Steel Pipe.rfa', input: 'family2', size: PILE_RFA.length, sha256: sha(PILE_RFA) },
+    ], 'what was uploaded, for the gateway to hold to what the person was shown');
+    assert.ok(h.aps.objects.get(`${bucket}/${out.job_id}/family1.rfa`)?.bytes.equals(FOOTING_RFA), 'the first family file the list names is family1.rfa');
+    assert.ok(h.aps.objects.get(`${bucket}/${out.job_id}/family2.rfa`)?.bytes.equals(PILE_RFA));
+    const wi = h.aps.workItems.at(-1) as { arguments: Record<string, { url: string; verb: string; headers: Record<string, string> }> };
+    assert.deepEqual(Object.keys(wi.arguments).sort(), ['changes', 'family1', 'family2', 'ifc', 'report', 'result', 'rvtFile', 'sheets'], 'only the family inputs the list uses');
+    assert.equal(wi.arguments.family1?.verb, 'get');
+    assert.equal(wi.arguments.family1?.url, `urn:adsk.objects:os.object:${bucket}/${out.job_id}%2Ffamily1.rfa`);
+    assert.equal(wi.arguments.family2?.headers.Authorization, `Bearer ${APS_TOKEN}`);
+    const record = JSON.parse(h.aps.objects.get(`${bucket}/${out.job_id}/workitem.json`)!.bytes.toString('utf8'));
+    assert.deepEqual(record.family_files, [
+      { input: 'family1', size: FOOTING_RFA.length, sha256: sha(FOOTING_RFA) },
+      { input: 'family2', size: PILE_RFA.length, sha256: sha(PILE_RFA) },
+    ]);
+    const logged = h.logger.lines.join('\n');
+    assert.ok(!logged.includes('Footing-Rectangular') && !logged.includes('/flo2/download/family'), 'the log names no family file and no link, only their sha256');
+    assert.ok(logged.includes(sha(PILE_RFA)));
+  });
+
+  test('refuses by name, before anything reaches Autodesk: a family file not handed over, one the list does not name, one twice, one too large, and all too large together', async () => {
+    const before = h.aps.calls.length;
+    const footing = familyHandover(h.aps, 'Footing-Rectangular.rfa', FOOTING_RFA);
+    const pile = familyHandover(h.aps, 'Pile-Steel Pipe.rfa', PILE_RFA);
+    const other = familyHandover(h.aps, 'Pile Cap-2 Pile.rfa', PILE_RFA);
+    const start = async (families: unknown[] | undefined) => refusal(await call(h, 'rvt_edit_start', { file: 'x.rvt', change_list: FOUNDATIONS }, families === undefined ? jobMeta(h.aps) : withFamilies(families)));
+    assert.match(await start(undefined), /names the family files "Footing-Rectangular\.rfa", "Pile-Steel Pipe\.rfa", and flo2\.io did not hand them over; no job was started/);
+    assert.match(await start([footing]), /names the family file "Pile-Steel Pipe\.rfa", and flo2\.io did not hand it over/);
+    assert.match(await start([footing, pile, other]), /handed over the family file "Pile Cap-2 Pile\.rfa", which the change list does not name/);
+    assert.match(await start([footing, footing, pile]), /handed over the family file "Footing-Rectangular\.rfa" twice/);
+    assert.match(await start([{ ...footing, size: 32 * 1024 * 1024 + 1 }, pile]), /"Footing-Rectangular\.rfa" is 33554433 bytes \(32 MiB\); a family file may be at most 33554432 bytes \(32 MiB\)/);
+    // Each within 32 MiB, three of them past 64 MiB in all.
+    const three = { ...FOUNDATIONS, changes: [...FOUNDATIONS.changes, { ...FOUNDATIONS.changes[0], id: 'f3', family_file: 'Pile Cap-2 Pile.rfa' }] };
+    const full = 32 * 1024 * 1024;
+    const tooMuch = withFamilies([{ ...footing, size: full }, { ...pile, size: full }, { ...other, size: 1 }]);
+    assert.match(refusal(await call(h, 'rvt_edit_start', { file: 'x.rvt', change_list: three }, tooMuch)), /The family files the change list names are 67108865 bytes in all \(64 MiB\); at most 67108864 bytes \(64 MiB\) go with one job/);
+    assert.equal(h.aps.calls.length, before, 'nothing reached Autodesk');
+  });
+
+  test('a family file whose bytes are not the sha256 flo2.io said starts no job', async () => {
+    const workItems = h.aps.workItems.length;
+    const footing = familyHandover(h.aps, 'Footing-Rectangular.rfa', FOOTING_RFA, { sha256: sha('other bytes') });
+    const pile = familyHandover(h.aps, 'Pile-Steel Pipe.rfa', PILE_RFA);
+    const why = refusal(await call(h, 'rvt_edit_start', { file: 'x.rvt', change_list: FOUNDATIONS }, withFamilies([footing, pile])));
+    assert.match(why, /the family file "Footing-Rectangular\.rfa": .*SHA-256.*; no job was started/);
+    assert.equal(h.aps.workItems.length, workItems, 'no WorkItem');
+  });
+
+  test('a probe that carries family files is refused: it loads nothing', async () => {
+    const before = h.aps.calls.length;
+    const m = withFamilies([familyHandover(h.aps, 'Footing-Rectangular.rfa', FOOTING_RFA)]);
+    assert.match(refusal(await call(h, 'rvt_probe_start', { file: 'x.rvt' }, m)), /family files with a probe, which reads the model alone and loads nothing/);
+    assert.equal(h.aps.calls.length, before);
+  });
+});
+
 describe('an edit none of whose changes was kept', () => {
   test('hands over report.json alone, and says no model was saved', async () => {
     const h = await startHarness({ statuses: ['success'], writes: ['report.json'] });
@@ -286,6 +380,16 @@ describe("an edit's report summary", () => {
     assert.equal(s.not_applied, 1, 'the door into a wall the model does not have');
     assert.ok(EditSummary.safeParse(s).success, 'in the contract');
     assert.equal(editSummary(fixture('sample-edit-report.json')).elements_added, undefined, 'an older report says nothing of it, rather than 0');
+  });
+
+  // Since add-in 0.11.0 a change may add a foundation (change-list version 4): the summary counts it with the rest.
+  test('from a report of add-in 0.11.0, counts the foundations the kept changes added', () => {
+    const f = fixture('sample-edit-report-foundations.json');
+    const s = editSummary(f.report as Record<string, unknown>);
+    assert.equal(s.elements_added, 6, 'a wall, a wall footing, two footings and two piles');
+    assert.equal(s.not_applied, 1, 'the footing from a family file that is not a Structural Foundations family');
+    assert.equal(s.outcome, 'partly_applied');
+    assert.ok(EditSummary.safeParse(s).success, 'in the contract');
   });
 
   test('from a version-1 report (add-in 0.2.0), reads as before, without the counts it did not keep', () => {

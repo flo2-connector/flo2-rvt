@@ -1,0 +1,166 @@
+{
+  "_note": "A made-up excerpt of a probe report of add-in 0.11.0: its `types`, with `foundations` (every Structural Foundations family type and wall foundation type, each with its length parameters, type or instance, their values, and whether Revit holds them read-only or by a formula), as an edit's add_footing, add_pile and add_wall_footing name them and their sizes. The names are Revit's defaults and made-up families'. Read by addin/tests through the probe report's contract, and for flo2's own reading of a probe's foundation types.",
+  "types": {
+    "walls": [
+      {
+        "family": "Basic Wall",
+        "type": "Exterior - 200mm",
+        "element_id": 4322,
+        "kind": "Basic",
+        "width_mm": 200
+      }
+    ],
+    "floors": [
+      {
+        "family": "Floor",
+        "type": "Generic 150mm",
+        "element_id": 4400,
+        "thickness_mm": 150
+      }
+    ],
+    "doors": [],
+    "foundations": [
+      {
+        "family": "Footing-Rectangular",
+        "type": "1800 x 1200 x 450mm",
+        "element_id": 990111,
+        "kind": "family_type",
+        "sizes": [
+          {
+            "name": "Foundation Thickness",
+            "of": "type",
+            "value_ft": 1.476378,
+            "value_mm": 450.0
+          },
+          {
+            "name": "Length",
+            "of": "type",
+            "value_ft": 5.905512,
+            "value_mm": 1800.0
+          },
+          {
+            "name": "Width",
+            "of": "type",
+            "value_ft": 3.937008,
+            "value_mm": 1200.0
+          }
+        ]
+      },
+      {
+        "family": "Pile-Steel Pipe",
+        "type": "Standard",
+        "element_id": 990110,
+        "kind": "family_type",
+        "sizes": [
+          {
+            "name": "Pile Diameter",
+            "of": "type",
+            "value_ft": 0.984252,
+            "value_mm": 300.0
+          },
+          {
+            "name": "Pile Cutoff",
+            "of": "type",
+            "value_ft": 0.246063,
+            "value_mm": 75.0,
+            "read_only": true,
+            "formula": true
+          },
+          {
+            "name": "Pile Length",
+            "of": "instance",
+            "value_ft": 29.527559,
+            "value_mm": 9000.0
+          }
+        ]
+      },
+      {
+        "family": "Pile Cap-1 Pile",
+        "type": "Standard",
+        "element_id": 990120,
+        "kind": "family_type",
+        "sizes": [
+          {
+            "name": "Foundation Thickness",
+            "of": "type",
+            "value_ft": 1.968504,
+            "value_mm": 600.0
+          }
+        ],
+        "instance_sizes_unread": "its family's document could not be read: InvalidOperationException: made-up"
+      },
+      {
+        "family": "Wall Foundation",
+        "type": "Bearing Footing - 900 x 300",
+        "element_id": 4500,
+        "kind": "wall_foundation_type",
+        "sizes": [
+          {
+            "name": "Default End Extension Length",
+            "of": "type",
+            "value_ft": 0.0,
+            "value_mm": 0.0
+          },
+          {
+            "name": "Foundation Thickness",
+            "of": "type",
+            "value_ft": 0.984252,
+            "value_mm": 300.0
+          },
+          {
+            "name": "Width",
+            "of": "type",
+            "value_ft": 2.952756,
+            "value_mm": 900.0
+          },
+          {
+            "name": "Eccentricity",
+            "of": "instance",
+            "value_ft": 0.0,
+            "value_mm": 0.0
+          },
+          {
+            "name": "Length",
+            "of": "instance",
+            "value_ft": 19.685039,
+            "value_mm": 6000.0,
+            "read_only": true
+          }
+        ]
+      },
+      {
+        "family": "Wall Foundation",
+        "type": "Retaining Footing - 900 x 250 x 600",
+        "element_id": 4501,
+        "kind": "wall_foundation_type",
+        "sizes": [
+          {
+            "name": "Foundation Thickness",
+            "of": "type",
+            "value_ft": 1.968504,
+            "value_mm": 600.0
+          },
+          {
+            "name": "Heel Length",
+            "of": "type",
+            "value_ft": 0.82021,
+            "value_mm": 250.0
+          },
+          {
+            "name": "Toe Length",
+            "of": "type",
+            "value_ft": 0.82021,
+            "value_mm": 250.0
+          },
+          {
+            "name": "Width",
+            "of": "type",
+            "value_ft": 2.952756,
+            "value_mm": 900.0
+          }
+        ],
+        "instance_sizes_unread": "a wall foundation's own parameters are read from one in the model, and the model holds none of this type"
+      }
+    ]
+  }
+}

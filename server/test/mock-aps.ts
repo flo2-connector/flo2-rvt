@@ -75,6 +75,8 @@ export class MockAps {
   readonly calls: Call[] = [];
   readonly objects = new Map<string, { bytes: Buffer; contentType: string }>();
   readonly workItems: unknown[] = [];
+  /** Since contract v4: the family files flo2.io's links serve, by name (/flo2/download/family/<name>). */
+  readonly families = new Map<string, Buffer>();
   readonly appBundleUploads: Array<{ fields: string[]; fileBytes: number }> = [];
   private readonly uploads = new Map<string, Upload>();
   private readonly buckets = new Map<string, 'me' | 'other'>();
@@ -163,6 +165,14 @@ export class MockAps {
 
     // flo2.io's short-lived download link for the input.
     if (path === '/flo2/download/input') return this.send(res, 200, SAMPLE_INPUT.toString('latin1'), 'application/octet-stream');
+    // ... and, since contract v4, for each family file an edit's list names.
+    if ((g = m(/^\/flo2\/download\/family\/(.+)$/))) {
+      const bytes = this.families.get(decodeURIComponent(g[1] as string));
+      if (!bytes) return this.send(res, 404, { reason: 'no such family file' });
+      res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Length': String(bytes.length) });
+      res.end(bytes);
+      return;
+    }
 
     // OSS
     if (req.method === 'POST' && path === '/oss/v2/buckets') {

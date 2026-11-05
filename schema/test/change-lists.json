@@ -220,7 +220,7 @@
       "schema": false,
       "accepted": false,
       "list": {
-        "version": 4,
+        "version": 5,
         "list_id": "sample-1",
         "description": "Made-up changes to a public sample model.",
         "changes": [
@@ -2832,6 +2832,1685 @@
             "door_type": {
               "family": "Single-Flush",
               "type": "800 x 2100"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "version 4: a foundation: a wall footing under a wall the list adds, sized on a copy of its type; two footings from a family file, one turned and sized on a copy of its type, one placed from that copy by name, both below their level; and two piles from a family file, sized on each pile",
+      "schema": true,
+      "accepted": true,
+      "list": {
+        "version": 4,
+        "list_id": "foundation-1",
+        "description": "Made-up: a foundation for a small room on a public sample model.",
+        "changes": [
+          {
+            "kind": "add_wall",
+            "id": "w1",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "start": {
+              "x": 0,
+              "y": 0,
+              "unit": "mm"
+            },
+            "end": {
+              "x": 6000,
+              "y": 0,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "wall_type": {
+              "family": "Basic Wall",
+              "type": "Exterior - 200mm"
+            },
+            "top": {
+              "height": {
+                "value": 2700,
+                "unit": "mm"
+              }
+            }
+          },
+          {
+            "kind": "add_wall_footing",
+            "id": "wf1",
+            "wall": {
+              "wall_change": "w1"
+            },
+            "wall_footing_type": {
+              "family": "Wall Foundation",
+              "type": "Bearing Footing - 900 x 300"
+            },
+            "sizes": {
+              "Width": {
+                "value": 600,
+                "unit": "mm"
+              },
+              "Foundation Thickness": {
+                "value": 300,
+                "unit": "mm"
+              }
+            },
+            "new_type": "Bearing Footing - 600 x 300"
+          },
+          {
+            "kind": "add_footing",
+            "id": "f1",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "point": {
+              "x": 1500,
+              "y": 3000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "footing_type": {
+              "family": "Footing-Rectangular",
+              "type": "1800 x 1200 x 450mm"
+            },
+            "family_file": "Footing-Rectangular.rfa",
+            "sizes": {
+              "Width": {
+                "value": 1.5,
+                "unit": "m"
+              },
+              "Length": {
+                "value": 1.5,
+                "unit": "m"
+              },
+              "Foundation Thickness": {
+                "value": 450,
+                "unit": "mm"
+              }
+            },
+            "new_type": "1500 x 1500 x 450mm",
+            "top_offset": {
+              "value": -600,
+              "unit": "mm"
+            },
+            "rotation_deg": 30
+          },
+          {
+            "kind": "add_footing",
+            "id": "f2",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "point": {
+              "x": 4500,
+              "y": 3000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "footing_type": {
+              "family": "Footing-Rectangular",
+              "type": "1500 x 1500 x 450mm"
+            },
+            "family_file": "Footing-Rectangular.rfa",
+            "top_offset": {
+              "value": -600,
+              "unit": "mm"
+            }
+          },
+          {
+            "kind": "add_pile",
+            "id": "p1",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "point": {
+              "x": 1500,
+              "y": 3000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "pile_type": {
+              "family": "Pile-Steel Pipe",
+              "type": "Standard"
+            },
+            "family_file": "Pile-Steel Pipe.rfa",
+            "sizes": {
+              "Pile Length": {
+                "value": 6,
+                "unit": "m"
+              }
+            },
+            "top_offset": {
+              "value": -1050,
+              "unit": "mm"
+            }
+          },
+          {
+            "kind": "add_pile",
+            "id": "p2",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "point": {
+              "x": 4500,
+              "y": 3000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "pile_type": {
+              "family": "Pile-Steel Pipe",
+              "type": "Standard"
+            },
+            "family_file": "Pile-Steel Pipe.rfa",
+            "sizes": {
+              "Pile Length": {
+                "value": 6,
+                "unit": "m"
+              }
+            },
+            "top_offset": {
+              "value": -1050,
+              "unit": "mm"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "version 4: a wall footing under a wall the model has, by its GlobalId, and a footing on a level by its storey's GlobalId, in internal coordinates and feet, each placed from its type as it is",
+      "schema": true,
+      "accepted": true,
+      "list": {
+        "version": 4,
+        "changes": [
+          {
+            "kind": "add_wall_footing",
+            "wall": {
+              "global_id": "2O2Fr$t4X7Zf8NOew3FLOH"
+            },
+            "wall_footing_type": {
+              "type": "Bearing Footing - 900 x 300"
+            }
+          },
+          {
+            "kind": "add_footing",
+            "level": {
+              "global_id": "3cUkl32yn9qRSPvBJVyWYp"
+            },
+            "point": {
+              "x": 12.5,
+              "y": -4,
+              "unit": "ft"
+            },
+            "coordinates": "internal",
+            "footing_type": {
+              "type": "1800 x 1200 x 450mm"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "version 4 reads a list of version 3's vocabulary as it did",
+      "schema": true,
+      "accepted": true,
+      "list": {
+        "version": 4,
+        "list_id": "mech-room-1",
+        "description": "Made-up: a small plant room built inside a ground-floor room of a public sample model.",
+        "changes": [
+          {
+            "kind": "add_wall",
+            "id": "w1",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "start": {
+              "x": 1000,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "end": {
+              "x": 4000,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "wall_type": {
+              "family": "Basic Wall",
+              "type": "Interior - Partition"
+            },
+            "top": {
+              "height": {
+                "value": 2700,
+                "unit": "mm"
+              }
+            }
+          },
+          {
+            "kind": "add_wall",
+            "id": "w2",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "start": {
+              "x": 4000,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "end": {
+              "x": 4000,
+              "y": 4500,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "wall_type": {
+              "family": "Basic Wall",
+              "type": "Interior - Partition"
+            },
+            "top": {
+              "top_level": {
+                "level_name": "Level 2"
+              }
+            }
+          },
+          {
+            "kind": "add_wall",
+            "id": "w3",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "start": {
+              "x": 4000,
+              "y": 4500,
+              "unit": "mm"
+            },
+            "end": {
+              "x": 1000,
+              "y": 4500,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "wall_type": {
+              "type": "Interior - Partition"
+            },
+            "top": {
+              "height": {
+                "value": 9,
+                "unit": "ft"
+              }
+            },
+            "joins": "join"
+          },
+          {
+            "kind": "add_wall",
+            "id": "w4",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "start": {
+              "x": 1000,
+              "y": 4500,
+              "unit": "mm"
+            },
+            "end": {
+              "x": 1000,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "wall_type": {
+              "family": "Basic Wall",
+              "type": "Interior - Partition"
+            },
+            "top": {
+              "height": {
+                "value": 2.7,
+                "unit": "m"
+              }
+            },
+            "joins": "do_not_join"
+          },
+          {
+            "kind": "add_room",
+            "id": "r1",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "point": {
+              "x": 2500,
+              "y": 3250,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "name": "Mech. / Elec.",
+            "number": "109"
+          },
+          {
+            "kind": "add_door",
+            "id": "d1",
+            "host": {
+              "wall_change": "w1"
+            },
+            "point": {
+              "x": 2500,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "door_type": {
+              "family": "Single-Flush",
+              "type": "800 x 2100"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "version 4: a list naming eight family files, the most one list may name",
+      "schema": true,
+      "accepted": true,
+      "list": {
+        "version": 4,
+        "changes": [
+          {
+            "kind": "add_footing",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "point": {
+              "x": 0,
+              "y": 0,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "footing_type": {
+              "type": "Type 0"
+            },
+            "family_file": "Footing-0.rfa"
+          },
+          {
+            "kind": "add_footing",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "point": {
+              "x": 1000,
+              "y": 0,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "footing_type": {
+              "type": "Type 1"
+            },
+            "family_file": "Footing-1.rfa"
+          },
+          {
+            "kind": "add_footing",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "point": {
+              "x": 2000,
+              "y": 0,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "footing_type": {
+              "type": "Type 2"
+            },
+            "family_file": "Footing-2.rfa"
+          },
+          {
+            "kind": "add_footing",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "point": {
+              "x": 3000,
+              "y": 0,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "footing_type": {
+              "type": "Type 3"
+            },
+            "family_file": "Footing-3.rfa"
+          },
+          {
+            "kind": "add_footing",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "point": {
+              "x": 4000,
+              "y": 0,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "footing_type": {
+              "type": "Type 4"
+            },
+            "family_file": "Footing-4.rfa"
+          },
+          {
+            "kind": "add_footing",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "point": {
+              "x": 5000,
+              "y": 0,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "footing_type": {
+              "type": "Type 5"
+            },
+            "family_file": "Footing-5.rfa"
+          },
+          {
+            "kind": "add_footing",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "point": {
+              "x": 6000,
+              "y": 0,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "footing_type": {
+              "type": "Type 6"
+            },
+            "family_file": "Footing-6.rfa"
+          },
+          {
+            "kind": "add_footing",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "point": {
+              "x": 7000,
+              "y": 0,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "footing_type": {
+              "type": "Type 7"
+            },
+            "family_file": "Footing-7.rfa"
+          }
+        ]
+      }
+    },
+    {
+      "why": "version 3 naming add_footing, which needs version 4",
+      "schema": true,
+      "accepted": false,
+      "list": {
+        "version": 3,
+        "changes": [
+          {
+            "kind": "add_footing",
+            "id": "f2",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "point": {
+              "x": 4500,
+              "y": 3000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "footing_type": {
+              "family": "Footing-Rectangular",
+              "type": "1500 x 1500 x 450mm"
+            },
+            "family_file": "Footing-Rectangular.rfa",
+            "top_offset": {
+              "value": -600,
+              "unit": "mm"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "version 3 naming add_wall_footing, which needs version 4",
+      "schema": true,
+      "accepted": false,
+      "list": {
+        "version": 3,
+        "changes": [
+          {
+            "kind": "add_wall_footing",
+            "wall": {
+              "global_id": "2O2Fr$t4X7Zf8NOew3FLOH"
+            },
+            "wall_footing_type": {
+              "type": "Bearing Footing - 900 x 300"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "version 3 naming add_pile, which needs version 4",
+      "schema": true,
+      "accepted": false,
+      "list": {
+        "version": 3,
+        "changes": [
+          {
+            "kind": "add_pile",
+            "id": "p1",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "point": {
+              "x": 1500,
+              "y": 3000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "pile_type": {
+              "family": "Pile-Steel Pipe",
+              "type": "Standard"
+            },
+            "family_file": "Pile-Steel Pipe.rfa",
+            "sizes": {
+              "Pile Length": {
+                "value": 6,
+                "unit": "m"
+              }
+            },
+            "top_offset": {
+              "value": -1050,
+              "unit": "mm"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "a footing that names new_type without sizes",
+      "schema": true,
+      "accepted": false,
+      "list": {
+        "version": 4,
+        "changes": [
+          {
+            "kind": "add_footing",
+            "id": "f2",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "point": {
+              "x": 4500,
+              "y": 3000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "footing_type": {
+              "family": "Footing-Rectangular",
+              "type": "1500 x 1500 x 450mm"
+            },
+            "family_file": "Footing-Rectangular.rfa",
+            "top_offset": {
+              "value": -600,
+              "unit": "mm"
+            },
+            "new_type": "1200 x 1200 x 450mm"
+          }
+        ]
+      }
+    },
+    {
+      "why": "a wall footing under a wall change the list does not hold",
+      "schema": true,
+      "accepted": false,
+      "list": {
+        "version": 4,
+        "changes": [
+          {
+            "kind": "add_wall",
+            "id": "w1",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "start": {
+              "x": 0,
+              "y": 0,
+              "unit": "mm"
+            },
+            "end": {
+              "x": 6000,
+              "y": 0,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "wall_type": {
+              "family": "Basic Wall",
+              "type": "Exterior - 200mm"
+            },
+            "top": {
+              "height": {
+                "value": 2700,
+                "unit": "mm"
+              }
+            }
+          },
+          {
+            "kind": "add_wall_footing",
+            "id": "wf1",
+            "wall": {
+              "wall_change": "w9"
+            },
+            "wall_footing_type": {
+              "family": "Wall Foundation",
+              "type": "Bearing Footing - 900 x 300"
+            },
+            "sizes": {
+              "Width": {
+                "value": 600,
+                "unit": "mm"
+              },
+              "Foundation Thickness": {
+                "value": 300,
+                "unit": "mm"
+              }
+            },
+            "new_type": "Bearing Footing - 600 x 300"
+          }
+        ]
+      }
+    },
+    {
+      "why": "a wall footing under a wall change that comes after it",
+      "schema": true,
+      "accepted": false,
+      "list": {
+        "version": 4,
+        "changes": [
+          {
+            "kind": "add_wall_footing",
+            "id": "wf1",
+            "wall": {
+              "wall_change": "w1"
+            },
+            "wall_footing_type": {
+              "family": "Wall Foundation",
+              "type": "Bearing Footing - 900 x 300"
+            },
+            "sizes": {
+              "Width": {
+                "value": 600,
+                "unit": "mm"
+              },
+              "Foundation Thickness": {
+                "value": 300,
+                "unit": "mm"
+              }
+            },
+            "new_type": "Bearing Footing - 600 x 300"
+          },
+          {
+            "kind": "add_wall",
+            "id": "w1",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "start": {
+              "x": 0,
+              "y": 0,
+              "unit": "mm"
+            },
+            "end": {
+              "x": 6000,
+              "y": 0,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "wall_type": {
+              "family": "Basic Wall",
+              "type": "Exterior - 200mm"
+            },
+            "top": {
+              "height": {
+                "value": 2700,
+                "unit": "mm"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "a wall footing under a change that adds no wall",
+      "schema": true,
+      "accepted": false,
+      "list": {
+        "version": 4,
+        "changes": [
+          {
+            "kind": "add_footing",
+            "id": "f2",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "point": {
+              "x": 4500,
+              "y": 3000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "footing_type": {
+              "family": "Footing-Rectangular",
+              "type": "1500 x 1500 x 450mm"
+            },
+            "family_file": "Footing-Rectangular.rfa",
+            "top_offset": {
+              "value": -600,
+              "unit": "mm"
+            }
+          },
+          {
+            "kind": "add_wall_footing",
+            "id": "wf1",
+            "wall": {
+              "wall_change": "f2"
+            },
+            "wall_footing_type": {
+              "family": "Wall Foundation",
+              "type": "Bearing Footing - 900 x 300"
+            },
+            "sizes": {
+              "Width": {
+                "value": 600,
+                "unit": "mm"
+              },
+              "Foundation Thickness": {
+                "value": 300,
+                "unit": "mm"
+              }
+            },
+            "new_type": "Bearing Footing - 600 x 300"
+          }
+        ]
+      }
+    },
+    {
+      "why": "a footing point beyond Revit's model extent",
+      "schema": true,
+      "accepted": false,
+      "list": {
+        "version": 4,
+        "changes": [
+          {
+            "kind": "add_footing",
+            "id": "f2",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "point": {
+              "x": 40000,
+              "y": 0,
+              "unit": "m"
+            },
+            "coordinates": "shared",
+            "footing_type": {
+              "family": "Footing-Rectangular",
+              "type": "1500 x 1500 x 450mm"
+            },
+            "family_file": "Footing-Rectangular.rfa",
+            "top_offset": {
+              "value": -600,
+              "unit": "mm"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "a pile whose top offset is beyond Revit's model extent",
+      "schema": true,
+      "accepted": false,
+      "list": {
+        "version": 4,
+        "changes": [
+          {
+            "kind": "add_pile",
+            "id": "p1",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "point": {
+              "x": 1500,
+              "y": 3000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "pile_type": {
+              "family": "Pile-Steel Pipe",
+              "type": "Standard"
+            },
+            "family_file": "Pile-Steel Pipe.rfa",
+            "sizes": {
+              "Pile Length": {
+                "value": 6,
+                "unit": "m"
+              }
+            },
+            "top_offset": {
+              "value": -200000,
+              "unit": "ft"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "a footing size beyond Revit's model extent",
+      "schema": true,
+      "accepted": false,
+      "list": {
+        "version": 4,
+        "changes": [
+          {
+            "kind": "add_footing",
+            "id": "f1",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "point": {
+              "x": 1500,
+              "y": 3000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "footing_type": {
+              "family": "Footing-Rectangular",
+              "type": "1800 x 1200 x 450mm"
+            },
+            "family_file": "Footing-Rectangular.rfa",
+            "sizes": {
+              "Width": {
+                "value": 40000,
+                "unit": "m"
+              },
+              "Length": {
+                "value": 1.5,
+                "unit": "m"
+              },
+              "Foundation Thickness": {
+                "value": 450,
+                "unit": "mm"
+              }
+            },
+            "new_type": "1500 x 1500 x 450mm",
+            "top_offset": {
+              "value": -600,
+              "unit": "mm"
+            },
+            "rotation_deg": 30
+          }
+        ]
+      }
+    },
+    {
+      "why": "a list naming nine family files",
+      "schema": true,
+      "accepted": false,
+      "list": {
+        "version": 4,
+        "changes": [
+          {
+            "kind": "add_footing",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "point": {
+              "x": 0,
+              "y": 0,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "footing_type": {
+              "type": "Type 0"
+            },
+            "family_file": "Footing-0.rfa"
+          },
+          {
+            "kind": "add_footing",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "point": {
+              "x": 1000,
+              "y": 0,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "footing_type": {
+              "type": "Type 1"
+            },
+            "family_file": "Footing-1.rfa"
+          },
+          {
+            "kind": "add_footing",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "point": {
+              "x": 2000,
+              "y": 0,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "footing_type": {
+              "type": "Type 2"
+            },
+            "family_file": "Footing-2.rfa"
+          },
+          {
+            "kind": "add_footing",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "point": {
+              "x": 3000,
+              "y": 0,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "footing_type": {
+              "type": "Type 3"
+            },
+            "family_file": "Footing-3.rfa"
+          },
+          {
+            "kind": "add_footing",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "point": {
+              "x": 4000,
+              "y": 0,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "footing_type": {
+              "type": "Type 4"
+            },
+            "family_file": "Footing-4.rfa"
+          },
+          {
+            "kind": "add_footing",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "point": {
+              "x": 5000,
+              "y": 0,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "footing_type": {
+              "type": "Type 5"
+            },
+            "family_file": "Footing-5.rfa"
+          },
+          {
+            "kind": "add_footing",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "point": {
+              "x": 6000,
+              "y": 0,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "footing_type": {
+              "type": "Type 6"
+            },
+            "family_file": "Footing-6.rfa"
+          },
+          {
+            "kind": "add_footing",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "point": {
+              "x": 7000,
+              "y": 0,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "footing_type": {
+              "type": "Type 7"
+            },
+            "family_file": "Footing-7.rfa"
+          },
+          {
+            "kind": "add_footing",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "point": {
+              "x": 8000,
+              "y": 0,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "footing_type": {
+              "type": "Type 0"
+            },
+            "family_file": "Footing-8.rfa"
+          }
+        ]
+      }
+    },
+    {
+      "why": "a footing with no coordinates",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 4,
+        "changes": [
+          {
+            "kind": "add_footing",
+            "id": "f2",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "point": {
+              "x": 4500,
+              "y": 3000,
+              "unit": "mm"
+            },
+            "footing_type": {
+              "family": "Footing-Rectangular",
+              "type": "1500 x 1500 x 450mm"
+            },
+            "family_file": "Footing-Rectangular.rfa",
+            "top_offset": {
+              "value": -600,
+              "unit": "mm"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "a footing type given as text, not by type and family",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 4,
+        "changes": [
+          {
+            "kind": "add_footing",
+            "id": "f2",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "point": {
+              "x": 4500,
+              "y": 3000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "footing_type": "Footing-Rectangular: 1500 x 1500 x 450mm",
+            "family_file": "Footing-Rectangular.rfa",
+            "top_offset": {
+              "value": -600,
+              "unit": "mm"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "a pile turned by rotation_deg, which a pile does not take",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 4,
+        "changes": [
+          {
+            "kind": "add_pile",
+            "id": "p1",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "point": {
+              "x": 1500,
+              "y": 3000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "pile_type": {
+              "family": "Pile-Steel Pipe",
+              "type": "Standard"
+            },
+            "family_file": "Pile-Steel Pipe.rfa",
+            "sizes": {
+              "Pile Length": {
+                "value": 6,
+                "unit": "m"
+              }
+            },
+            "top_offset": {
+              "value": -1050,
+              "unit": "mm"
+            },
+            "rotation_deg": 45
+          }
+        ]
+      }
+    },
+    {
+      "why": "a wall footing from a family file: a wall foundation type is a system family",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 4,
+        "changes": [
+          {
+            "kind": "add_wall_footing",
+            "wall": {
+              "global_id": "2O2Fr$t4X7Zf8NOew3FLOH"
+            },
+            "wall_footing_type": {
+              "type": "Bearing Footing - 900 x 300"
+            },
+            "family_file": "Wall Foundation.rfa"
+          }
+        ]
+      }
+    },
+    {
+      "why": "a family file that is not a .rfa",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 4,
+        "changes": [
+          {
+            "kind": "add_footing",
+            "id": "f2",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "point": {
+              "x": 4500,
+              "y": 3000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "footing_type": {
+              "family": "Footing-Rectangular",
+              "type": "1500 x 1500 x 450mm"
+            },
+            "family_file": "Footing-Rectangular.rvt",
+            "top_offset": {
+              "value": -600,
+              "unit": "mm"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "a family file named with a folder",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 4,
+        "changes": [
+          {
+            "kind": "add_footing",
+            "id": "f2",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "point": {
+              "x": 4500,
+              "y": 3000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "footing_type": {
+              "family": "Footing-Rectangular",
+              "type": "1500 x 1500 x 450mm"
+            },
+            "family_file": "families/Footing-Rectangular.rfa",
+            "top_offset": {
+              "value": -600,
+              "unit": "mm"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "sizes that name no parameter",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 4,
+        "changes": [
+          {
+            "kind": "add_footing",
+            "id": "f1",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "point": {
+              "x": 1500,
+              "y": 3000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "footing_type": {
+              "family": "Footing-Rectangular",
+              "type": "1800 x 1200 x 450mm"
+            },
+            "family_file": "Footing-Rectangular.rfa",
+            "sizes": {},
+            "new_type": "1500 x 1500 x 450mm",
+            "top_offset": {
+              "value": -600,
+              "unit": "mm"
+            },
+            "rotation_deg": 30
+          }
+        ]
+      }
+    },
+    {
+      "why": "sizes naming seventeen parameters",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 4,
+        "changes": [
+          {
+            "kind": "add_footing",
+            "id": "f1",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "point": {
+              "x": 1500,
+              "y": 3000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "footing_type": {
+              "family": "Footing-Rectangular",
+              "type": "1800 x 1200 x 450mm"
+            },
+            "family_file": "Footing-Rectangular.rfa",
+            "sizes": {
+              "P00": {
+                "value": 100,
+                "unit": "mm"
+              },
+              "P01": {
+                "value": 101,
+                "unit": "mm"
+              },
+              "P02": {
+                "value": 102,
+                "unit": "mm"
+              },
+              "P03": {
+                "value": 103,
+                "unit": "mm"
+              },
+              "P04": {
+                "value": 104,
+                "unit": "mm"
+              },
+              "P05": {
+                "value": 105,
+                "unit": "mm"
+              },
+              "P06": {
+                "value": 106,
+                "unit": "mm"
+              },
+              "P07": {
+                "value": 107,
+                "unit": "mm"
+              },
+              "P08": {
+                "value": 108,
+                "unit": "mm"
+              },
+              "P09": {
+                "value": 109,
+                "unit": "mm"
+              },
+              "P10": {
+                "value": 110,
+                "unit": "mm"
+              },
+              "P11": {
+                "value": 111,
+                "unit": "mm"
+              },
+              "P12": {
+                "value": 112,
+                "unit": "mm"
+              },
+              "P13": {
+                "value": 113,
+                "unit": "mm"
+              },
+              "P14": {
+                "value": 114,
+                "unit": "mm"
+              },
+              "P15": {
+                "value": 115,
+                "unit": "mm"
+              },
+              "P16": {
+                "value": 116,
+                "unit": "mm"
+              }
+            },
+            "new_type": "1500 x 1500 x 450mm",
+            "top_offset": {
+              "value": -600,
+              "unit": "mm"
+            },
+            "rotation_deg": 30
+          }
+        ]
+      }
+    },
+    {
+      "why": "a size given as a number, not a length",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 4,
+        "changes": [
+          {
+            "kind": "add_footing",
+            "id": "f1",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "point": {
+              "x": 1500,
+              "y": 3000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "footing_type": {
+              "family": "Footing-Rectangular",
+              "type": "1800 x 1200 x 450mm"
+            },
+            "family_file": "Footing-Rectangular.rfa",
+            "sizes": {
+              "Width": 1500,
+              "Length": {
+                "value": 1.5,
+                "unit": "m"
+              },
+              "Foundation Thickness": {
+                "value": 450,
+                "unit": "mm"
+              }
+            },
+            "new_type": "1500 x 1500 x 450mm",
+            "top_offset": {
+              "value": -600,
+              "unit": "mm"
+            },
+            "rotation_deg": 30
+          }
+        ]
+      }
+    },
+    {
+      "why": "a size with an empty name",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 4,
+        "changes": [
+          {
+            "kind": "add_footing",
+            "id": "f1",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "point": {
+              "x": 1500,
+              "y": 3000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "footing_type": {
+              "family": "Footing-Rectangular",
+              "type": "1800 x 1200 x 450mm"
+            },
+            "family_file": "Footing-Rectangular.rfa",
+            "sizes": {
+              "": {
+                "value": 1500,
+                "unit": "mm"
+              }
+            },
+            "new_type": "1500 x 1500 x 450mm",
+            "top_offset": {
+              "value": -600,
+              "unit": "mm"
+            },
+            "rotation_deg": 30
+          }
+        ]
+      }
+    },
+    {
+      "why": "a footing turned past a full turn",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 4,
+        "changes": [
+          {
+            "kind": "add_footing",
+            "id": "f1",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "point": {
+              "x": 1500,
+              "y": 3000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "footing_type": {
+              "family": "Footing-Rectangular",
+              "type": "1800 x 1200 x 450mm"
+            },
+            "family_file": "Footing-Rectangular.rfa",
+            "sizes": {
+              "Width": {
+                "value": 1.5,
+                "unit": "m"
+              },
+              "Length": {
+                "value": 1.5,
+                "unit": "m"
+              },
+              "Foundation Thickness": {
+                "value": 450,
+                "unit": "mm"
+              }
+            },
+            "new_type": "1500 x 1500 x 450mm",
+            "top_offset": {
+              "value": -600,
+              "unit": "mm"
+            },
+            "rotation_deg": 400
+          }
+        ]
+      }
+    },
+    {
+      "why": "a wall footing under a wall named both ways",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 4,
+        "changes": [
+          {
+            "kind": "add_wall",
+            "id": "w1",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "start": {
+              "x": 0,
+              "y": 0,
+              "unit": "mm"
+            },
+            "end": {
+              "x": 6000,
+              "y": 0,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "wall_type": {
+              "family": "Basic Wall",
+              "type": "Exterior - 200mm"
+            },
+            "top": {
+              "height": {
+                "value": 2700,
+                "unit": "mm"
+              }
+            }
+          },
+          {
+            "kind": "add_wall_footing",
+            "wall": {
+              "global_id": "2O2Fr$t4X7Zf8NOew3FLOH",
+              "wall_change": "w1"
+            },
+            "wall_footing_type": {
+              "type": "Bearing Footing - 900 x 300"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "a new_type with an empty name",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 4,
+        "changes": [
+          {
+            "kind": "add_footing",
+            "id": "f1",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "point": {
+              "x": 1500,
+              "y": 3000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "footing_type": {
+              "family": "Footing-Rectangular",
+              "type": "1800 x 1200 x 450mm"
+            },
+            "family_file": "Footing-Rectangular.rfa",
+            "sizes": {
+              "Width": {
+                "value": 1.5,
+                "unit": "m"
+              },
+              "Length": {
+                "value": 1.5,
+                "unit": "m"
+              },
+              "Foundation Thickness": {
+                "value": 450,
+                "unit": "mm"
+              }
+            },
+            "new_type": "",
+            "top_offset": {
+              "value": -600,
+              "unit": "mm"
+            },
+            "rotation_deg": 30
+          }
+        ]
+      }
+    },
+    {
+      "why": "a wall footing with no type",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 4,
+        "changes": [
+          {
+            "kind": "add_wall_footing",
+            "wall": {
+              "global_id": "2O2Fr$t4X7Zf8NOew3FLOH"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "a pile whose type is named as a footing's",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 4,
+        "changes": [
+          {
+            "kind": "add_pile",
+            "id": "p1",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "point": {
+              "x": 1500,
+              "y": 3000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "family_file": "Pile-Steel Pipe.rfa",
+            "sizes": {
+              "Pile Length": {
+                "value": 6,
+                "unit": "m"
+              }
+            },
+            "top_offset": {
+              "value": -1050,
+              "unit": "mm"
+            },
+            "footing_type": {
+              "family": "Pile-Steel Pipe",
+              "type": "Standard"
             }
           }
         ]

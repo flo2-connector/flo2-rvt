@@ -9,7 +9,8 @@ import { readFileSync } from 'node:fs';
 import { describe, test } from 'node:test';
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import { csharpFor, schemaSha256, typescriptFor } from '../../scripts/gen-types.ts';
-import { ChangeListShape, MAX_CHANGE_LIST_BYTES, MAX_REFERENCES, canonicalJson, checkChangeList, feetOf, outlineProblem, pointFeet, sha256Hex, signedArea } from '../src/change-list.ts';
+import { ChangeListShape, MAX_CHANGE_LIST_BYTES, MAX_FAMILY_FILES, MAX_REFERENCES, canonicalJson, checkChangeList, familyFilesOf, feetOf, outlineProblem, pointFeet, sha256Hex, signedArea } from '../src/change-list.ts';
+import type { ChangeList } from '../src/types/change-list.ts';
 
 const schemaBytes = readFileSync(new URL('../../schema/change-list.schema.json', import.meta.url));
 const schema = JSON.parse(schemaBytes.toString('utf8')) as Record<string, unknown>;
@@ -87,7 +88,12 @@ test('the C# types and their schema hash are generated from the schema as it is 
   assert.equal(readFileSync(new URL('../../addin/Generated/change-list.schema.sha256', import.meta.url), 'utf8').trim(), sha);
   for (const kind of ['delete_elements_on_level', 'delete_elements_by_global_id', 'set_level_elevation', 'move_levels_together']) assert.ok(cs.includes(`"${kind}"`));
   assert.ok(cs.includes('public static class GroupsInTheWayValues'), 'groups_in_the_way\'s values, for the add-in');
-  assert.ok(cs.includes('public static readonly long[] VersionValues = { 0, 1, 2, 3 };'), 'the versions this schema reads');
+  assert.ok(cs.includes('public static readonly long[] VersionValues = { 0, 1, 2, 3, 4 };'), 'the versions this schema reads');
+  for (const kind of ['add_footing', 'add_wall_footing', 'add_pile']) assert.ok(cs.includes(`"${kind}"`), `${kind}, for the add-in`);
+  assert.ok(cs.includes('public Dictionary<string, Length> Sizes { get; set; }'), "a foundation's sizes, a map of names to lengths, for the add-in");
+  assert.ok(cs.includes('public Length TopOffset { get; set; }') && cs.includes('public double? RotationDeg { get; set; }'), 'a top offset is a length, a turn a number');
+  assert.ok(cs.includes('public const string FamilyFilePattern = '), "a family file's form, for the add-in");
+  assert.ok(!cs.includes('class FoundationSizes') && !cs.includes('class TopOffset'), 'a map and an alias are no classes of their own');
   for (const kind of ['add_wall', 'add_floor', 'add_room', 'add_door']) assert.ok(cs.includes(`"${kind}"`), `${kind}, for the add-in`);
   assert.ok(cs.includes('public static class CoordinatesValues') && cs.includes('public static class WallJoinsValues'), 'the coordinates and joins values, for the add-in');
   assert.ok(cs.includes('public static class LengthUnitValues'), 'the units, one list for a length and a point');
@@ -151,4 +157,44 @@ test("an outline's area and problems are the add-in's, in its words and order", 
   assert.match(outlineProblem([{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }, { x: 10, y: 0 }]) ?? '', /names a corner twice \(corners 2 and 4\)/);
   assert.match(outlineProblem([{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }, { x: 5, y: 0 }, { x: 0, y: 10 }]) ?? '', /crosses itself/);
   assert.deepEqual(pointFeet({ x: 304.8, y: -609.6, unit: 'mm' }), { x: 1, y: -2 });
+});
+
+// Since flo2-rvt 0.12.0 (change-list version 4): foundations, add_footing, add_wall_footing and add_pile.
+test('version 4: a list that adds a foundation says version 4, and each rule beside the schema says where and why', () => {
+  const wall = { kind: 'add_wall', id: 'w1', level: { level_name: 'Level 1' }, start: { x: 0, y: 0, unit: 'ft' }, end: { x: 20, y: 0, unit: 'ft' }, coordinates: 'internal', wall_type: { type: 'Exterior - 200mm' }, top: { height: { value: 3, unit: 'm' } } };
+  const footing = { kind: 'add_footing', id: 'f1', level: { level_name: 'Level 1' }, point: { x: 5, y: 5, unit: 'ft' }, coordinates: 'internal', footing_type: { type: '1800 x 1200 x 450mm' }, family_file: 'Footing-Rectangular.rfa', sizes: { Width: { value: 1.5, unit: 'm' } }, new_type: '1500 x 1200 x 450mm', top_offset: { value: -600, unit: 'mm' } };
+  const under = { kind: 'add_wall_footing', wall: { wall_change: 'w1' }, wall_footing_type: { type: 'Bearing Footing - 900 x 300' } };
+  const pile = { kind: 'add_pile', level: { level_name: 'Level 1' }, point: { x: 5, y: 5, unit: 'ft' }, coordinates: 'internal', pile_type: { type: 'Standard' }, family_file: 'Pile-Steel Pipe.rfa' };
+  const why = (list: unknown) => {
+    const r = checkChangeList(list);
+    return r.ok ? '' : r.errors.join(' | ');
+  };
+  assert.match(why({ version: 3, changes: [footing] }), /changes\.0\.kind: add_footing needs version 4; say "version": 4/);
+  assert.match(why({ version: 3, changes: [wall, under] }), /changes\.1\.kind: add_wall_footing needs version 4/);
+  assert.match(why({ version: 3, changes: [pile] }), /changes\.0\.kind: add_pile needs version 4/);
+  const { sizes: _sizes, ...unsized } = footing;
+  void _sizes;
+  assert.match(why({ version: 4, changes: [unsized] }), /changes\.0\.new_type: names a copy of the type with sizes set on it; give sizes, or leave new_type out/);
+  assert.match(why({ version: 4, changes: [under, wall] }), /changes\.0\.wall\.wall_change: names no add_wall change before it with the id "w1" \(change 2, add_wall, carries it\)/);
+  assert.match(why({ version: 4, changes: [wall, wall, under] }), /changes\.2\.wall\.wall_change: 2 changes carry the id "w1"; give each wall its own id/);
+  assert.match(why({ version: 4, changes: [{ ...footing, point: { x: 40_000, y: 0, unit: 'm' } }] }), /changes\.0\.point: beyond Revit's model extent/);
+  assert.match(why({ version: 4, changes: [{ ...pile, top_offset: { value: -200_000, unit: 'ft' } }] }), /changes\.0\.top_offset: beyond Revit's model extent/);
+  assert.match(why({ version: 4, changes: [{ ...footing, sizes: { 'Foundation Thickness': { value: 40_000, unit: 'm' } } }] }), /changes\.0\.sizes\["Foundation Thickness"\]: beyond Revit's model extent/);
+  const nine = Array.from({ length: MAX_FAMILY_FILES + 1 }, (_, i) => ({ ...pile, family_file: `Pile-${i}.rfa` }));
+  assert.match(why({ version: 4, changes: nine }), /the list names 9 family files; the most one list may name is 8/);
+  const ok = checkChangeList({ version: 4, changes: [{ ...wall, level: { global_id: '3cUkl32yn9qRSPvBJVyWYp' } }, under, footing, { ...footing, id: 'f2' }, pile, { kind: 'add_wall_footing', wall: { global_id: GID }, wall_footing_type: { type: 'Bearing Footing - 900 x 300' } }] });
+  assert.ok(ok.ok, ok.ok ? '' : ok.errors.join('; '));
+  assert.equal(ok.ok && ok.references, 2, "a level by its storey GlobalId and a wall footing's wall by its GlobalId each count as one reference");
+  assert.deepEqual(ok.ok && ok.family_files, ['Footing-Rectangular.rfa', 'Pile-Steel Pipe.rfa'], 'each family file once, in the order the list first names it');
+});
+
+test("the family files a list names are each named once, in the order the list first names them: the work item's family1, family2 ...", () => {
+  const list = { version: 4, changes: [
+    { kind: 'add_pile', level: { level_name: 'L1' }, point: { x: 0, y: 0, unit: 'ft' }, coordinates: 'internal', pile_type: { type: 'P' }, family_file: 'B.rfa' },
+    { kind: 'add_footing', level: { level_name: 'L1' }, point: { x: 0, y: 0, unit: 'ft' }, coordinates: 'internal', footing_type: { type: 'F' }, family_file: 'A.rfa' },
+    { kind: 'add_footing', level: { level_name: 'L1' }, point: { x: 1, y: 0, unit: 'ft' }, coordinates: 'internal', footing_type: { type: 'F' } },
+    { kind: 'add_pile', level: { level_name: 'L1' }, point: { x: 1, y: 0, unit: 'ft' }, coordinates: 'internal', pile_type: { type: 'P' }, family_file: 'B.rfa' },
+  ] } as ChangeList;
+  assert.deepEqual(familyFilesOf(list), ['B.rfa', 'A.rfa']);
+  assert.deepEqual(familyFilesOf({ version: 3, changes: [{ kind: 'delete_elements_on_level', level: { level_name: 'L1' } }] }), []);
 });
