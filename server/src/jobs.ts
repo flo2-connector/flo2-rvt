@@ -11,6 +11,13 @@
 // an app flo2-rvt was never set up on is refused in plain words, nothing uploaded. Autodesk's own
 // "activity could not be found" at the WorkItem says the same (setup.ts notSetUpAtAutodesk). The
 // setup itself, and the fuller check flo2.io makes before it asks the person, are setup.ts.
+//
+// Since 0.12.0 (contract v4) an edit whose list names family files (family_file, change-list
+// version 4) takes each from the hidden context's `families`, as it takes the model from `input`:
+// checked against the list before anything is asked of Autodesk (each it names handed over once,
+// nothing else, each and all within their sizes), fetched from flo2.io's link into the bucket,
+// checked by size and sha256, and handed to the WorkItem as family1, family2 ... in the order the
+// list first names them (names.ts familyInput).
 
 import { createHash } from 'node:crypto';
 import { ApsError, type ApsContext } from './aps/http.ts';
@@ -29,6 +36,7 @@ import { apsFetch } from './aps/http.ts';
 import { checkChangeList } from './change-list.ts';
 import {
   expiresAtMs,
+  type FamilyFileHandover,
   type EditStartResult,
   type EditSummary,
   type JobContext,
@@ -48,9 +56,12 @@ import {
   INPUT_NAME,
   INPUT_PARAMETER,
   JOBS,
+  MAX_FAMILY_FILES_BYTES,
+  MAX_FAMILY_FILE_BYTES,
   RECORD_NAME,
   activityIdFor,
   bucketKeyFor,
+  familyInput,
   isJobId,
   newJobId,
   objectKey,
@@ -106,6 +117,49 @@ interface JobRecord {
   /** Absent in records written before the edit job: those are probes. */
   job?: JobKind;
   change_list_sha256?: string;
+  /** Since 0.12.0: the family files the edit's list named, as uploaded (no names: the list holds them). */
+  family_files?: Array<{ input: string; size: number; sha256: string }>;
+}
+
+/** One family file of an edit, matched to its work item input. */
+interface FamilyUpload {
+  n: number;
+  input: string;
+  object: string;
+  handed: FamilyFileHandover;
+}
+
+const mib = (bytes: number) => `${Math.round((bytes / (1024 * 1024)) * 10) / 10} MiB`;
+
+/**
+ * The family files the hidden context hands over, matched to those the list names (each once, in
+ * the order it first names them), or the refusal that names what is wrong. Nothing is asked of
+ * Autodesk before this passes.
+ */
+export function matchFamilies(named: readonly string[], handed: readonly FamilyFileHandover[] | undefined): FamilyUpload[] {
+  const given = handed ?? [];
+  const seen = new Set<string>();
+  for (const f of given) {
+    if (seen.has(f.family_file)) throw new Refusal(`flo2.io handed over the family file "${f.family_file}" twice; no job was started.`);
+    seen.add(f.family_file);
+    if (!named.includes(f.family_file)) throw new Refusal(`flo2.io handed over the family file "${f.family_file}", which the change list does not name; no job was started.`);
+  }
+  const missing = named.filter((n) => !seen.has(n));
+  if (missing.length) {
+    throw new Refusal(
+      `The change list names the family file${missing.length === 1 ? '' : 's'} ${missing.map((m) => `"${m}"`).join(', ')}, and flo2.io did not hand ${missing.length === 1 ? 'it' : 'them'} over; no job was started. flo2.io hands over each family file a list names, from the design, as it hands over the model.`,
+    );
+  }
+  let total = 0;
+  const out = named.map((name, i) => {
+    const f = given.find((g) => g.family_file === name) as FamilyFileHandover;
+    if (f.size > MAX_FAMILY_FILE_BYTES) throw new Refusal(`The family file "${name}" is ${f.size} bytes (${mib(f.size)}); a family file may be at most ${MAX_FAMILY_FILE_BYTES} bytes (${mib(MAX_FAMILY_FILE_BYTES)}); no job was started.`);
+    total += f.size;
+    const input = familyInput(i + 1);
+    return { n: i + 1, input: input.parameter, object: input.name, handed: f };
+  });
+  if (total > MAX_FAMILY_FILES_BYTES) throw new Refusal(`The family files the change list names are ${total} bytes in all (${mib(total)}); at most ${MAX_FAMILY_FILES_BYTES} bytes (${mib(MAX_FAMILY_FILES_BYTES)}) go with one job; no job was started.`);
+  return out;
 }
 
 /**
@@ -214,7 +268,8 @@ export class JobService {
 
   /** rvt_probe_start: upload the input to the person's transient bucket and submit the WorkItem. */
   async startProbe(ctx: JobContext, maxMinutes: number, signal?: AbortSignal): Promise<ProbeStartResult> {
-    const { result } = await this.start('probe', ctx, maxMinutes, undefined, signal);
+    if (ctx.families?.length) throw new Refusal('flo2.io handed over family files with a probe, which reads the model alone and loads nothing; no job was started.');
+    const { result } = await this.start('probe', ctx, maxMinutes, undefined, [], signal);
     return result;
   }
 
@@ -224,8 +279,49 @@ export class JobService {
     if (!checked.ok) {
       throw new Refusal(`The change list is not one the edit job takes, so no job was started: ${checked.errors.join('; ')}.`);
     }
-    const { result } = await this.start('edit', ctx, maxMinutes, { canonical: checked.canonical, sha256: checked.sha256 }, signal);
-    return { ...result, change_list_sha256: checked.sha256 };
+    // The family files the list names, each handed over once and nothing else, before Autodesk is asked anything.
+    const families = matchFamilies(checked.family_files, ctx.families);
+    const { result } = await this.start('edit', ctx, maxMinutes, { canonical: checked.canonical, sha256: checked.sha256 }, families, signal);
+    return {
+      ...result,
+      change_list_sha256: checked.sha256,
+      ...(families.length ? { family_files: families.map((f) => ({ family_file: f.handed.family_file, input: f.input, size: f.handed.size, sha256: f.handed.sha256.toLowerCase() })) } : {}),
+    };
+  }
+
+  /** One file from flo2.io's short-lived link straight into the bucket, checked by size and sha256; a refusal names it otherwise. */
+  private async carry(
+    aps: ApsContext,
+    bucketKey: string,
+    key: string,
+    from: { download_url: string; size: number; sha256: string },
+    what: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    let download: Response;
+    try {
+      const init: RequestInit = { redirect: 'follow' };
+      if (signal) init.signal = signal;
+      download = await (this.opts.fetch ?? fetch)(from.download_url, init);
+    } catch {
+      if (signal?.aborted) throw new Refusal(`The call was cancelled before ${what} reached Autodesk.`);
+      throw new Refusal(`flo2-rvt could not read ${what} from flo2.io's download link.`);
+    }
+    if (download.status !== 200 || !download.body) {
+      await download.body?.cancel();
+      throw new Refusal(`flo2.io's download link for ${what} answered HTTP ${download.status}; no job was started.`);
+    }
+    const declared = download.headers.get('content-length');
+    if (declared !== null && Number(declared) !== from.size) {
+      await download.body.cancel();
+      throw new Refusal(`The bytes flo2.io served for ${what} are not the size flo2.io said; no job was started.`);
+    }
+    try {
+      await uploadStream(aps, bucketKey, key, download.body, { size: from.size, sha256: from.sha256, contentType: 'application/octet-stream' }, this.opts.upload);
+    } catch (err) {
+      if (err instanceof IntegrityError) throw new Refusal(`${what}: ${err.message}; no job was started.`);
+      throw err;
+    }
   }
 
   private async start(
@@ -233,6 +329,7 @@ export class JobService {
     ctx: JobContext,
     maxMinutes: number,
     changes: { canonical: string; sha256: string } | undefined,
+    families: readonly FamilyUpload[],
     signal?: AbortSignal,
   ): Promise<{ result: ProbeStartResult }> {
     const word = KIND_WORD[kind];
@@ -297,6 +394,11 @@ export class JobService {
       await putSmallObject(aps, bucketKey, objectKey(jobId, CHANGES_NAME), Buffer.from(changes.canonical, 'utf8'), 'application/json');
       this.logger.info('edit_change_list_uploaded', { job_id: jobId, change_list_sha256: changes.sha256 });
     }
+    // The family files, each as the model came: from flo2's link into the bucket, by size and sha256.
+    for (const f of families) {
+      await this.carry(aps, bucketKey, objectKey(jobId, f.object), f.handed, `the family file "${f.handed.family_file}"`, signal);
+      this.logger.info('edit_family_file_uploaded', { job_id: jobId, input: f.input, size: f.handed.size, sha256: f.handed.sha256.toLowerCase() });
+    }
 
     // The WorkItem: Design Automation reads and writes the bucket with the same token.
     const headers = { Authorization: `Bearer ${ctx.aps.access_token}` };
@@ -304,6 +406,7 @@ export class JobService {
       [INPUT_PARAMETER]: { url: objectUrn(bucketKey, objectKey(jobId, INPUT_NAME)), verb: 'get', headers },
     };
     if (changes) args[CHANGES_PARAMETER] = { url: objectUrn(bucketKey, objectKey(jobId, CHANGES_NAME)), verb: 'get', headers };
+    for (const f of families) args[f.input] = { url: objectUrn(bucketKey, objectKey(jobId, f.object)), verb: 'get', headers };
     for (const out of JOBS[kind].outputs) {
       const arg: XrefArgument = { url: objectUrn(bucketKey, objectKey(jobId, out.name)), verb: 'put', headers };
       if (!out.required) arg.optional = true;
@@ -331,6 +434,7 @@ export class JobService {
       limit_processing_sec: limitSec,
       job: kind,
       ...(changes ? { change_list_sha256: changes.sha256 } : {}),
+      ...(families.length ? { family_files: families.map((f) => ({ input: f.input, size: f.handed.size, sha256: f.handed.sha256.toLowerCase() })) } : {}),
     };
     try {
       await putSmallObject(aps, bucketKey, objectKey(jobId, RECORD_NAME), Buffer.from(JSON.stringify(record)), 'application/json');

@@ -234,12 +234,13 @@ namespace Flo2Rvt.Addin.Edit.Logic
         }
     }
 
-    /// <summary>A type the model holds: its family's name, its own, and its element id.</summary>
+    /// <summary>A type the model holds: its family's name, its own, and its element id (and, since add-in 0.11.0, its family's element id, for a family type).</summary>
     public sealed class HeldType
     {
         public string Family;
         public string Type;
         public long Id;
+        public long FamilyId;
 
         public string Named { get { return Family + ": " + Type; } }
     }

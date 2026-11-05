@@ -30,6 +30,12 @@
 // what a person checks of it: a wall's ends, length and height, a floor's area beside its
 // outline's, a room's number, name and area, a door's host wall and where it stands), the report's
 // `coordinates` say how shared coordinates sit on internal ones, and `totals.elements_added`.
+// Add-in 0.11.0 writes version 2 still, with fields added and none changed: a foundation change
+// (change-list version 4) names what it added under `added` as `footing`, `pile` or
+// `wall_footing` (where its top and bottom stand, its rotation, its host wall, every length
+// parameter of it and its type as Revit holds them beside each size asked, the type copied under
+// new_type, the family file it came from), and the report's `families` say what came of each
+// family file the list named: loaded, already held, or not loaded and why.
 
 using System.Collections.Generic;
 using System.Linq;
@@ -65,6 +71,8 @@ namespace Flo2Rvt.Addin.Edit
         [DataMember(Name = "exports", Order = 13)] public EditExports Exports = new EditExports();
         [DataMember(Name = "warnings", Order = 14)] public List<WarningInfo> Warnings = new List<WarningInfo>();
         [DataMember(Name = "warnings_total", Order = 15)] public int WarningsTotal;
+        /// <summary>Since add-in 0.11.0, when the list names family files: what came of each, in the order the list first names them.</summary>
+        [DataMember(Name = "families", Order = 16, EmitDefaultValue = false)] public List<FamilyFileReport> Families;
 
         private static DataContractJsonSerializer Serializer()
         {
@@ -271,7 +279,8 @@ namespace Flo2Rvt.Addin.Edit
 
     /// <summary>
     /// Since add-in 0.10.0: one element a change added, read from the model after its transaction.
-    /// Exactly one of wall, floor, room and door is given, for its kind.
+    /// Exactly one of wall, floor, room and door is given, for its kind; since add-in 0.11.0, or one
+    /// of footing, pile and wall_footing.
     /// </summary>
     [DataContract]
     public sealed class AddedElement
@@ -294,6 +303,12 @@ namespace Flo2Rvt.Addin.Edit
         [DataMember(Name = "floor", Order = 11, EmitDefaultValue = false)] public AddedFloor Floor;
         [DataMember(Name = "room", Order = 12, EmitDefaultValue = false)] public AddedRoom Room;
         [DataMember(Name = "door", Order = 13, EmitDefaultValue = false)] public AddedDoor Door;
+        /// <summary>Since add-in 0.11.0: an isolated footing (add_footing).</summary>
+        [DataMember(Name = "footing", Order = 14, EmitDefaultValue = false)] public AddedFoundation Footing;
+        /// <summary>Since add-in 0.11.0: a pile (add_pile).</summary>
+        [DataMember(Name = "pile", Order = 15, EmitDefaultValue = false)] public AddedFoundation Pile;
+        /// <summary>Since add-in 0.11.0: a wall foundation (add_wall_footing).</summary>
+        [DataMember(Name = "wall_footing", Order = 16, EmitDefaultValue = false)] public AddedWallFooting WallFooting;
     }
 
     /// <summary>A plan point in feet, in shared and in internal coordinates, each [x, y].</summary>
@@ -381,6 +396,118 @@ namespace Flo2Rvt.Addin.Edit
         [DataMember(Name = "off_line_mm", Order = 6)] public double OffLineMm;
         [DataMember(Name = "width_mm", Order = 7, EmitDefaultValue = false)] public double? WidthMm;
         [DataMember(Name = "height_mm", Order = 8, EmitDefaultValue = false)] public double? HeightMm;
+    }
+
+    /// <summary>
+    /// Since add-in 0.11.0: a footing or pile a change added, as Revit holds it after the change.
+    /// Every elevation is in Revit's internal coordinates, in feet, as a level's project elevation is.
+    /// </summary>
+    [DataContract]
+    public sealed class AddedFoundation
+    {
+        /// <summary>Its insertion point (its LocationPoint), in plan.</summary>
+        [DataMember(Name = "location", Order = 0)] public PlanAt Location;
+        /// <summary>Its level's elevation (Level.ProjectElevation).</summary>
+        [DataMember(Name = "level_elevation_ft", Order = 1)] public double LevelElevationFt;
+        /// <summary>The change's top_offset, 0 when it said none.</summary>
+        [DataMember(Name = "top_offset_ft", Order = 2)] public double TopOffsetFt;
+        [DataMember(Name = "top_offset_mm", Order = 3)] public double TopOffsetMm;
+        /// <summary>Where its insertion point stands (its LocationPoint's height).</summary>
+        [DataMember(Name = "insertion_elevation_ft", Order = 4)] public double InsertionElevationFt;
+        /// <summary>Where its geometry's top and bottom stand (its bounding box), when Revit gives one.</summary>
+        [DataMember(Name = "top_elevation_ft", Order = 5, EmitDefaultValue = false)] public double? TopElevationFt;
+        [DataMember(Name = "bottom_elevation_ft", Order = 6, EmitDefaultValue = false)] public double? BottomElevationFt;
+        /// <summary>Its top less its level's elevation: what flo2's check holds to top_offset.</summary>
+        [DataMember(Name = "top_above_level_ft", Order = 7, EmitDefaultValue = false)] public double? TopAboveLevelFt;
+        [DataMember(Name = "top_above_level_mm", Order = 8, EmitDefaultValue = false)] public double? TopAboveLevelMm;
+        /// <summary>Its turn in plan, counterclockwise in degrees, in the change's coordinates (-180 to 180), and in internal ones.</summary>
+        [DataMember(Name = "rotation_deg", Order = 9)] public double RotationDeg;
+        [DataMember(Name = "rotation_internal_deg", Order = 10)] public double RotationInternalDeg;
+        /// <summary>How Revit places it (FamilyInstance.StructuralType): Footing.</summary>
+        [DataMember(Name = "structural_type", Order = 11, EmitDefaultValue = false)] public string StructuralType;
+        /// <summary>Its own Export to IFC As (IFC_EXPORT_ELEMENT_AS), and its type's Export Type to IFC As (IFC_EXPORT_ELEMENT_TYPE_AS), when set.</summary>
+        [DataMember(Name = "ifc_export_as", Order = 12, EmitDefaultValue = false)] public string IfcExportAs;
+        [DataMember(Name = "ifc_export_type_as", Order = 13, EmitDefaultValue = false)] public string IfcExportTypeAs;
+        /// <summary>The entity Revit's IFC export writes for it by those (Logic/Foundations.cs FoundationIfc): IfcFooting or IfcPile.</summary>
+        [DataMember(Name = "ifc_entity", Order = 14, EmitDefaultValue = false)] public string IfcEntity;
+        /// <summary>The type the change named, when it is placed from a copy of it.</summary>
+        [DataMember(Name = "copied_from", Order = 15, EmitDefaultValue = false)] public string CopiedFrom;
+        /// <summary>The change's new_type, and whether the job made it (copied) or placed one the family already held of that name and sizes (held).</summary>
+        [DataMember(Name = "new_type", Order = 16, EmitDefaultValue = false)] public string NewType;
+        [DataMember(Name = "new_type_was", Order = 17, EmitDefaultValue = false)] public string NewTypeWas;
+        /// <summary>The change's family_file, and whether its family was loaded from it or already held.</summary>
+        [DataMember(Name = "family_file", Order = 18, EmitDefaultValue = false)] public string FamilyFile;
+        [DataMember(Name = "family_was", Order = 19, EmitDefaultValue = false)] public string FamilyWas;
+        /// <summary>Every length parameter of it and its type, as Revit holds them, each size the change set beside it.</summary>
+        [DataMember(Name = "sizes", Order = 20)] public List<SizeReport> Sizes = new List<SizeReport>();
+    }
+
+    /// <summary>Since add-in 0.11.0: a wall foundation a change added, under its wall.</summary>
+    [DataContract]
+    public sealed class AddedWallFooting
+    {
+        [DataMember(Name = "host_element_id", Order = 0)] public long HostElementId;
+        [DataMember(Name = "host_global_id", Order = 1, EmitDefaultValue = false)] public string HostGlobalId;
+        /// <summary>The add_wall change that made its wall, when the list named it so.</summary>
+        [DataMember(Name = "host_change_id", Order = 2, EmitDefaultValue = false)] public string HostChangeId;
+        /// <summary>Its width, thickness and length as Revit holds them, when it does.</summary>
+        [DataMember(Name = "width_ft", Order = 3, EmitDefaultValue = false)] public double? WidthFt;
+        [DataMember(Name = "width_mm", Order = 4, EmitDefaultValue = false)] public double? WidthMm;
+        [DataMember(Name = "thickness_ft", Order = 5, EmitDefaultValue = false)] public double? ThicknessFt;
+        [DataMember(Name = "thickness_mm", Order = 6, EmitDefaultValue = false)] public double? ThicknessMm;
+        [DataMember(Name = "length_ft", Order = 7, EmitDefaultValue = false)] public double? LengthFt;
+        [DataMember(Name = "length_mm", Order = 8, EmitDefaultValue = false)] public double? LengthMm;
+        /// <summary>Where its geometry's top and bottom stand (its bounding box), in internal feet.</summary>
+        [DataMember(Name = "top_elevation_ft", Order = 9, EmitDefaultValue = false)] public double? TopElevationFt;
+        [DataMember(Name = "bottom_elevation_ft", Order = 10, EmitDefaultValue = false)] public double? BottomElevationFt;
+        [DataMember(Name = "copied_from", Order = 11, EmitDefaultValue = false)] public string CopiedFrom;
+        [DataMember(Name = "new_type", Order = 12, EmitDefaultValue = false)] public string NewType;
+        [DataMember(Name = "new_type_was", Order = 13, EmitDefaultValue = false)] public string NewTypeWas;
+        [DataMember(Name = "sizes", Order = 14)] public List<SizeReport> Sizes = new List<SizeReport>();
+    }
+
+    /// <summary>Since add-in 0.11.0: one length parameter of a new foundation or its type, as Revit holds it.</summary>
+    [DataContract]
+    public sealed class SizeReport
+    {
+        public const int Cap = 64;
+        [DataMember(Name = "name", Order = 0)] public string Name;
+        /// <summary>type or instance.</summary>
+        [DataMember(Name = "of", Order = 1)] public string Of;
+        [DataMember(Name = "value_ft", Order = 2)] public double ValueFt;
+        [DataMember(Name = "value_mm", Order = 3)] public double ValueMm;
+        [DataMember(Name = "read_only", Order = 4, EmitDefaultValue = false)] public bool ReadOnly;
+        /// <summary>What the change's sizes asked of it, when they named it.</summary>
+        [DataMember(Name = "asked_ft", Order = 5, EmitDefaultValue = false)] public double? AskedFt;
+        [DataMember(Name = "asked_mm", Order = 6, EmitDefaultValue = false)] public double? AskedMm;
+    }
+
+    /// <summary>Since add-in 0.11.0: what came of one family file the list named, before any change ran.</summary>
+    [DataContract]
+    public sealed class FamilyFileReport
+    {
+        public const string Loaded = "loaded";
+        public const string Held = "held";
+        public const string NotLoaded = "not_loaded";
+        public const int TypesCap = 200;
+
+        [DataMember(Name = "family_file", Order = 0)] public string FamilyFile;
+        /// <summary>The input it arrived as (family1.rfa ...), its bytes and their SHA-256, as the add-in read them.</summary>
+        [DataMember(Name = "input", Order = 1)] public string Input;
+        [DataMember(Name = "bytes", Order = 2, EmitDefaultValue = false)] public long Bytes;
+        [DataMember(Name = "sha256", Order = 3, EmitDefaultValue = false)] public string Sha256;
+        /// <summary>The family the model holds after: its name (the file's, without .rfa), id and category.</summary>
+        [DataMember(Name = "family", Order = 4, EmitDefaultValue = false)] public string Family;
+        [DataMember(Name = "family_id", Order = 5, EmitDefaultValue = false)] public long FamilyId;
+        [DataMember(Name = "category", Order = 6, EmitDefaultValue = false)] public string Category;
+        /// <summary>loaded (from this file), held (the model already held a family of that name, used as it is) or not_loaded.</summary>
+        [DataMember(Name = "was", Order = 7)] public string Was;
+        /// <summary>Why it was not loaded; a change that names it is then not applied, with this.</summary>
+        [DataMember(Name = "why", Order = 8, EmitDefaultValue = false)] public string Why;
+        /// <summary>The family's types, by name, the first TypesCap.</summary>
+        [DataMember(Name = "types", Order = 9, EmitDefaultValue = false)] public List<string> Types;
+        [DataMember(Name = "seconds", Order = 10, EmitDefaultValue = false)] public double Seconds;
+        [DataMember(Name = "revit_messages", Order = 11, EmitDefaultValue = false)] public List<RevitMessage> RevitMessages;
     }
 
     /// <summary>A kept level move's reshaped_by_revit (Logic/Reshapes.cs).</summary>

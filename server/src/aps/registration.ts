@@ -63,10 +63,12 @@ import {
   EDIT_NAME,
   EDIT_OUTPUTS,
   ENGINE,
+  FAMILY_INPUTS,
   INPUT_NAME,
   INPUT_PARAMETER,
   OUTPUTS,
   PROBE_NAME,
+  familyInput,
   setupMark,
 } from '../names.ts';
 
@@ -97,13 +99,19 @@ export function activityBody(nickname: string): Record<string, unknown> {
 /**
  * The Activity the edit runs: the model and the change list in, the report and the NEW model
  * out. The change list is required, so a WorkItem without it fails before Revit starts; the
- * new model is optional, since a list none of whose changes was kept saves none.
+ * new model is optional, since a list none of whose changes was kept saves none. Since add-in
+ * 0.11.0, up to eight family files in, each optional (names.ts FAMILY_INPUTS): a WorkItem names
+ * those its list uses, in the order it first names them.
  */
 export function editActivityBody(nickname: string): Record<string, unknown> {
   const parameters: Record<string, unknown> = {
     [INPUT_PARAMETER]: { verb: 'get', localName: INPUT_NAME, required: true, description: 'The Revit model to edit. It is read and never saved: the result is a new model.' },
     [CHANGES_PARAMETER]: { verb: 'get', localName: CHANGES_NAME, required: true, description: "The change list, in flo2-rvt's fixed vocabulary (schema/change-list.schema.json)." },
   };
+  for (let n = 1; n <= FAMILY_INPUTS; n++) {
+    const f = familyInput(n);
+    parameters[f.parameter] = { verb: 'get', localName: f.name, required: false, description: `Family file ${n} of those the change list names (.rfa), in the order it first names them, when it names so many; the add-in loads it before the changes run.` };
+  }
   for (const out of EDIT_OUTPUTS) {
     parameters[out.parameter] = { verb: 'put', localName: out.name, required: out.required, description: out.description };
   }

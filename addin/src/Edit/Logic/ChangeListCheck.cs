@@ -12,6 +12,12 @@
 // version 3; a wall's ends are two points and it rises by more than nothing, to a level other
 // than its own; a floor's outline names each corner once, does not cross itself and has an area
 // (Logic/Placement.cs); and a door's wall_change names exactly one add_wall change before it.
+// Since add-in 0.11.0, version 4's foundations: add_footing, add_wall_footing and add_pile need
+// version 4; a footing's or pile's point, top_offset and every size lie within the model extent;
+// sizes name 1 to 16 parameters, each once; new_type comes only beside sizes; a wall footing's
+// wall_change names exactly one add_wall change before it; and a list names at most
+// FamilyFiles.Max family files (Logic/Foundations.cs). The typed reader reads sizes, a JSON
+// object of names, as a dictionary (UseSimpleDictionaryFormat).
 //
 // PURE LOGIC: no Revit type here, so addin/tests runs it on any OS.
 
@@ -53,9 +59,14 @@ namespace Flo2Rvt.Addin.Edit.Logic
         public const long ConstraintsVersion = 2;
         /// <summary>The first change-list version that reads add_wall, add_floor, add_room and add_door (add-in 0.10.0).</summary>
         public const long AddElementsVersion = 3;
+        /// <summary>The first change-list version that reads add_footing, add_wall_footing and add_pile (add-in 0.11.0).</summary>
+        public const long FoundationsVersion = 4;
+        /// <summary>The most sizes one foundation change may set.</summary>
+        public const int MaxSizes = 16;
 
         private static readonly Regex GlobalIdPattern = new Regex(ChangeListSchema.IfcGlobalIdPattern, RegexOptions.CultureInvariant);
         private static readonly Regex IdPattern = new Regex(ChangeListSchema.ChangeIdPattern, RegexOptions.CultureInvariant);
+        private static readonly Regex FamilyFilePattern = new Regex(ChangeListSchema.FamilyFilePattern, RegexOptions.CultureInvariant);
         private static readonly string[] UnitNames = { LengthUnitValues.Mm, LengthUnitValues.M, LengthUnitValues.Ft, LengthUnitValues.In };
         private static readonly string[] Datums = { SetLevelElevationRelativeToValues.ProjectOrigin, SetLevelElevationRelativeToValues.ElevationBase };
         private static readonly string[] Systems = { CoordinatesValues.Shared, CoordinatesValues.Internal };
@@ -103,7 +114,8 @@ namespace Flo2Rvt.Addin.Edit.Logic
 
             try
             {
-                var serializer = new DataContractJsonSerializer(typeof(ChangeList));
+                // A foundation's sizes are a JSON object of names, read as a dictionary.
+                var serializer = new DataContractJsonSerializer(typeof(ChangeList), new DataContractJsonSerializerSettings { UseSimpleDictionaryFormat = true });
                 using (var stream = new MemoryStream(bytes))
                 {
                     r.List = (ChangeList)serializer.ReadObject(stream);
@@ -126,6 +138,8 @@ namespace Flo2Rvt.Addin.Edit.Logic
             /// <summary>Every change's id, with each change that carries it (its index and kind), read before any change is walked: a door's wall_change is checked against them.</summary>
             private readonly Dictionary<string, List<KeyValuePair<int, string>>> ids = new Dictionary<string, List<KeyValuePair<int, string>>>(StringComparer.Ordinal);
             private int current;
+            /// <summary>The family files the list names, each once (Logic/Foundations.cs FamilyFiles).</summary>
+            private readonly List<string> familyFiles = new List<string>();
 
             public Walk(List<string> errors)
             {
@@ -269,6 +283,7 @@ namespace Flo2Rvt.Addin.Edit.Logic
                     }
                 }
                 if (references > MaxReferences) Fail("changes", "name " + references + " elements in all; the most one list may name is " + MaxReferences);
+                if (familyFiles.Count > FamilyFiles.Max) Fail("changes", "name " + familyFiles.Count + " family files; the most one list may name is " + FamilyFiles.Max);
             }
 
             private void Change(XElement e, string at)
@@ -365,10 +380,44 @@ namespace Flo2Rvt.Addin.Edit.Logic
                         m = Object(e, at, new[] { "kind", "id", "host", "point", "coordinates", "door_type" }, new[] { "kind", "host", "point", "coordinates", "door_type" });
                         if (m == null) return;
                         NeedsAdding(kind, at);
-                        if (m.TryGetValue("host", out x)) DoorHost(x, at + ".host");
+                        if (m.TryGetValue("host", out x)) WallNamed(x, at + ".host", "name the wall once: by global_id or by wall_change");
                         if (m.TryGetValue("point", out x)) Point(x, at + ".point");
                         if (m.TryGetValue("coordinates", out x)) OneOf(x, at + ".coordinates", Systems);
                         if (m.TryGetValue("door_type", out x)) TypeNamed(x, at + ".door_type");
+                        break;
+                    case ChangeKinds.AddFooting:
+                    case ChangeKinds.AddPile:
+                        bool pile = kind == ChangeKinds.AddPile;
+                        string typeKey = pile ? "pile_type" : "footing_type";
+                        var keys = new List<string> { "kind", "id", "level", "point", "coordinates", typeKey, "family_file", "sizes", "new_type", "top_offset" };
+                        if (!pile) keys.Add("rotation_deg");
+                        m = Object(e, at, keys.ToArray(), new[] { "kind", "level", "point", "coordinates", typeKey });
+                        if (m == null) return;
+                        NeedsFoundations(kind, at);
+                        if (m.TryGetValue("level", out x)) Level(x, at + ".level");
+                        if (m.TryGetValue("point", out x)) Point(x, at + ".point");
+                        if (m.TryGetValue("coordinates", out x)) OneOf(x, at + ".coordinates", Systems);
+                        if (m.TryGetValue(typeKey, out x)) TypeNamed(x, at + "." + typeKey);
+                        if (m.TryGetValue("family_file", out x))
+                        {
+                            string file = Text(x, at + ".family_file", 5, 204, FamilyFilePattern);
+                            if (file != null && !familyFiles.Contains(file)) familyFiles.Add(file);
+                        }
+                        if (m.TryGetValue("top_offset", out x)) Length(x, at + ".top_offset");
+                        if (m.TryGetValue("rotation_deg", out x))
+                        {
+                            double? turn = Number(x, at + ".rotation_deg");
+                            if (turn.HasValue && (turn.Value < -360 || turn.Value > 360)) Fail(at + ".rotation_deg", "must be -360 to 360");
+                        }
+                        Sized(m, at);
+                        break;
+                    case ChangeKinds.AddWallFooting:
+                        m = Object(e, at, new[] { "kind", "id", "wall", "wall_footing_type", "sizes", "new_type" }, new[] { "kind", "wall", "wall_footing_type" });
+                        if (m == null) return;
+                        NeedsFoundations(kind, at);
+                        if (m.TryGetValue("wall", out x)) WallNamed(x, at + ".wall", "name the wall once: by global_id or by wall_change");
+                        if (m.TryGetValue("wall_footing_type", out x)) TypeNamed(x, at + ".wall_footing_type");
+                        Sized(m, at);
                         break;
                     default:
                         Fail(at, "kind " + Quote(kind) + " is not in the vocabulary (" + string.Join(", ", ChangeKinds.All) + ")");
@@ -380,6 +429,41 @@ namespace Flo2Rvt.Addin.Edit.Logic
             private void NeedsAdding(string kind, string at)
             {
                 if (version < AddElementsVersion) Fail(at + ".kind", kind + " needs version " + AddElementsVersion + "; say \"version\": " + AddElementsVersion);
+            }
+
+            private void NeedsFoundations(string kind, string at)
+            {
+                if (version < FoundationsVersion) Fail(at + ".kind", kind + " needs version " + FoundationsVersion + "; say \"version\": " + FoundationsVersion);
+            }
+
+            /// <summary>A foundation's sizes (1 to MaxSizes lengths, each by a name once) and its new_type, which comes only beside them.</summary>
+            private void Sized(Dictionary<string, XElement> m, string at)
+            {
+                XElement x;
+                if (m.TryGetValue("sizes", out x))
+                {
+                    if (TypeOf(x) != "object") Fail(at + ".sizes", "must be an object");
+                    else
+                    {
+                        var seen = new HashSet<string>(StringComparer.Ordinal);
+                        List<XElement> sizes = x.Elements().ToList();
+                        if (sizes.Count < 1 || sizes.Count > MaxSizes) Fail(at + ".sizes", "must name 1 to " + MaxSizes + " parameters");
+                        foreach (XElement s in sizes)
+                        {
+                            string name = Key(s);
+                            string here = at + ".sizes[" + Quote(name) + "]";
+                            int n = CodePoints(name);
+                            if (n < 1 || n > 256) Fail(at + ".sizes", "names a parameter of " + n + " characters; a name is 1 to 256");
+                            else if (!seen.Add(name)) Fail(at + ".sizes", "names " + Quote(name) + " twice");
+                            else Length(s, here);
+                        }
+                    }
+                }
+                if (m.TryGetValue("new_type", out x))
+                {
+                    Text(x, at + ".new_type", 1, 256, null);
+                    if (!m.ContainsKey("sizes")) Fail(at + ".new_type", "names a copy of the type with sizes set on it; give sizes, or leave new_type out");
+                }
             }
 
             private void OneOf(XElement e, string at, string[] values)
@@ -465,13 +549,14 @@ namespace Flo2Rvt.Addin.Edit.Logic
                 if (why != null) Fail(at, why);
             }
 
-            private void DoorHost(XElement e, string at)
+            /// <summary>A wall a door goes into or a wall footing goes under: one the model has, or an add_wall before it.</summary>
+            private void WallNamed(XElement e, string at, string once)
             {
                 var m = Object(e, at, new[] { "global_id", "wall_change" }, new string[0]);
                 if (m == null) return;
                 if (m.Count != 1)
                 {
-                    Fail(at, "name the wall once: by global_id or by wall_change");
+                    Fail(at, once);
                     return;
                 }
                 XElement x;

@@ -8,7 +8,12 @@
 // it is held to what the add-in holds it to (Logic/Placement.cs, ChangeListCheck.cs): every point
 // within the model extent; a wall's ends two points, rising by more than nothing, to a level other
 // than its own; a floor's outline each corner once, not crossing itself, with an area; and a
-// door's wall_change exactly one add_wall change before it.
+// door's wall_change exactly one add_wall change before it. Since flo2-rvt 0.12.0, version 4's
+// foundations (add_footing, add_wall_footing, add_pile) say version 4, and are held to what the
+// add-in holds them to (Logic/Foundations.cs, ChangeListCheck.cs): a footing's or pile's point,
+// its top_offset and every size within the model extent; new_type only beside sizes; a wall
+// footing's wall_change exactly one add_wall change before it; and at most MAX_FAMILY_FILES family
+// files in one list, which flo2.io hands over with the job (contract.ts JobContext.families).
 //
 // ⭐ ITS CANONICAL FORM: the JSON with every object's keys sorted, no whitespace. That is the
 // exact byte string flo2-rvt uploads as changes.json, and its SHA-256 is the change list's
@@ -19,7 +24,7 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import * as z from 'zod/v4';
-import type { ChangeList, Length, LevelReference, PlanPoint } from './types/change-list.ts';
+import type { Change, ChangeList, Length, LevelReference, PlanPoint } from './types/change-list.ts';
 
 export const SCHEMA_URL = new URL('../../schema/change-list.schema.json', import.meta.url);
 export const CHANGE_LIST_SCHEMA = JSON.parse(readFileSync(SCHEMA_URL, 'utf8')) as Record<string, unknown>;
@@ -40,6 +45,10 @@ export const MOVE_LEVELS_VERSION = 1;
 export const CONSTRAINTS_VERSION = 2;
 /** The first change-list version that reads add_wall, add_floor, add_room and add_door (flo2-rvt 0.11.0). */
 export const ADD_ELEMENTS_VERSION = 3;
+/** The first change-list version that reads add_footing, add_wall_footing and add_pile (flo2-rvt 0.12.0). */
+export const FOUNDATIONS_VERSION = 4;
+/** The most family files (family_file, counted once each) one list may name (the add-in's FamilyFiles.Max). */
+export const MAX_FAMILY_FILES = 8;
 /** How close two points must be to be one, in feet (the add-in's Placement.ToleranceFt, LevelMoves.ToleranceFt). */
 export const POINT_TOLERANCE_FT = 1e-5;
 /** How small an outline's area may be and still be none, in square feet (Placement.AreaToleranceFt2). */
@@ -122,10 +131,27 @@ export function outlineProblem(o: readonly XY[]): string | null {
   return null;
 }
 
+/** The change kinds that add a foundation (change-list version 4). */
+export const FOUNDATION_KINDS = ['add_footing', 'add_wall_footing', 'add_pile'] as const;
+
+/**
+ * The family files a list names, each once, in the order the list first names them: the n-th
+ * (from 1) travels to the work item as the edit Activity's input `family<n>` (names.ts familyInput),
+ * and the add-in reads it from the same order (Logic/Foundations.cs FamilyFiles.Of).
+ */
+export function familyFilesOf(list: ChangeList): string[] {
+  const out: string[] = [];
+  for (const c of list.changes) {
+    const file = 'family_file' in c ? c.family_file : undefined;
+    if (file !== undefined && !out.includes(file)) out.push(file);
+  }
+  return out;
+}
+
 const sameLevel = (a: LevelReference, b: LevelReference) => ('level_name' in a && 'level_name' in b ? a.level_name === b.level_name : 'global_id' in a && 'global_id' in b ? a.global_id === b.global_id : false);
 
 export type CheckedChangeList =
-  | { ok: true; list: ChangeList; canonical: string; sha256: string; bytes: number; changes: number; references: number }
+  | { ok: true; list: ChangeList; canonical: string; sha256: string; bytes: number; changes: number; references: number; family_files: string[] }
   | { ok: false; errors: string[] };
 
 /** The list, if it is one the edit job takes; otherwise why not, in a few sentences. */
@@ -139,13 +165,39 @@ export function checkChangeList(value: unknown): CheckedChangeList {
   const list = value as ChangeList;
   const errors: string[] = [];
   let references = 0;
-  // Every change's id, with the changes that carry it (a door's wall_change is checked against them).
+  // Every change's id, with the changes that carry it (a door's or a wall footing's wall_change is checked against them).
   const carriers = new Map<string, Array<{ index: number; kind: string }>>();
   list.changes.forEach((c, i) => {
     if (c.id !== undefined) carriers.set(c.id, [...(carriers.get(c.id) ?? []), { index: i, kind: c.kind }]);
   });
   const extent = (at: string, p: XY) => {
     if (Math.abs(p.x) >= MODEL_EXTENT_FEET || Math.abs(p.y) >= MODEL_EXTENT_FEET) errors.push(`${at}: beyond Revit's model extent (20 miles from the internal origin)`);
+  };
+  const lengthWithin = (at: string, l: Length) => {
+    if (Math.abs(feetOf(l)) >= MODEL_EXTENT_FEET) errors.push(`${at}: beyond Revit's model extent (20 miles from the internal origin)`);
+  };
+  // A door's host and a wall footing's wall name a wall the same way: one the model has, or an add_wall before it.
+  const wallChange = (at: string, i: number, id: string) => {
+    const holders = carriers.get(id) ?? [];
+    if (!holders.some((h) => h.index < i && h.kind === 'add_wall')) {
+      errors.push(`${at}: names no add_wall change before it with the id "${id}"${holders.length ? ` (change ${holders.map((h) => `${h.index + 1}, ${h.kind},`).join(' ')} carries it)` : ''}`);
+    } else if (holders.length > 1) {
+      errors.push(`${at}: ${holders.length} changes carry the id "${id}"; give each wall its own id`);
+    }
+  };
+  const foundation = (c: Change, i: number) => {
+    if (c.kind !== 'add_footing' && c.kind !== 'add_wall_footing' && c.kind !== 'add_pile') return;
+    if (list.version < FOUNDATIONS_VERSION) errors.push(`changes.${i}.kind: ${c.kind} needs version ${FOUNDATIONS_VERSION}; say "version": ${FOUNDATIONS_VERSION}`);
+    if (c.new_type !== undefined && c.sizes === undefined) errors.push(`changes.${i}.new_type: names a copy of the type with sizes set on it; give sizes, or leave new_type out`);
+    for (const [name, size] of Object.entries(c.sizes ?? {})) if (size) lengthWithin(`changes.${i}.sizes[${JSON.stringify(name)}]`, size);
+    if (c.kind === 'add_wall_footing') {
+      if ('global_id' in c.wall) references += 1;
+      else wallChange(`changes.${i}.wall.wall_change`, i, c.wall.wall_change);
+      return;
+    }
+    if ('global_id' in c.level) references += 1;
+    extent(`changes.${i}.point`, pointFeet(c.point));
+    if (c.top_offset !== undefined) lengthWithin(`changes.${i}.top_offset`, c.top_offset);
   };
   list.changes.forEach((c, i) => {
     if (c.kind === 'delete_elements_by_global_id') references += c.elements.length;
@@ -179,16 +231,9 @@ export function checkChangeList(value: unknown): CheckedChangeList {
     if (c.kind === 'add_door') {
       extent(`changes.${i}.point`, pointFeet(c.point));
       if ('global_id' in c.host) references += 1;
-      else {
-        const id = c.host.wall_change;
-        const holders = carriers.get(id) ?? [];
-        if (!holders.some((h) => h.index < i && h.kind === 'add_wall')) {
-          errors.push(`changes.${i}.host.wall_change: names no add_wall change before it with the id "${id}"${holders.length ? ` (change ${holders.map((h) => `${h.index + 1}, ${h.kind},`).join(' ')} carries it)` : ''}`);
-        } else if (holders.length > 1) {
-          errors.push(`changes.${i}.host.wall_change: ${holders.length} changes carry the id "${id}"; give each wall its own id`);
-        }
-      }
+      else wallChange(`changes.${i}.host.wall_change`, i, c.host.wall_change);
     }
+    foundation(c, i);
     if (c.kind === 'set_level_elevation' && Math.abs(feetOf(c.elevation)) >= MODEL_EXTENT_FEET) {
       errors.push(`changes.${i}.elevation: beyond Revit's model extent (20 miles from the internal origin)`);
     }
@@ -208,9 +253,11 @@ export function checkChangeList(value: unknown): CheckedChangeList {
     }
   });
   if (references > MAX_REFERENCES) errors.push(`the list names ${references} elements; the most one list may name is ${MAX_REFERENCES}`);
+  const familyFiles = familyFilesOf(list);
+  if (familyFiles.length > MAX_FAMILY_FILES) errors.push(`the list names ${familyFiles.length} family files; the most one list may name is ${MAX_FAMILY_FILES}`);
   const canonical = canonicalJson(list);
   const bytes = Buffer.byteLength(canonical, 'utf8');
   if (bytes > MAX_CHANGE_LIST_BYTES) errors.push(`the list is ${bytes} bytes; the most is ${MAX_CHANGE_LIST_BYTES}`);
   if (errors.length) return { ok: false, errors };
-  return { ok: true, list, canonical, sha256: sha256Hex(canonical), bytes, changes: list.changes.length, references };
+  return { ok: true, list, canonical, sha256: sha256Hex(canonical), bytes, changes: list.changes.length, references, family_files: familyFiles };
 }

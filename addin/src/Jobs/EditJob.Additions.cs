@@ -26,12 +26,13 @@ namespace Flo2Rvt.Addin.Jobs
 {
     public sealed partial class EditJob
     {
-        /// <summary>What the changes that add share through one job: the coordinate frame, and the walls the list's add_wall changes made, by change id.</summary>
+        /// <summary>What the changes that add share through one job: the coordinate frame, the walls the list's add_wall changes made, by change id, and (since add-in 0.11.0) what came of each family file the list names.</summary>
         private sealed class Adding
         {
             /// <summary>Null when the model's shared coordinates could not be read: then only a change in internal coordinates is placed, and the report gives no shared point.</summary>
             public SiteFrame Frame;
             public readonly Dictionary<string, long> Walls = new Dictionary<string, long>(System.StringComparer.Ordinal);
+            public readonly Dictionary<string, FamilyFileReport> Families = new Dictionary<string, FamilyFileReport>(System.StringComparer.Ordinal);
         }
 
         private static readonly string[] LocationLines = { "wall_centerline", "core_centerline", "finish_face_exterior", "finish_face_interior", "core_face_exterior", "core_face_interior" };
@@ -63,15 +64,16 @@ namespace Flo2Rvt.Addin.Jobs
             return t;
         }
 
-        /// <summary>The run recorded, with what the change made itself taken out of what Revit added and changed on its own.</summary>
-        private static void RecordAdded(Document doc, ChangeReport r, ElementIndex index, RunResult run, ElementId made)
+        /// <summary>The run recorded, with what the change made itself (the element, and since add-in 0.11.0 a type it copied for it) taken out of what Revit added and changed on its own.</summary>
+        private static void RecordAdded(Document doc, ChangeReport r, ElementIndex index, RunResult run, ElementId made, ElementId alsoMade = null)
         {
             Record(doc, r, index, run, new List<long>());
             if (!run.Committed || made == null) return;
             long id = made.Value;
-            var added = run.Added.Where(x => x != id).ToList();
+            long also = alsoMade != null ? alsoMade.Value : id;
+            var added = run.Added.Where(x => x != id && x != also).ToList();
             r.AddedByRevit = added.Count > 0 ? ReportedElements.From(Tally(doc, index, added)) : null;
-            var modified = run.Modified.Where(x => x != id && !run.Deleted.Contains(x) && !run.Added.Contains(x)).ToList();
+            var modified = run.Modified.Where(x => x != id && x != also && !run.Deleted.Contains(x) && !run.Added.Contains(x)).ToList();
             r.ModifiedByRevit = modified.Count > 0 ? ReportedElements.From(Tally(doc, index, modified)) : null;
         }
 
@@ -307,41 +309,45 @@ namespace Flo2Rvt.Addin.Jobs
             Kept(r, e);
         }
 
-        private static void AddDoor(JobContext context, ElementIndex index, Adding adding, Change change, ChangeReport r)
+        /// <summary>The wall a door goes into or (since add-in 0.11.0) a wall footing goes under: one an earlier add_wall made, by its change id, or one the model has, by its GlobalId; null (and not applied) otherwise.</summary>
+        private static Wall HostWall(Document doc, ElementIndex index, Adding adding, string wallChange, string globalId, string purpose, ChangeReport r, out string hostChange)
         {
-            Document doc = context.Document;
-            Wall wall = null;
-            string hostChange = null;
-            if (change.Host.WallChange != null)
+            hostChange = null;
+            if (wallChange != null)
             {
-                hostChange = change.Host.WallChange;
+                hostChange = wallChange;
                 long id;
                 if (!adding.Walls.TryGetValue(hostChange, out id))
                 {
                     r.Status = ChangeStatus.NotApplied;
-                    r.Why = "the wall change " + hostChange + " was not kept, so there is no wall to put the door in";
-                    return;
+                    r.Why = "the wall change " + hostChange + " was not kept, so there is no wall " + purpose;
+                    return null;
                 }
-                wall = doc.GetElement(new ElementId(id)) as Wall;
+                return doc.GetElement(new ElementId(id)) as Wall;
             }
-            else
+            ElementIndex.Resolution hit = index.Resolve(globalId);
+            if (hit.Problem != null)
             {
-                ElementIndex.Resolution hit = index.Resolve(change.Host.GlobalId);
-                if (hit.Problem != null)
-                {
-                    r.Status = ChangeStatus.NotApplied;
-                    r.Why = hit.Problem == "ambiguous" ? "the GlobalId " + change.Host.GlobalId + " names more than one element" : "no element has the GlobalId " + change.Host.GlobalId;
-                    return;
-                }
-                Element e = doc.GetElement(new ElementId(hit.Entry.Id));
-                wall = e as Wall;
-                if (wall == null)
-                {
-                    r.Status = ChangeStatus.NotApplied;
-                    r.Why = e == null ? "the element the GlobalId " + change.Host.GlobalId + " names is no longer in the model" : "the GlobalId " + change.Host.GlobalId + " names a " + (hit.Entry.Category ?? "element") + ", not a wall";
-                    return;
-                }
+                r.Status = ChangeStatus.NotApplied;
+                r.Why = hit.Problem == "ambiguous" ? "the GlobalId " + globalId + " names more than one element" : "no element has the GlobalId " + globalId;
+                return null;
             }
+            Element e = doc.GetElement(new ElementId(hit.Entry.Id));
+            var wall = e as Wall;
+            if (wall == null)
+            {
+                r.Status = ChangeStatus.NotApplied;
+                r.Why = e == null ? "the element the GlobalId " + globalId + " names is no longer in the model" : "the GlobalId " + globalId + " names a " + (hit.Entry.Category ?? "element") + ", not a wall";
+            }
+            return wall;
+        }
+
+        private static void AddDoor(JobContext context, ElementIndex index, Adding adding, Change change, ChangeReport r)
+        {
+            Document doc = context.Document;
+            string hostChange;
+            Wall wall = HostWall(doc, index, adding, change.Host.WallChange, change.Host.GlobalId, "to put the door in", r, out hostChange);
+            if (wall == null && r.Status == ChangeStatus.NotApplied) return;
             var located = wall != null ? wall.Location as LocationCurve : null;
             var line = located != null ? located.Curve as Line : null;
             if (line == null)

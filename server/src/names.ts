@@ -26,12 +26,13 @@ export const BUNDLE_FILE = 'Flo2RvtProbe.bundle.zip';
  * and groups in the way, 0.6.0 constraints in the way, 0.7.0 what a level move reshaped, 0.8.0 a pad's
  * own ground expected, rooms, climbs and the warnings a move added, 0.9.0 a stair run's climb and its
  * stair, 0.10.0 new content: walls, floors, rooms and doors added, and the probe's types, rooms and
- * coordinates), and it is what a person's app must carry
+ * coordinates, 0.11.0 foundations: footings, wall footings and piles added, family files loaded,
+ * and the probe's foundation types with their sizes), and it is what a person's app must carry
  * for a job to run there: a setup writes it into the AppBundle's and each Activity's
  * description, and a job's check reads it back (server/src/setup.ts). It is not the bundle's
  * sha256, which changes with every CI build of the same add-in.
  */
-export const ADDIN_VERSION = '0.10.0';
+export const ADDIN_VERSION = '0.11.0';
 
 /** What a setup ends each description with, so a check can read which add-in an Activity runs. */
 export function setupMark(addinVersion = ADDIN_VERSION): string {
@@ -125,6 +126,26 @@ export const INPUT_NAME = 'input.rvt';
 /** The edit Activity's second input: the change list, as flo2-rvt uploads it (canonical JSON). */
 export const CHANGES_PARAMETER = 'changes';
 export const CHANGES_NAME = 'changes.json';
+
+/**
+ * Since flo2-rvt 0.12.0 (add-in 0.11.0): the family files a list names (family_file), each a
+ * further input of the edit Activity, `family1` to `family8`, arriving as `family1.rfa` to
+ * `family8.rfa` in the order the list first names them (change-list.ts familyFilesOf; the
+ * add-in's Logic/Foundations.cs FamilyFiles.Of). Optional: a WorkItem names only those its list
+ * uses. The add-in copies each to its own name before Revit loads it, since Revit names a family
+ * it loads from a file by the file's name.
+ */
+export const FAMILY_INPUTS = 8;
+/** The most bytes one family file may be (the contract's families[].size). */
+export const MAX_FAMILY_FILE_BYTES = 32 * 1024 * 1024;
+/** The most bytes the family files of one job may be in all. */
+export const MAX_FAMILY_FILES_BYTES = 64 * 1024 * 1024;
+
+/** The n-th (from 1) family input: its Activity parameter and its name in the working folder and the bucket. */
+export function familyInput(n: number): { parameter: string; name: string } {
+  if (!Number.isInteger(n) || n < 1 || n > FAMILY_INPUTS) throw new Error('not a family input');
+  return { parameter: `family${n}`, name: `family${n}.rfa` };
+}
 
 /** Each job's Activity, inputs beyond the model, and outputs. */
 export const JOBS: Readonly<Record<JobKind, { activity: string; outputs: readonly OutputSpec[]; changeList: boolean }>> = {
