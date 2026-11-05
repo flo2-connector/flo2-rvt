@@ -9,7 +9,7 @@ import { readFileSync } from 'node:fs';
 import { describe, test } from 'node:test';
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import { csharpFor, schemaSha256, typescriptFor } from '../../scripts/gen-types.ts';
-import { ChangeListShape, MAX_CHANGE_LIST_BYTES, MAX_REFERENCES, canonicalJson, checkChangeList, feetOf, sha256Hex } from '../src/change-list.ts';
+import { ChangeListShape, MAX_CHANGE_LIST_BYTES, MAX_REFERENCES, canonicalJson, checkChangeList, feetOf, outlineProblem, pointFeet, sha256Hex, signedArea } from '../src/change-list.ts';
 
 const schemaBytes = readFileSync(new URL('../../schema/change-list.schema.json', import.meta.url));
 const schema = JSON.parse(schemaBytes.toString('utf8')) as Record<string, unknown>;
@@ -87,7 +87,10 @@ test('the C# types and their schema hash are generated from the schema as it is 
   assert.equal(readFileSync(new URL('../../addin/Generated/change-list.schema.sha256', import.meta.url), 'utf8').trim(), sha);
   for (const kind of ['delete_elements_on_level', 'delete_elements_by_global_id', 'set_level_elevation', 'move_levels_together']) assert.ok(cs.includes(`"${kind}"`));
   assert.ok(cs.includes('public static class GroupsInTheWayValues'), 'groups_in_the_way\'s values, for the add-in');
-  assert.ok(cs.includes('public static readonly long[] VersionValues = { 0, 1, 2 };'), 'the versions this schema reads');
+  assert.ok(cs.includes('public static readonly long[] VersionValues = { 0, 1, 2, 3 };'), 'the versions this schema reads');
+  for (const kind of ['add_wall', 'add_floor', 'add_room', 'add_door']) assert.ok(cs.includes(`"${kind}"`), `${kind}, for the add-in`);
+  assert.ok(cs.includes('public static class CoordinatesValues') && cs.includes('public static class WallJoinsValues'), 'the coordinates and joins values, for the add-in');
+  assert.ok(cs.includes('public static class LengthUnitValues'), 'the units, one list for a length and a point');
   assert.ok(cs.includes('public static class ConstraintsInTheWayValues'), 'constraints_in_the_way\'s values, for the add-in');
 });
 
@@ -115,4 +118,37 @@ test('levels moved together: by a non-zero offset within the model extent, each 
   const ok = checkChangeList(list({ value: -250, unit: 'mm' }));
   assert.ok(ok.ok, ok.ok ? '' : ok.errors.join('; '));
   assert.equal(ok.ok && ok.references, 1, 'a level by its storey GlobalId counts as one reference');
+});
+
+// Since flo2-rvt 0.11.0 (change-list version 3): new content, add_wall, add_floor, add_room and add_door.
+test('version 3: a list that adds says version 3, and each rule beside the schema says where and why', () => {
+  const wall = { kind: 'add_wall', id: 'w1', level: { level_name: 'Level 1' }, start: { x: 0, y: 0, unit: 'ft' }, end: { x: 10, y: 0, unit: 'ft' }, coordinates: 'internal', wall_type: { type: 'Generic - 200mm' }, top: { height: { value: 3, unit: 'm' } } };
+  const door = { kind: 'add_door', host: { wall_change: 'w1' }, point: { x: 5, y: 0, unit: 'ft' }, coordinates: 'internal', door_type: { type: '800 x 2100' } };
+  const why = (list: unknown) => {
+    const r = checkChangeList(list);
+    return r.ok ? '' : r.errors.join(' | ');
+  };
+  assert.match(why({ version: 2, changes: [wall] }), /changes\.0\.kind: add_wall needs version 3; say "version": 3/);
+  assert.match(why({ version: 3, changes: [door, wall] }), /changes\.0\.host\.wall_change: names no add_wall change before it with the id "w1"/);
+  assert.match(why({ version: 3, changes: [wall, wall, door] }), /changes\.2\.host\.wall_change: 2 changes carry the id "w1"; give each wall its own id/);
+  assert.match(why({ version: 3, changes: [{ ...wall, end: { x: 0, y: 0, unit: 'ft' } }] }), /changes\.0\.end: a wall from a point to itself has no length/);
+  assert.match(why({ version: 3, changes: [{ ...wall, top: { height: { value: 0, unit: 'mm' } } }] }), /changes\.0\.top\.height: a wall rises by more than nothing/);
+  assert.match(why({ version: 3, changes: [{ ...wall, top: { top_level: { level_name: 'Level 1' } } }] }), /changes\.0\.top\.top_level: names the wall's own level/);
+  assert.match(why({ version: 3, changes: [{ ...wall, end: { x: 40_000, y: 0, unit: 'm' } }] }), /changes\.0\.end: beyond Revit's model extent/);
+  const bow = { kind: 'add_floor', level: { level_name: 'Level 1' }, outline: [{ x: 0, y: 0, unit: 'ft' }, { x: 10, y: 10, unit: 'ft' }, { x: 10, y: 0, unit: 'ft' }, { x: 0, y: 10, unit: 'ft' }], coordinates: 'shared', floor_type: { type: 'Generic 150mm' } };
+  assert.match(why({ version: 3, changes: [bow] }), /changes\.0\.outline: the outline crosses itself/);
+  const ok = checkChangeList({ version: 3, changes: [{ ...wall, level: { global_id: '3cUkl32yn9qRSPvBJVyWYp' } }, door, { kind: 'add_door', host: { global_id: GID }, point: { x: 1, y: 1, unit: 'ft' }, coordinates: 'shared', door_type: { type: '800 x 2100', family: 'Single-Flush' } }] });
+  assert.ok(ok.ok, ok.ok ? '' : ok.errors.join('; '));
+  assert.equal(ok.ok && ok.references, 2, "a level by its storey GlobalId and a door's wall by its GlobalId each count as one reference");
+});
+
+test("an outline's area and problems are the add-in's, in its words and order", () => {
+  const sq = [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 4 }, { x: 0, y: 4 }];
+  assert.equal(signedArea(sq), 40);
+  assert.equal(signedArea([...sq].reverse()), -40);
+  assert.equal(outlineProblem(sq), null);
+  assert.match(outlineProblem([{ x: 0, y: 0 }, { x: 5, y: 0 }, { x: 10, y: 0 }]) ?? '', /no area/);
+  assert.match(outlineProblem([{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }, { x: 10, y: 0 }]) ?? '', /names a corner twice \(corners 2 and 4\)/);
+  assert.match(outlineProblem([{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }, { x: 5, y: 0 }, { x: 0, y: 10 }]) ?? '', /crosses itself/);
+  assert.deepEqual(pointFeet({ x: 304.8, y: -609.6, unit: 'mm' }), { x: 1, y: -2 });
 });

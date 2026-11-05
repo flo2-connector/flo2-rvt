@@ -220,7 +220,7 @@
       "schema": false,
       "accepted": false,
       "list": {
-        "version": 3,
+        "version": 4,
         "list_id": "sample-1",
         "description": "Made-up changes to a public sample model.",
         "changes": [
@@ -1289,6 +1289,1550 @@
               "level_name": "Level 2"
             },
             "constraints_in_the_way": "remove"
+          }
+        ]
+      }
+    },
+    {
+      "why": "version 3: a small room built inside another: four walls by line (by a height, to a level above, joined and not), a room at a point inside them, and a door into the first",
+      "schema": true,
+      "accepted": true,
+      "list": {
+        "version": 3,
+        "list_id": "mech-room-1",
+        "description": "Made-up: a small plant room built inside a ground-floor room of a public sample model.",
+        "changes": [
+          {
+            "kind": "add_wall",
+            "id": "w1",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "start": {
+              "x": 1000,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "end": {
+              "x": 4000,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "wall_type": {
+              "family": "Basic Wall",
+              "type": "Interior - Partition"
+            },
+            "top": {
+              "height": {
+                "value": 2700,
+                "unit": "mm"
+              }
+            }
+          },
+          {
+            "kind": "add_wall",
+            "id": "w2",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "start": {
+              "x": 4000,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "end": {
+              "x": 4000,
+              "y": 4500,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "wall_type": {
+              "family": "Basic Wall",
+              "type": "Interior - Partition"
+            },
+            "top": {
+              "top_level": {
+                "level_name": "Level 2"
+              }
+            }
+          },
+          {
+            "kind": "add_wall",
+            "id": "w3",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "start": {
+              "x": 4000,
+              "y": 4500,
+              "unit": "mm"
+            },
+            "end": {
+              "x": 1000,
+              "y": 4500,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "wall_type": {
+              "type": "Interior - Partition"
+            },
+            "top": {
+              "height": {
+                "value": 9,
+                "unit": "ft"
+              }
+            },
+            "joins": "join"
+          },
+          {
+            "kind": "add_wall",
+            "id": "w4",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "start": {
+              "x": 1000,
+              "y": 4500,
+              "unit": "mm"
+            },
+            "end": {
+              "x": 1000,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "wall_type": {
+              "family": "Basic Wall",
+              "type": "Interior - Partition"
+            },
+            "top": {
+              "height": {
+                "value": 2.7,
+                "unit": "m"
+              }
+            },
+            "joins": "do_not_join"
+          },
+          {
+            "kind": "add_room",
+            "id": "r1",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "point": {
+              "x": 2500,
+              "y": 3250,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "name": "Mech. / Elec.",
+            "number": "109"
+          },
+          {
+            "kind": "add_door",
+            "id": "d1",
+            "host": {
+              "wall_change": "w1"
+            },
+            "point": {
+              "x": 2500,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "door_type": {
+              "family": "Single-Flush",
+              "type": "800 x 2100"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "version 3: a walkway floor by its outline in internal coordinates and feet, a level by its storey's GlobalId, and a door into a wall the model has, by its GlobalId",
+      "schema": true,
+      "accepted": true,
+      "list": {
+        "version": 3,
+        "list_id": "walkway-1",
+        "changes": [
+          {
+            "kind": "add_floor",
+            "id": "f1",
+            "level": {
+              "global_id": "3cUkl32yn9qRSPvBJVyWYp"
+            },
+            "outline": [
+              {
+                "x": 0,
+                "y": 0,
+                "unit": "ft"
+              },
+              {
+                "x": 12,
+                "y": 0,
+                "unit": "ft"
+              },
+              {
+                "x": 12,
+                "y": 4.5,
+                "unit": "ft"
+              },
+              {
+                "x": 0,
+                "y": 4.5,
+                "unit": "ft"
+              }
+            ],
+            "coordinates": "internal",
+            "floor_type": {
+              "family": "Floor",
+              "type": "Generic 150mm"
+            }
+          },
+          {
+            "kind": "add_door",
+            "host": {
+              "global_id": "2O2Fr$t4X7Zf8NOew3FLOH"
+            },
+            "point": {
+              "x": -19.5,
+              "y": 31.25,
+              "unit": "ft"
+            },
+            "coordinates": "internal",
+            "door_type": {
+              "type": "800 x 2100"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "version 3 reads a list of version 2's vocabulary as it did",
+      "schema": true,
+      "accepted": true,
+      "list": {
+        "version": 3,
+        "changes": [
+          {
+            "kind": "move_levels_together",
+            "levels": [
+              {
+                "level_name": "Level 1"
+              },
+              {
+                "level_name": "Level 2"
+              }
+            ],
+            "by": {
+              "value": -9.375,
+              "unit": "in"
+            },
+            "constraints_in_the_way": "remove"
+          }
+        ]
+      }
+    },
+    {
+      "why": "version 2 naming add_wall, which needs version 3",
+      "schema": true,
+      "accepted": false,
+      "list": {
+        "version": 2,
+        "changes": [
+          {
+            "kind": "add_wall",
+            "id": "w1",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "start": {
+              "x": 1000,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "end": {
+              "x": 4000,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "wall_type": {
+              "family": "Basic Wall",
+              "type": "Interior - Partition"
+            },
+            "top": {
+              "height": {
+                "value": 2700,
+                "unit": "mm"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "version 2 naming add_door, which needs version 3",
+      "schema": true,
+      "accepted": false,
+      "list": {
+        "version": 2,
+        "changes": [
+          {
+            "kind": "add_wall",
+            "id": "w1",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "start": {
+              "x": 1000,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "end": {
+              "x": 4000,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "wall_type": {
+              "family": "Basic Wall",
+              "type": "Interior - Partition"
+            },
+            "top": {
+              "height": {
+                "value": 2700,
+                "unit": "mm"
+              }
+            }
+          },
+          {
+            "kind": "add_door",
+            "id": "d1",
+            "host": {
+              "wall_change": "w1"
+            },
+            "point": {
+              "x": 2500,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "door_type": {
+              "family": "Single-Flush",
+              "type": "800 x 2100"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "a wall with no coordinates said",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 3,
+        "changes": [
+          {
+            "kind": "add_wall",
+            "id": "w1",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "start": {
+              "x": 1000,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "end": {
+              "x": 4000,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "wall_type": {
+              "family": "Basic Wall",
+              "type": "Interior - Partition"
+            },
+            "top": {
+              "height": {
+                "value": 2700,
+                "unit": "mm"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "a wall in a coordinate system outside the set",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 3,
+        "changes": [
+          {
+            "kind": "add_wall",
+            "id": "w1",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "start": {
+              "x": 1000,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "end": {
+              "x": 4000,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "coordinates": "project",
+            "wall_type": {
+              "family": "Basic Wall",
+              "type": "Interior - Partition"
+            },
+            "top": {
+              "height": {
+                "value": 2700,
+                "unit": "mm"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "a wall rising both by a height and to a level",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 3,
+        "changes": [
+          {
+            "kind": "add_wall",
+            "id": "w1",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "start": {
+              "x": 1000,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "end": {
+              "x": 4000,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "wall_type": {
+              "family": "Basic Wall",
+              "type": "Interior - Partition"
+            },
+            "top": {
+              "height": {
+                "value": 2700,
+                "unit": "mm"
+              },
+              "top_level": {
+                "level_name": "Level 2"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "a wall whose top says neither height nor level",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 3,
+        "changes": [
+          {
+            "kind": "add_wall",
+            "id": "w1",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "start": {
+              "x": 1000,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "end": {
+              "x": 4000,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "wall_type": {
+              "family": "Basic Wall",
+              "type": "Interior - Partition"
+            },
+            "top": {}
+          }
+        ]
+      }
+    },
+    {
+      "why": "a wall type given as text, not by type and family",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 3,
+        "changes": [
+          {
+            "kind": "add_wall",
+            "id": "w1",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "start": {
+              "x": 1000,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "end": {
+              "x": 4000,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "wall_type": "Basic Wall: Interior - Partition",
+            "top": {
+              "height": {
+                "value": 2700,
+                "unit": "mm"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "a wall type with an empty name",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 3,
+        "changes": [
+          {
+            "kind": "add_wall",
+            "id": "w1",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "start": {
+              "x": 1000,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "end": {
+              "x": 4000,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "wall_type": {
+              "type": ""
+            },
+            "top": {
+              "height": {
+                "value": 2700,
+                "unit": "mm"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "a wall type with a field the schema does not name",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 3,
+        "changes": [
+          {
+            "kind": "add_wall",
+            "id": "w1",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "start": {
+              "x": 1000,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "end": {
+              "x": 4000,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "wall_type": {
+              "type": "Interior - Partition",
+              "id": 4321
+            },
+            "top": {
+              "height": {
+                "value": 2700,
+                "unit": "mm"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "a point with no unit",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 3,
+        "changes": [
+          {
+            "kind": "add_wall",
+            "id": "w1",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "start": {
+              "x": 1000,
+              "y": 2000
+            },
+            "end": {
+              "x": 4000,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "wall_type": {
+              "family": "Basic Wall",
+              "type": "Interior - Partition"
+            },
+            "top": {
+              "height": {
+                "value": 2700,
+                "unit": "mm"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "a point with a height",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 3,
+        "changes": [
+          {
+            "kind": "add_wall",
+            "id": "w1",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "start": {
+              "x": 1000,
+              "y": 2000,
+              "z": 0,
+              "unit": "mm"
+            },
+            "end": {
+              "x": 4000,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "wall_type": {
+              "family": "Basic Wall",
+              "type": "Interior - Partition"
+            },
+            "top": {
+              "height": {
+                "value": 2700,
+                "unit": "mm"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "joins outside its set",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 3,
+        "changes": [
+          {
+            "kind": "add_wall",
+            "id": "w1",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "start": {
+              "x": 1000,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "end": {
+              "x": 4000,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "wall_type": {
+              "family": "Basic Wall",
+              "type": "Interior - Partition"
+            },
+            "top": {
+              "height": {
+                "value": 2700,
+                "unit": "mm"
+              }
+            },
+            "joins": "miter"
+          }
+        ]
+      }
+    },
+    {
+      "why": "a wall from a point to itself",
+      "schema": true,
+      "accepted": false,
+      "list": {
+        "version": 3,
+        "changes": [
+          {
+            "kind": "add_wall",
+            "id": "w1",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "start": {
+              "x": 1000,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "end": {
+              "x": 1000,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "wall_type": {
+              "family": "Basic Wall",
+              "type": "Interior - Partition"
+            },
+            "top": {
+              "height": {
+                "value": 2700,
+                "unit": "mm"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "a wall from a point to the same point in another unit",
+      "schema": true,
+      "accepted": false,
+      "list": {
+        "version": 3,
+        "changes": [
+          {
+            "kind": "add_wall",
+            "id": "w1",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "start": {
+              "x": 1,
+              "y": 2,
+              "unit": "m"
+            },
+            "end": {
+              "x": 1000,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "wall_type": {
+              "family": "Basic Wall",
+              "type": "Interior - Partition"
+            },
+            "top": {
+              "height": {
+                "value": 2700,
+                "unit": "mm"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "a wall rising by nothing",
+      "schema": true,
+      "accepted": false,
+      "list": {
+        "version": 3,
+        "changes": [
+          {
+            "kind": "add_wall",
+            "id": "w1",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "start": {
+              "x": 1000,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "end": {
+              "x": 4000,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "wall_type": {
+              "family": "Basic Wall",
+              "type": "Interior - Partition"
+            },
+            "top": {
+              "height": {
+                "value": 0,
+                "unit": "mm"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "a wall rising by a negative height",
+      "schema": true,
+      "accepted": false,
+      "list": {
+        "version": 3,
+        "changes": [
+          {
+            "kind": "add_wall",
+            "id": "w1",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "start": {
+              "x": 1000,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "end": {
+              "x": 4000,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "wall_type": {
+              "family": "Basic Wall",
+              "type": "Interior - Partition"
+            },
+            "top": {
+              "height": {
+                "value": -2700,
+                "unit": "mm"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "a wall whose top level is its own level",
+      "schema": true,
+      "accepted": false,
+      "list": {
+        "version": 3,
+        "changes": [
+          {
+            "kind": "add_wall",
+            "id": "w1",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "start": {
+              "x": 1000,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "end": {
+              "x": 4000,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "wall_type": {
+              "family": "Basic Wall",
+              "type": "Interior - Partition"
+            },
+            "top": {
+              "top_level": {
+                "level_name": "Level 1"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "a wall end beyond Revit's model extent",
+      "schema": true,
+      "accepted": false,
+      "list": {
+        "version": 3,
+        "changes": [
+          {
+            "kind": "add_wall",
+            "id": "w1",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "start": {
+              "x": 1000,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "end": {
+              "x": 40000,
+              "y": 0,
+              "unit": "m"
+            },
+            "coordinates": "shared",
+            "wall_type": {
+              "family": "Basic Wall",
+              "type": "Interior - Partition"
+            },
+            "top": {
+              "height": {
+                "value": 2700,
+                "unit": "mm"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "a floor outline of two corners",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 3,
+        "changes": [
+          {
+            "kind": "add_floor",
+            "id": "f1",
+            "level": {
+              "global_id": "3cUkl32yn9qRSPvBJVyWYp"
+            },
+            "outline": [
+              {
+                "x": 0,
+                "y": 0,
+                "unit": "mm"
+              },
+              {
+                "x": 10,
+                "y": 0,
+                "unit": "mm"
+              }
+            ],
+            "coordinates": "internal",
+            "floor_type": {
+              "family": "Floor",
+              "type": "Generic 150mm"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "a floor with no floor type",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 3,
+        "changes": [
+          {
+            "kind": "add_floor",
+            "id": "f1",
+            "level": {
+              "global_id": "3cUkl32yn9qRSPvBJVyWYp"
+            },
+            "outline": [
+              {
+                "x": 0,
+                "y": 0,
+                "unit": "ft"
+              },
+              {
+                "x": 12,
+                "y": 0,
+                "unit": "ft"
+              },
+              {
+                "x": 12,
+                "y": 4.5,
+                "unit": "ft"
+              },
+              {
+                "x": 0,
+                "y": 4.5,
+                "unit": "ft"
+              }
+            ],
+            "coordinates": "internal"
+          }
+        ]
+      }
+    },
+    {
+      "why": "a floor outline that crosses itself",
+      "schema": true,
+      "accepted": false,
+      "list": {
+        "version": 3,
+        "changes": [
+          {
+            "kind": "add_floor",
+            "id": "f1",
+            "level": {
+              "global_id": "3cUkl32yn9qRSPvBJVyWYp"
+            },
+            "outline": [
+              {
+                "x": 0,
+                "y": 0,
+                "unit": "ft"
+              },
+              {
+                "x": 10,
+                "y": 10,
+                "unit": "ft"
+              },
+              {
+                "x": 10,
+                "y": 0,
+                "unit": "ft"
+              },
+              {
+                "x": 0,
+                "y": 10,
+                "unit": "ft"
+              }
+            ],
+            "coordinates": "internal",
+            "floor_type": {
+              "family": "Floor",
+              "type": "Generic 150mm"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "a floor outline that names a corner twice",
+      "schema": true,
+      "accepted": false,
+      "list": {
+        "version": 3,
+        "changes": [
+          {
+            "kind": "add_floor",
+            "id": "f1",
+            "level": {
+              "global_id": "3cUkl32yn9qRSPvBJVyWYp"
+            },
+            "outline": [
+              {
+                "x": 0,
+                "y": 0,
+                "unit": "ft"
+              },
+              {
+                "x": 10,
+                "y": 0,
+                "unit": "ft"
+              },
+              {
+                "x": 10,
+                "y": 10,
+                "unit": "ft"
+              },
+              {
+                "x": 10,
+                "y": 0,
+                "unit": "ft"
+              }
+            ],
+            "coordinates": "internal",
+            "floor_type": {
+              "family": "Floor",
+              "type": "Generic 150mm"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "a floor outline on one line, with no area",
+      "schema": true,
+      "accepted": false,
+      "list": {
+        "version": 3,
+        "changes": [
+          {
+            "kind": "add_floor",
+            "id": "f1",
+            "level": {
+              "global_id": "3cUkl32yn9qRSPvBJVyWYp"
+            },
+            "outline": [
+              {
+                "x": 0,
+                "y": 0,
+                "unit": "ft"
+              },
+              {
+                "x": 5,
+                "y": 0,
+                "unit": "ft"
+              },
+              {
+                "x": 10,
+                "y": 0,
+                "unit": "ft"
+              }
+            ],
+            "coordinates": "internal",
+            "floor_type": {
+              "family": "Floor",
+              "type": "Generic 150mm"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "a floor outline the same corner twice in a row, in two units",
+      "schema": true,
+      "accepted": false,
+      "list": {
+        "version": 3,
+        "changes": [
+          {
+            "kind": "add_floor",
+            "id": "f1",
+            "level": {
+              "global_id": "3cUkl32yn9qRSPvBJVyWYp"
+            },
+            "outline": [
+              {
+                "x": 0,
+                "y": 0,
+                "unit": "ft"
+              },
+              {
+                "x": 12,
+                "y": 0,
+                "unit": "ft"
+              },
+              {
+                "x": 144,
+                "y": 0,
+                "unit": "in"
+              },
+              {
+                "x": 12,
+                "y": 4.5,
+                "unit": "ft"
+              }
+            ],
+            "coordinates": "internal",
+            "floor_type": {
+              "family": "Floor",
+              "type": "Generic 150mm"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "a room with no number",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 3,
+        "changes": [
+          {
+            "kind": "add_room",
+            "id": "r1",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "point": {
+              "x": 2500,
+              "y": 3250,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "name": "Mech. / Elec."
+          }
+        ]
+      }
+    },
+    {
+      "why": "a room with an empty name",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 3,
+        "changes": [
+          {
+            "kind": "add_room",
+            "id": "r1",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "point": {
+              "x": 2500,
+              "y": 3250,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "name": "",
+            "number": "109"
+          }
+        ]
+      }
+    },
+    {
+      "why": "a door into a wall named both ways",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 3,
+        "changes": [
+          {
+            "kind": "add_wall",
+            "id": "w1",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "start": {
+              "x": 1000,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "end": {
+              "x": 4000,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "wall_type": {
+              "family": "Basic Wall",
+              "type": "Interior - Partition"
+            },
+            "top": {
+              "height": {
+                "value": 2700,
+                "unit": "mm"
+              }
+            }
+          },
+          {
+            "kind": "add_door",
+            "id": "d1",
+            "host": {
+              "wall_change": "w1",
+              "global_id": "2O2Fr$t4X7Zf8NOew3FLOH"
+            },
+            "point": {
+              "x": 2500,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "door_type": {
+              "family": "Single-Flush",
+              "type": "800 x 2100"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "a door with no host",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 3,
+        "changes": [
+          {
+            "kind": "add_door",
+            "id": "d1",
+            "point": {
+              "x": 2500,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "door_type": {
+              "family": "Single-Flush",
+              "type": "800 x 2100"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "a door into a wall change the list does not hold",
+      "schema": true,
+      "accepted": false,
+      "list": {
+        "version": 3,
+        "changes": [
+          {
+            "kind": "add_wall",
+            "id": "w1",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "start": {
+              "x": 1000,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "end": {
+              "x": 4000,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "wall_type": {
+              "family": "Basic Wall",
+              "type": "Interior - Partition"
+            },
+            "top": {
+              "height": {
+                "value": 2700,
+                "unit": "mm"
+              }
+            }
+          },
+          {
+            "kind": "add_door",
+            "id": "d1",
+            "host": {
+              "wall_change": "w9"
+            },
+            "point": {
+              "x": 2500,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "door_type": {
+              "family": "Single-Flush",
+              "type": "800 x 2100"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "a door into a wall change that comes after it",
+      "schema": true,
+      "accepted": false,
+      "list": {
+        "version": 3,
+        "changes": [
+          {
+            "kind": "add_door",
+            "id": "d1",
+            "host": {
+              "wall_change": "w1"
+            },
+            "point": {
+              "x": 2500,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "door_type": {
+              "family": "Single-Flush",
+              "type": "800 x 2100"
+            }
+          },
+          {
+            "kind": "add_wall",
+            "id": "w1",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "start": {
+              "x": 1000,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "end": {
+              "x": 4000,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "wall_type": {
+              "family": "Basic Wall",
+              "type": "Interior - Partition"
+            },
+            "top": {
+              "height": {
+                "value": 2700,
+                "unit": "mm"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "a door into a change that adds no wall",
+      "schema": true,
+      "accepted": false,
+      "list": {
+        "version": 3,
+        "changes": [
+          {
+            "kind": "add_room",
+            "id": "w1",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "point": {
+              "x": 2500,
+              "y": 3250,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "name": "Mech. / Elec.",
+            "number": "109"
+          },
+          {
+            "kind": "add_door",
+            "id": "d1",
+            "host": {
+              "wall_change": "w1"
+            },
+            "point": {
+              "x": 2500,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "door_type": {
+              "family": "Single-Flush",
+              "type": "800 x 2100"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "a door into a wall change whose id two changes carry",
+      "schema": true,
+      "accepted": false,
+      "list": {
+        "version": 3,
+        "changes": [
+          {
+            "kind": "add_wall",
+            "id": "w1",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "start": {
+              "x": 1000,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "end": {
+              "x": 4000,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "wall_type": {
+              "family": "Basic Wall",
+              "type": "Interior - Partition"
+            },
+            "top": {
+              "height": {
+                "value": 2700,
+                "unit": "mm"
+              }
+            }
+          },
+          {
+            "kind": "add_wall",
+            "id": "w1",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "start": {
+              "x": 4000,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "end": {
+              "x": 4000,
+              "y": 4500,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "wall_type": {
+              "family": "Basic Wall",
+              "type": "Interior - Partition"
+            },
+            "top": {
+              "top_level": {
+                "level_name": "Level 2"
+              }
+            }
+          },
+          {
+            "kind": "add_door",
+            "id": "d1",
+            "host": {
+              "wall_change": "w1"
+            },
+            "point": {
+              "x": 2500,
+              "y": 2000,
+              "unit": "mm"
+            },
+            "coordinates": "shared",
+            "door_type": {
+              "family": "Single-Flush",
+              "type": "800 x 2100"
+            }
           }
         ]
       }

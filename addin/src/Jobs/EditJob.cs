@@ -19,6 +19,10 @@
 // first (Document.Delete), at most ConstraintsInTheWay.MaxAttempts tries (Logic/ConstraintsInTheWay.cs).
 // The report gives every try and every message Revit raised, each level before and after, and
 // the groups: moved whole with their levels, ungrouped, or in the way, as the model is after.
+//
+// ⭐ NEW CONTENT (since 0.10.0, change-list version 3): add_wall, add_floor, add_room and
+// add_door, in EditJob.Additions.cs, each in its own transaction like every other change, each
+// placing a type the model holds at points the change gives in shared or internal coordinates.
 
 using System;
 using System.Collections.Generic;
@@ -34,7 +38,7 @@ using Flo2Rvt.ChangeLists;
 namespace Flo2Rvt.Addin.Jobs
 {
     [Flo2RvtJob(Name)]
-    public sealed class EditJob : IFlo2RvtJob
+    public sealed partial class EditJob : IFlo2RvtJob
     {
         public const string Name = JobSelection.Edit;
         public const string ReportName = "report.json";
@@ -76,11 +80,26 @@ namespace Flo2Rvt.Addin.Jobs
 
             // What the job could not do, and any invariant a change's report breaks (Logic/ReportCheck.cs).
             var probeWarnings = new List<string>();
+            // The changes that add share the coordinate frame and the walls the list made (EditJob.Additions.cs).
+            var adding = new Adding();
+            if (list.List.Changes.Any(c => ReportCheck.Adds(c.Kind)))
+            {
+                try
+                {
+                    adding.Frame = ModelTypes.Frame(doc);
+                    report.Coordinates = ModelTypes.Info(adding.Frame);
+                }
+                catch (Exception ex)
+                {
+                    adding.Frame = null;
+                    probeWarnings.Add("the model's shared coordinates could not be read (" + ex.GetType().Name + ": " + ex.Message + "): a change in shared coordinates is not applied");
+                }
+            }
             for (int i = 0; i < list.List.Changes.Count; i++)
             {
                 Change change = list.List.Changes[i];
                 context.Heartbeat.Step("change " + (i + 1) + " of " + list.List.Changes.Count + ": " + change.Kind);
-                ChangeReport r = Apply(context, index, change, i);
+                ChangeReport r = Apply(context, index, adding, change, i);
                 report.Changes.Add(r);
                 report.Totals.Count(r);
                 // A level move tried again (groups_in_the_way "ungroup") rolled back each try before the last.
@@ -162,17 +181,27 @@ namespace Flo2Rvt.Addin.Jobs
 
         // ─────────────────────────────────────────────────────────── the change kinds
 
-        private static ChangeReport Apply(JobContext context, ElementIndex index, Change change, int i)
+        private static ChangeReport Apply(JobContext context, ElementIndex index, Adding adding, Change change, int i)
         {
             var r = new ChangeReport { Index = i, Id = change.Id, Kind = change.Kind };
             try
             {
+                if (ReportCheck.Adds(change.Kind) && adding.Frame == null && change.Coordinates == CoordinatesValues.Shared)
+                {
+                    r.Status = ChangeStatus.NotApplied;
+                    r.Why = "the model's shared coordinates could not be read, so a point in them cannot be placed (the job's warnings say why)";
+                    return r;
+                }
                 switch (change.Kind)
                 {
                     case ChangeKinds.DeleteElementsOnLevel: DeleteOnLevel(context, index, change, r); break;
                     case ChangeKinds.DeleteElementsByGlobalId: DeleteByGlobalId(context, index, change, r); break;
                     case ChangeKinds.SetLevelElevation: SetElevation(context, index, change, r); break;
                     case ChangeKinds.MoveLevelsTogether: MoveTogether(context, index, change, r); break;
+                    case ChangeKinds.AddWall: AddWall(context, index, adding, change, r); break;
+                    case ChangeKinds.AddFloor: AddFloor(context, index, adding, change, r); break;
+                    case ChangeKinds.AddRoom: AddRoom(context, index, adding, change, r); break;
+                    case ChangeKinds.AddDoor: AddDoor(context, index, adding, change, r); break;
                     default:
                         r.Status = ChangeStatus.NotApplied;
                         r.Why = "the kind is not in this add-in's vocabulary";

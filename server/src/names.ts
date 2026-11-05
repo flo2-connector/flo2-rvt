@@ -25,12 +25,13 @@ export const BUNDLE_FILE = 'Flo2RvtProbe.bundle.zip';
  * reconciled report, 0.4.0 parts with their owners, 0.5.0 levels moved together
  * and groups in the way, 0.6.0 constraints in the way, 0.7.0 what a level move reshaped, 0.8.0 a pad's
  * own ground expected, rooms, climbs and the warnings a move added, 0.9.0 a stair run's climb and its
- * stair), and it is what a person's app must carry
+ * stair, 0.10.0 new content: walls, floors, rooms and doors added, and the probe's types, rooms and
+ * coordinates), and it is what a person's app must carry
  * for a job to run there: a setup writes it into the AppBundle's and each Activity's
  * description, and a job's check reads it back (server/src/setup.ts). It is not the bundle's
  * sha256, which changes with every CI build of the same add-in.
  */
-export const ADDIN_VERSION = '0.9.0';
+export const ADDIN_VERSION = '0.10.0';
 
 /** What a setup ends each description with, so a check can read which add-in an Activity runs. */
 export function setupMark(addinVersion = ADDIN_VERSION): string {

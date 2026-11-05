@@ -27,7 +27,7 @@ using Flo2Rvt.ChangeLists;
 
 namespace Flo2Rvt.Addin.Tests
 {
-    public static class Program
+    public static partial class Program
     {
         private static int passed;
         private static readonly List<string> failed = new List<string>();
@@ -1124,6 +1124,9 @@ namespace Flo2Rvt.Addin.Tests
                 // Moved one level at a time, the first of those moves already reshapes the group spanning the third and fourth floors.
                 Eq(GroupsInTheWay.InTheWay, GroupsInTheWay.Expect(Group(11, 4, 3, 4), LevelMoves.Offsets(new Dictionary<long, double> { { 3, -0.25 } })), "one at a time");
             });
+
+            // Since add-in 0.10.0: new content (AdditionsTests.cs).
+            Additions(root);
 
             Console.WriteLine();
             Console.WriteLine(passed + " passed, " + failed.Count + " failed");

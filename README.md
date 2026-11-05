@@ -11,7 +11,7 @@ It runs two jobs, both paid by processing time on the person's app, both confirm
 
 | File | What it holds |
 | --- | --- |
-| `report.json` | The levels with their elevations in feet and millimetres, the sheets by number and name, the linked files (Revit links and CAD links or imports), element counts by category, the Revit release the file was saved in and the engine's version and build, and the warnings stored in the model. |
+| `report.json` | The levels with their elevations in feet and millimetres, the sheets by number and name, the linked files (Revit links and CAD links or imports), element counts by category, the Revit release the file was saved in and the engine's version and build, and the warnings stored in the model. Since add-in 0.10.0, what an edit places new content by: every wall, floor and door type the model holds (`types`, by family and name, with a wall's thickness, a floor's and a door's sizes), its placed rooms (`rooms`: number, name, level, area, point and boundary, in shared and internal coordinates; Revit's IFC export holds no rooms), and how its shared coordinates sit on its internal ones (`coordinates`). |
 | `sheets.pdf` | Every printable sheet, in sheet-number order, in one PDF. Absent when the model has none. |
 | `model.ifc` | Revit's own IFC export: IFC4 Design Transfer View, with base quantities. |
 
@@ -19,7 +19,7 @@ It runs two jobs, both paid by processing time on the person's app, both confirm
 
 | File | What it holds |
 | --- | --- |
-| `report.json` | Per change: what it named and matched, what it deleted, what Revit deleted with a host, changed or added on its own, the messages Revit raised, what is still in the model (what Revit would not delete, and what is still tied to an emptied level, each with why), and whether it was applied, applied in part, rolled back or not applied, judged from what is really left. Each element is named by its element id, IFC GlobalId, category and Revit class, and model elements are counted apart from Revit's internal ones. Then the levels after the edit, how the model was saved, and the model's stored warnings. Always written. |
+| `report.json` | Per change: what it named and matched, what it deleted, what Revit deleted with a host, changed or added on its own, the messages Revit raised, what is still in the model (what Revit would not delete, and what is still tied to an emptied level, each with why), and whether it was applied, applied in part, rolled back or not applied, judged from what is really left. Since add-in 0.10.0, what each change added (`added`: the element's id, GlobalId, family, type and level, a wall's ends, length and height, a floor's area beside its outline's, a room's number, name and area, a door's host wall and where it stands). Each element is named by its element id, IFC GlobalId, category and Revit class, and model elements are counted apart from Revit's internal ones. Then the levels after the edit, how the model was saved, and the model's stored warnings. Always written. |
 | `model.rvt` | The edited model, a **new** file: a new central model, with its worksets, when the input is workshared. Absent when no change was kept. |
 | `sheets.pdf` | The edited model's printable sheets in one PDF. Absent when it has none, or no change was kept. |
 | `model.ifc` | Revit's own IFC export of the edited model, with the probe's options. Absent when no change was kept. |
@@ -133,7 +133,7 @@ bucket:create bucket:read data:create data:write data:read code:all
 
 ## The change list
 
-`schema/change-list.schema.json` is the one JSON Schema of the change list an agent hands the edit job: version 2, the element reference (an IFC GlobalId, or a level by name or by its storey's GlobalId), and four change kinds: `delete_elements_on_level`, `delete_elements_by_global_id`, `set_level_elevation` and `move_levels_together`. Version 1 (flo2-rvt 0.6.0, add-in 0.5.0) added `move_levels_together` and a level move's `groups_in_the_way`, and a list that uses either says `"version": 1`; a list of version 0's vocabulary reads as it always did, as version 0 or 1. Version 2 (flo2-rvt 0.7.0, add-in 0.6.0) adds a level move's `constraints_in_the_way`, and a list that uses it says `"version": 2`; a list of version 1 reads as it did. `npm run gen` builds both sides' types from it: `server/src/types/change-list.ts` and `addin/Generated/ChangeList.g.cs`. The add-in's build refuses C# types generated from another version of the schema.
+`schema/change-list.schema.json` is the one JSON Schema of the change list an agent hands the edit job: version 3, the element reference (an IFC GlobalId, or a level by name or by its storey's GlobalId), and eight change kinds: `delete_elements_on_level`, `delete_elements_by_global_id`, `set_level_elevation` and `move_levels_together`, and, adding new content, `add_wall`, `add_floor`, `add_room` and `add_door`. Version 1 (flo2-rvt 0.6.0, add-in 0.5.0) added `move_levels_together` and a level move's `groups_in_the_way`, and a list that uses either says `"version": 1`; a list of version 0's vocabulary reads as it always did, as version 0 or 1. Version 2 (flo2-rvt 0.7.0, add-in 0.6.0) adds a level move's `constraints_in_the_way`, and a list that uses it says `"version": 2`; a list of version 1 reads as it did. Version 3 (flo2-rvt 0.11.0, add-in 0.10.0) adds `add_wall`, `add_floor`, `add_room` and `add_door`, and a list that uses any of them says `"version": 3`; a list of version 2 reads as it did. `npm run gen` builds both sides' types from it: `server/src/types/change-list.ts` and `addin/Generated/ChangeList.g.cs`. The add-in's build refuses C# types generated from another version of the schema.
 
 ```json
 {
@@ -162,7 +162,31 @@ bucket:create bucket:read data:create data:write data:read code:all
 }
 ```
 
-It is checked three times before Revit acts on it, each time against the same rules: by flo2.io's gateway (before the person is asked), by the server (`server/src/change-list.ts`, which reads the schema file itself through zod's `fromJSONSchema`), and by the add-in (`addin/src/Edit/Logic/ChangeListCheck.cs`, which walks the JSON with closed key sets, so a key the add-in would not read is refused rather than skipped). On top of the schema all three hold the same limits: at most 512 KiB in canonical form, at most 20,000 GlobalIds in all, no elevation or move beyond Revit's model extent (20 miles from the internal origin), no move by zero, and what version 1 added only in a version 1 list. `schema/test/change-lists.json` holds the cases and the verdicts every side must reach; the server's and the add-in's tests both read it.
+```json
+{
+  "version": 3,
+  "list_id": "plant-room-1",
+  "description": "A small plant room inside room 106, with a door, and a walkway.",
+  "changes": [
+    { "kind": "add_wall", "id": "w1", "level": { "level_name": "Level 1" }, "coordinates": "shared",
+      "start": { "x": 1000, "y": 2000, "unit": "mm" }, "end": { "x": 4000, "y": 2000, "unit": "mm" },
+      "wall_type": { "family": "Basic Wall", "type": "Interior - Partition" }, "top": { "height": { "value": 2700, "unit": "mm" } } },
+    { "kind": "add_wall", "id": "w2", "level": { "level_name": "Level 1" }, "coordinates": "shared",
+      "start": { "x": 4000, "y": 2000, "unit": "mm" }, "end": { "x": 4000, "y": 4500, "unit": "mm" },
+      "wall_type": { "family": "Basic Wall", "type": "Interior - Partition" }, "top": { "top_level": { "level_name": "Level 2" } } },
+    { "kind": "add_room", "id": "r1", "level": { "level_name": "Level 1" }, "coordinates": "shared",
+      "point": { "x": 2500, "y": 3250, "unit": "mm" }, "name": "Plant", "number": "109" },
+    { "kind": "add_door", "id": "d1", "host": { "wall_change": "w1" }, "coordinates": "shared",
+      "point": { "x": 2500, "y": 2000, "unit": "mm" }, "door_type": { "family": "Single-Flush", "type": "800 x 2100" } },
+    { "kind": "add_floor", "id": "f1", "level": { "level_name": "Level 1" }, "coordinates": "shared",
+      "outline": [ { "x": 6000, "y": 0, "unit": "mm" }, { "x": 10000, "y": 0, "unit": "mm" },
+                   { "x": 10000, "y": 1500, "unit": "mm" }, { "x": 6000, "y": 1500, "unit": "mm" } ],
+      "floor_type": { "family": "Floor", "type": "Generic 150mm" } }
+  ]
+}
+```
+
+It is checked three times before Revit acts on it, each time against the same rules: by flo2.io's gateway (before the person is asked), by the server (`server/src/change-list.ts`, which reads the schema file itself through zod's `fromJSONSchema`), and by the add-in (`addin/src/Edit/Logic/ChangeListCheck.cs`, which walks the JSON with closed key sets, so a key the add-in would not read is refused rather than skipped). On top of the schema all three hold the same limits: at most 512 KiB in canonical form, at most 20,000 GlobalIds in all, no elevation, move or point beyond Revit's model extent (20 miles from the internal origin), no move by zero, what version 1 added only in a version 1 list (2 and 3 the same), a wall's ends two points and its height more than nothing to a level other than its own, a floor's outline each corner once, not crossing itself and with an area, and a door's `wall_change` exactly one `add_wall` change before it. `schema/test/change-lists.json` holds the cases and the verdicts every side must reach; the server's and the add-in's tests both read it.
 
 ### What each change kind does
 
@@ -206,6 +230,24 @@ Changes run in order, **each in its own Revit transaction**. Lengths are convert
 - *`refuse`*, what a change that says nothing does: the move is rolled back, nothing is removed, and the report's `constraints.in_the_way` names each constraint Revit named (element id, category, `dimension` and whether it is locked) and the elements it ties (`ties`: id, GlobalId, name, category), with `why` saying how a person can let it through (the architect releases them in Revit, or the list says `remove`).
 - *`remove`*, only once the person agreed: the move is tried first with every constraint kept. If Revit rolls it back for constraints in the way, and for model groups only when the change also says `groups_in_the_way: "ungroup"`, and for nothing else, it is tried again in a new transaction that first removes ONLY the constraint elements Revit named that are in the Constraints category (`Document.Delete`, in the Revit API reference), then moves the levels; at most four tries in all. Revit's own resolution is not taken inside failure processing, as for groups. The report's `constraints.removed` names every constraint removed with what it tied, and `constraints.note` says in plain words that those elements are no longer held to each other (the architect may want to lock them again) and that the original model is untouched. `attempts` lists every try, with `removed_first`.
 - Since add-in 0.6.0 every message in `revit_messages` also says what each element it names is (`element_categories`), Revit's id for the kind of failure (`definition`), and the resolution Revit offers for it (`revit_offers`), which the add-in reports and never takes.
+
+### New content (change-list version 3, add-in 0.10.0)
+
+Four change kinds add elements, each in its own transaction like every change, each **from a type the model already holds**: nothing is loaded or made. A type is named by its family and its own name, exactly (`"wall_type": { "family": "Basic Wall", "type": "Interior - Partition" }`): Revit's IFC export names each element `<family>:<type>:<element id>`, and the probe's report lists every wall, floor and door type the model holds (`types`). `family` may be left out when no two families hold a type of that name. A type the model does not hold makes the change `not_applied`, and `why` lists the types it does hold (`addin/src/Edit/Logic/Placement.cs`, `TypeMatch`).
+
+**Where a point is.** Every point is a plan point, `{ "x", "y", "unit" }`, in the change's `coordinates`, which a change must say:
+- `shared`: Revit's shared coordinates. This is the frame Revit's own IFC export of the model is written in with the exporter's default coordinate base, which flo2-rvt's probe and edit both use, so **x and y read from the model's IFC** (the probe's `model.ifc`, or the last edit's), in that file's length unit, go straight in. The probe's report gives each placed room's point and boundary in it too (`rooms[].location_shared_ft`, `rooms[].boundary_shared_ft`, in feet).
+- `internal`: Revit's internal coordinates, from the model's internal origin, as the Revit API takes points (the probe's `rooms[].location_internal_ft`).
+
+The two are one rotation and one offset apart, read from the project base point as Autodesk's open-source IFC exporter places its site for the shared coordinate base (github.com/Autodesk/revit-ifc, branch `Release_24.x.x`, commit `887c3d3e`: `Utility/ExportOptionsCache.cs` makes `SiteTransformBasis.Shared` the default, and `Utility/GeometryUtil.cs` `GetSiteLocalPlacement` places the IfcSite, the root of every element's placement, by a rotation of the project base point's angle to true north, `ActiveProjectLocation.GetProjectPosition(...).Angle`, and an offset of `BasePoint.SharedPosition` less the rotated `BasePoint.Position`). So shared = R(angle)·internal + offset; the report gives both (`coordinates`: `angle_deg`, `offset_x_ft`, `offset_y_ft`), and every point it names in both frames. A point's height is never a coordinate: a new element stands on its level. *Assumed until the first live run*: that an element placed at shared x, y lands at x, y in the edited model's own IFC.
+
+**`add_wall`** places a straight wall on `level`, along the line from `start` to `end` (its location line), of `wall_type`, with `Wall.Create`. `top` is `{ "height": <length> }` (Revit's Unconnected Height) or `{ "top_level": <level> }` (Revit's Top Constraint: the wall rises to that level, and follows it when it moves); a top level not above the wall's own is not applied. `joins`, `join` unless said, lets Revit join its ends to the walls they meet, as drawing a wall does; `do_not_join` disallows both (`WallUtils.DisallowWallJoinAtEnd`). The report gives the wall's ends as Revit holds them, its length, height, thickness, location line and joins.
+
+**`add_floor`** places a floor on `level` over `outline` (3 to 500 corners, in order, the last joined back to the first; its top at the level) of `floor_type`, with `Floor.Create`, after Revit's own `BoundaryValidation.IsValidHorizontalBoundary`. An outline naming a corner twice, crossing itself or with no area is refused before Revit is asked. The report gives Revit's area (`HOST_AREA_COMPUTED`) beside the outline's own, its thickness and its corners.
+
+**`add_room`** places a room with `name` and `number` on `level` at `point`, as placing a room in Revit does (`NewRoom`): it fills the region the walls or room separation lines around the point enclose, including walls an earlier change of the list added. Revit makes a room at any point, an unbounded one where nothing encloses it, so the change reads the room's area inside its transaction and rolls itself back when there is none, saying so; it is never left as an unbounded room. The report gives its number, name, level, area, perimeter, point and phase.
+
+**`add_door`** places a door of `door_type` into a straight wall: `host` is `{ "global_id": ... }` for a wall the model has, or `{ "wall_change": "w1" }` for one an earlier `add_wall` of the list added (a wall change that was not kept makes the door `not_applied`). `point` is taken to the nearest point of the wall's location line, and must lie between its ends and within the wall's thickness of the line. The door stands on the wall's level (`NewFamilyInstance` with the wall as host). The report gives its host wall (element id, GlobalId, the change that made it), where it stands (in both frames, and how far along the wall), how far the point named was off the line, and its type's width and height.
 
 ### How an IFC GlobalId maps to a Revit element
 

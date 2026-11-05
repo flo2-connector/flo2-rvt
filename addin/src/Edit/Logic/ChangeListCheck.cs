@@ -8,6 +8,10 @@
 // it reads the list into the generated classes (addin/Generated/ChangeList.g.cs). Beside the
 // schema it holds what the schema's keywords cannot say, as the server does: a move by zero is
 // refused, and a list that uses what version 1 added says version 1 (version 2's constraints_in_the_way, version 2).
+// Since add-in 0.10.0, version 3's new content: add_wall, add_floor, add_room and add_door need
+// version 3; a wall's ends are two points and it rises by more than nothing, to a level other
+// than its own; a floor's outline names each corner once, does not cross itself and has an area
+// (Logic/Placement.cs); and a door's wall_change names exactly one add_wall change before it.
 //
 // PURE LOGIC: no Revit type here, so addin/tests runs it on any OS.
 
@@ -47,11 +51,15 @@ namespace Flo2Rvt.Addin.Edit.Logic
         public const long MoveLevelsVersion = 1;
         /// <summary>The first change-list version that reads a level move's constraints_in_the_way (add-in 0.6.0).</summary>
         public const long ConstraintsVersion = 2;
+        /// <summary>The first change-list version that reads add_wall, add_floor, add_room and add_door (add-in 0.10.0).</summary>
+        public const long AddElementsVersion = 3;
 
         private static readonly Regex GlobalIdPattern = new Regex(ChangeListSchema.IfcGlobalIdPattern, RegexOptions.CultureInvariant);
         private static readonly Regex IdPattern = new Regex(ChangeListSchema.ChangeIdPattern, RegexOptions.CultureInvariant);
         private static readonly string[] UnitNames = { LengthUnitValues.Mm, LengthUnitValues.M, LengthUnitValues.Ft, LengthUnitValues.In };
         private static readonly string[] Datums = { SetLevelElevationRelativeToValues.ProjectOrigin, SetLevelElevationRelativeToValues.ElevationBase };
+        private static readonly string[] Systems = { CoordinatesValues.Shared, CoordinatesValues.Internal };
+        private static readonly string[] Joins = { WallJoinsValues.Join, WallJoinsValues.DoNotJoin };
 
         public static string Sha256Hex(byte[] bytes)
         {
@@ -115,6 +123,9 @@ namespace Flo2Rvt.Addin.Edit.Logic
             private int references;
             /// <summary>The list's version, once read; what version 1 added is refused under an earlier one.</summary>
             private double version = ChangeList.VersionValues.Max();
+            /// <summary>Every change's id, with each change that carries it (its index and kind), read before any change is walked: a door's wall_change is checked against them.</summary>
+            private readonly Dictionary<string, List<KeyValuePair<int, string>>> ids = new Dictionary<string, List<KeyValuePair<int, string>>>(StringComparer.Ordinal);
+            private int current;
 
             public Walk(List<string> errors)
             {
@@ -242,7 +253,20 @@ namespace Flo2Rvt.Addin.Edit.Logic
                 {
                     List<XElement> changes = ArrayOf(e, "changes", 1, 1000);
                     if (changes == null) return;
-                    for (int i = 0; i < changes.Count; i++) Change(changes[i], "changes[" + i + "]");
+                    for (int i = 0; i < changes.Count; i++)
+                    {
+                        XElement idElement = changes[i].Elements().FirstOrDefault(k => Key(k) == "id");
+                        XElement kindElement = changes[i].Elements().FirstOrDefault(k => Key(k) == "kind");
+                        if (idElement == null || TypeOf(idElement) != "string") continue;
+                        List<KeyValuePair<int, string>> carriers;
+                        if (!ids.TryGetValue(idElement.Value, out carriers)) ids[idElement.Value] = carriers = new List<KeyValuePair<int, string>>();
+                        carriers.Add(new KeyValuePair<int, string>(i, kindElement != null ? kindElement.Value : null));
+                    }
+                    for (int i = 0; i < changes.Count; i++)
+                    {
+                        current = i;
+                        Change(changes[i], "changes[" + i + "]");
+                    }
                 }
                 if (references > MaxReferences) Fail("changes", "name " + references + " elements in all; the most one list may name is " + MaxReferences);
             }
@@ -301,11 +325,175 @@ namespace Flo2Rvt.Addin.Edit.Logic
                         if (m.TryGetValue("groups_in_the_way", out x)) GroupsInTheWay(x, at + ".groups_in_the_way");
                         if (m.TryGetValue("constraints_in_the_way", out x)) ConstraintsInTheWay(x, at + ".constraints_in_the_way");
                         break;
+                    case ChangeKinds.AddWall:
+                        m = Object(e, at, new[] { "kind", "id", "level", "start", "end", "coordinates", "wall_type", "top", "joins" }, new[] { "kind", "level", "start", "end", "coordinates", "wall_type", "top" });
+                        if (m == null) return;
+                        NeedsAdding(kind, at);
+                        if (m.TryGetValue("level", out x)) Level(x, at + ".level");
+                        PlanXY? start = m.TryGetValue("start", out x) ? Point(x, at + ".start") : null;
+                        PlanXY? end = m.TryGetValue("end", out x) ? Point(x, at + ".end") : null;
+                        if (start.HasValue && end.HasValue)
+                        {
+                            string why = Placement.WallProblem(start.Value, end.Value);
+                            if (why != null) Fail(at + ".end", why);
+                        }
+                        if (m.TryGetValue("coordinates", out x)) OneOf(x, at + ".coordinates", Systems);
+                        if (m.TryGetValue("wall_type", out x)) TypeNamed(x, at + ".wall_type");
+                        if (m.TryGetValue("top", out x)) WallTop(x, at + ".top", m.ContainsKey("level") ? m["level"] : null);
+                        if (m.TryGetValue("joins", out x)) OneOf(x, at + ".joins", Joins);
+                        break;
+                    case ChangeKinds.AddFloor:
+                        m = Object(e, at, new[] { "kind", "id", "level", "outline", "coordinates", "floor_type" }, new[] { "kind", "level", "outline", "coordinates", "floor_type" });
+                        if (m == null) return;
+                        NeedsAdding(kind, at);
+                        if (m.TryGetValue("level", out x)) Level(x, at + ".level");
+                        if (m.TryGetValue("outline", out x)) Outline(x, at + ".outline");
+                        if (m.TryGetValue("coordinates", out x)) OneOf(x, at + ".coordinates", Systems);
+                        if (m.TryGetValue("floor_type", out x)) TypeNamed(x, at + ".floor_type");
+                        break;
+                    case ChangeKinds.AddRoom:
+                        m = Object(e, at, new[] { "kind", "id", "level", "point", "coordinates", "name", "number" }, new[] { "kind", "level", "point", "coordinates", "name", "number" });
+                        if (m == null) return;
+                        NeedsAdding(kind, at);
+                        if (m.TryGetValue("level", out x)) Level(x, at + ".level");
+                        if (m.TryGetValue("point", out x)) Point(x, at + ".point");
+                        if (m.TryGetValue("coordinates", out x)) OneOf(x, at + ".coordinates", Systems);
+                        if (m.TryGetValue("name", out x)) Text(x, at + ".name", 1, 256, null);
+                        if (m.TryGetValue("number", out x)) Text(x, at + ".number", 1, 64, null);
+                        break;
+                    case ChangeKinds.AddDoor:
+                        m = Object(e, at, new[] { "kind", "id", "host", "point", "coordinates", "door_type" }, new[] { "kind", "host", "point", "coordinates", "door_type" });
+                        if (m == null) return;
+                        NeedsAdding(kind, at);
+                        if (m.TryGetValue("host", out x)) DoorHost(x, at + ".host");
+                        if (m.TryGetValue("point", out x)) Point(x, at + ".point");
+                        if (m.TryGetValue("coordinates", out x)) OneOf(x, at + ".coordinates", Systems);
+                        if (m.TryGetValue("door_type", out x)) TypeNamed(x, at + ".door_type");
+                        break;
                     default:
                         Fail(at, "kind " + Quote(kind) + " is not in the vocabulary (" + string.Join(", ", ChangeKinds.All) + ")");
                         return;
                 }
                 if (m.TryGetValue("id", out x)) Text(x, at + ".id", 1, 64, IdPattern);
+            }
+
+            private void NeedsAdding(string kind, string at)
+            {
+                if (version < AddElementsVersion) Fail(at + ".kind", kind + " needs version " + AddElementsVersion + "; say \"version\": " + AddElementsVersion);
+            }
+
+            private void OneOf(XElement e, string at, string[] values)
+            {
+                string v = Text(e, at, 1, 64, null);
+                if (v != null && Array.IndexOf(values, v) < 0) Fail(at, "must be one of " + string.Join(", ", values));
+            }
+
+            /// <summary>A plan point in feet, when it is one; null (and a failure) otherwise.</summary>
+            private PlanXY? Point(XElement e, string at)
+            {
+                var m = Object(e, at, new[] { "x", "y", "unit" }, new[] { "x", "y", "unit" });
+                if (m == null) return null;
+                XElement v;
+                double? px = m.TryGetValue("x", out v) ? Number(v, at + ".x") : null;
+                double? py = m.TryGetValue("y", out v) ? Number(v, at + ".y") : null;
+                string unit = null;
+                if (m.TryGetValue("unit", out v))
+                {
+                    unit = Text(v, at + ".unit", 1, 8, null);
+                    if (unit != null && Array.IndexOf(UnitNames, unit) < 0)
+                    {
+                        Fail(at + ".unit", "must be one of " + string.Join(", ", UnitNames));
+                        unit = null;
+                    }
+                }
+                if (!px.HasValue || !py.HasValue || unit == null) return null;
+                PlanXY feet;
+                string why;
+                if (!Placement.TryFeet(new PlanPoint { X = px.Value, Y = py.Value, Unit = unit }, out feet, out why))
+                {
+                    Fail(at, why);
+                    return null;
+                }
+                return feet;
+            }
+
+            private void TypeNamed(XElement e, string at)
+            {
+                var m = Object(e, at, new[] { "type", "family" }, new[] { "type" });
+                if (m == null) return;
+                XElement x;
+                if (m.TryGetValue("type", out x)) Text(x, at + ".type", 1, 256, null);
+                if (m.TryGetValue("family", out x)) Text(x, at + ".family", 1, 256, null);
+            }
+
+            private void WallTop(XElement e, string at, XElement baseLevel)
+            {
+                var m = Object(e, at, new[] { "height", "top_level" }, new string[0]);
+                if (m == null) return;
+                if (m.Count != 1)
+                {
+                    Fail(at, "say how high the wall rises once: by height or by top_level");
+                    return;
+                }
+                XElement x;
+                if (m.TryGetValue("height", out x))
+                {
+                    double? h = Length(x, at + ".height");
+                    if (h.HasValue && !(h.Value > 0)) Fail(at + ".height", "a wall rises by more than nothing");
+                }
+                if (m.TryGetValue("top_level", out x))
+                {
+                    Level(x, at + ".top_level");
+                    XElement mine = x.Elements().Count() == 1 ? x.Elements().First() : null;
+                    XElement theirs = baseLevel != null && baseLevel.Elements().Count() == 1 ? baseLevel.Elements().First() : null;
+                    if (mine != null && theirs != null && Key(mine) == Key(theirs) && mine.Value == theirs.Value) Fail(at + ".top_level", "names the wall's own level; a wall rises to a level above its own");
+                }
+            }
+
+            private void Outline(XElement e, string at)
+            {
+                List<XElement> items = ArrayOf(e, at, 3, 500);
+                if (items == null) return;
+                var corners = new List<PlanXY>();
+                for (int i = 0; i < items.Count; i++)
+                {
+                    PlanXY? p = Point(items[i], at + "[" + i + "]");
+                    if (p.HasValue) corners.Add(p.Value);
+                }
+                if (corners.Count != items.Count || items.Count < 3) return;
+                string why = Placement.OutlineProblem(corners);
+                if (why != null) Fail(at, why);
+            }
+
+            private void DoorHost(XElement e, string at)
+            {
+                var m = Object(e, at, new[] { "global_id", "wall_change" }, new string[0]);
+                if (m == null) return;
+                if (m.Count != 1)
+                {
+                    Fail(at, "name the wall once: by global_id or by wall_change");
+                    return;
+                }
+                XElement x;
+                if (m.TryGetValue("global_id", out x))
+                {
+                    references++;
+                    Text(x, at + ".global_id", 22, 22, GlobalIdPattern);
+                }
+                if (m.TryGetValue("wall_change", out x))
+                {
+                    string id = Text(x, at + ".wall_change", 1, 64, IdPattern);
+                    if (id == null) return;
+                    List<KeyValuePair<int, string>> carriers;
+                    if (!ids.TryGetValue(id, out carriers) || !carriers.Any(c => c.Key < current && c.Value == ChangeKinds.AddWall))
+                    {
+                        Fail(at + ".wall_change", "names no add_wall change before it with the id " + Quote(id) + (carriers != null ? " (change " + string.Join(", ", carriers.Select(c => (c.Key + 1) + ", " + (c.Value ?? "with no kind"))) + ", carries it)" : ""));
+                    }
+                    else if (carriers.Count > 1)
+                    {
+                        Fail(at + ".wall_change", carriers.Count + " changes carry the id " + Quote(id) + "; give each wall its own id");
+                    }
+                }
             }
 
             private void GroupsInTheWay(XElement e, string at)
