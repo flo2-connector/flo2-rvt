@@ -15,7 +15,10 @@
 //   · (since 0.5.0) a kept level move reads applied only when every level is where it was asked
 //     to be, and a change not kept moved no level; a group is never both moved with its levels
 //     and ungrouped, is ungrouped only by a kept change that said groups_in_the_way "ungroup",
-//     reads no longer linked once ungrouped, and is in the way only of a change not kept.
+//     reads no longer linked once ungrouped, and is in the way only of a change not kept;
+//   · (since 0.10.0) an element is listed as added only by a kept change, an applied change that
+//     adds names what it added, nothing is both added and deleted, a new wall's length is the
+//     distance between its ends, and an applied room has an area (it is enclosed).
 //
 // The lists are read as the report lists them: past ElementTally.Cap a set is truncated, and
 // only its listed elements are checked.
@@ -113,6 +116,7 @@ namespace Flo2Rvt.Addin.Edit.Logic
             Adds(r.ModifiedByRevit, "modified_by_revit", at, found);
             LevelMoves(r, at, found);
             Reshaped(r, deleted, at, found);
+            Added(r, deleted, at, found);
             bool delete = r.Kind == ChangeKinds.DeleteElementsOnLevel || r.Kind == ChangeKinds.DeleteElementsByGlobalId;
             if (delete && ChangeStatus.Kept(r.Status))
             {
@@ -142,6 +146,33 @@ namespace Flo2Rvt.Addin.Edit.Logic
                 if (deleted.Contains(e.ElementId)) found.Add(at + "element " + e.ElementId + " is both reshaped and deleted");
                 if (e.Expected && (string.IsNullOrEmpty(e.ExpectedAs) || string.IsNullOrEmpty(e.WhyExpected))) found.Add(at + "element " + e.ElementId + " is expected but says not why");
                 if (!e.Expected && (e.ExpectedAs != null || e.WhyExpected != null || e.BecauseOfElementId != 0)) found.Add(at + "element " + e.ElementId + " is unexpected but says why it was expected");
+            }
+        }
+
+        /// <summary>The kinds of change that add an element (change-list version 3).</summary>
+        public static bool Adds(string kind)
+        {
+            return kind == ChangeKinds.AddWall || kind == ChangeKinds.AddFloor || kind == ChangeKinds.AddRoom || kind == ChangeKinds.AddDoor;
+        }
+
+        /// <summary>Since add-in 0.10.0: what a change added.</summary>
+        private static void Added(ChangeReport r, HashSet<long> deleted, string at, List<string> found)
+        {
+            bool kept = ChangeStatus.Kept(r.Status);
+            if (r.Added != null && r.Added.Count > 0 && !kept) found.Add(at + "lists an element it added, though the change was not kept");
+            if (Adds(r.Kind) && r.Status == ChangeStatus.Applied && (r.Added == null || r.Added.Count == 0)) found.Add(at + "reads applied but names no element it added");
+            if (r.Added == null) return;
+            foreach (AddedElement e in r.Added)
+            {
+                if (deleted.Contains(e.ElementId)) found.Add(at + "element " + e.ElementId + " is both added and deleted");
+                AddedWall w = e.Wall;
+                if (w != null && w.Start != null && w.End != null && w.Start.InternalFt != null && w.End.InternalFt != null && w.Start.InternalFt.Count == 2 && w.End.InternalFt.Count == 2)
+                {
+                    double apart = Placement.Distance(new PlanXY(w.Start.InternalFt[0], w.Start.InternalFt[1]), new PlanXY(w.End.InternalFt[0], w.End.InternalFt[1]));
+                    // Each end is rounded to a millionth of a foot in the report, so its distance may be off by up to about that.
+                    if (System.Math.Abs(apart - w.LengthFt) > Placement.ToleranceFt) found.Add(at + "reads a wall length of " + Ft(w.LengthFt) + " ft though its ends are " + Ft(apart) + " ft apart");
+                }
+                if (e.Room != null && r.Status == ChangeStatus.Applied && !(e.Room.AreaFt2 > 0)) found.Add(at + "reads applied though room " + (e.Room.Number ?? e.ElementId.ToString(CultureInfo.InvariantCulture)) + " has no area: it is not enclosed");
             }
         }
 

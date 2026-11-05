@@ -2,6 +2,10 @@
 // the working folder: report.json (always), sheets.pdf and model.ifc (when
 // Revit can make them). It changes nothing: it commits no transaction, and the
 // job box closes the model without saving.
+//
+// Since add-in 0.10.0 it also lists what an edit places new content from and against
+// (Edit/ModelTypes.cs, reads only): the wall, floor and door types the model holds, its placed
+// rooms with their boundaries, and how shared coordinates (the IFC's) sit on internal ones.
 
 using System;
 using System.Collections.Generic;
@@ -10,6 +14,7 @@ using System.IO;
 using System.Linq;
 using Autodesk.Revit.ApplicationServices;
 using Autodesk.Revit.DB;
+using Flo2Rvt.Addin.Edit;
 using Flo2Rvt.Addin.Edit.Logic;
 using Flo2Rvt.Addin.Probe;
 
@@ -19,7 +24,7 @@ namespace Flo2Rvt.Addin.Jobs
     public sealed class ProbeJob : IFlo2RvtJob
     {
         public const string Name = "probe";
-        public const string AddinVersion = "0.9.0";
+        public const string AddinVersion = "0.10.0";
         public const string ReportName = "report.json";
         /// <summary>1 ft = 304.8 mm exactly; Revit's internal length unit is the foot.</summary>
         private const double MmPerFoot = 304.8;
@@ -51,6 +56,8 @@ namespace Flo2Rvt.Addin.Jobs
             report.ElementCounts = Counts(doc, out total);
             report.ElementCountTotal = total;
 
+            ReadPlacing(doc, report, probeWarnings);
+
             context.Heartbeat.Step("printing sheets to sheets.pdf");
             report.Exports.SheetsPdf = Guard("sheets.pdf", () => Exports.Pdf(doc, context.WorkingFolder, printable, Name), probeWarnings);
 
@@ -68,6 +75,39 @@ namespace Flo2Rvt.Addin.Jobs
             report.WriteTo(Path.Combine(context.WorkingFolder, ReportName));
             Console.WriteLine("[flo2-rvt] wrote report.json: " + report.Levels.Count + " levels, " + report.Sheets.Count + " sheets, " + report.Links.Count + " links");
             return true;
+        }
+
+        /// <summary>The types, rooms and coordinates an edit's new content is placed by; each read alone, a failure named as a probe warning.</summary>
+        private static void ReadPlacing(Document doc, ProbeReport report, List<string> probeWarnings)
+        {
+            SiteFrame frame = null;
+            try
+            {
+                frame = ModelTypes.Frame(doc);
+                report.Coordinates = ModelTypes.Info(frame);
+            }
+            catch (Exception ex)
+            {
+                probeWarnings.Add("the shared coordinates could not be read: " + ex.GetType().Name + ": " + ex.Message);
+            }
+            try
+            {
+                report.Types = ModelTypes.Report(doc);
+            }
+            catch (Exception ex)
+            {
+                probeWarnings.Add("the model's types could not be read: " + ex.GetType().Name + ": " + ex.Message);
+            }
+            try
+            {
+                int total;
+                report.Rooms = ModelTypes.Rooms(doc, frame ?? SiteFrame.Identity, out total);
+                report.RoomsTotal = total;
+            }
+            catch (Exception ex)
+            {
+                probeWarnings.Add("the model's rooms could not be read: " + ex.GetType().Name + ": " + ex.Message);
+            }
         }
 
         private static string Now()

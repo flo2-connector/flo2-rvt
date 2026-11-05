@@ -24,7 +24,12 @@
 // level's elevation before and after, for move_levels_together), its `attempts` (every try, and
 // every message Revit raised in each), its `groups` (the model groups tied to a moved level:
 // moved whole with their levels, ungrouped on the list's word, or in the way), a Revit
-// message's `kind`, and `totals.groups_ungrouped`.
+// message's `kind`, and `totals.groups_ungrouped`. Add-in 0.10.0 writes version 2 still, with
+// fields added and none changed: a change that adds new content (change-list version 3) lists each
+// element it made under `added` (its element id, GlobalId, category, family, type and level, and
+// what a person checks of it: a wall's ends, length and height, a floor's area beside its
+// outline's, a room's number, name and area, a door's host wall and where it stands), the report's
+// `coordinates` say how shared coordinates sit on internal ones, and `totals.elements_added`.
 
 using System.Collections.Generic;
 using System.Linq;
@@ -51,6 +56,8 @@ namespace Flo2Rvt.Addin.Edit
         [DataMember(Name = "refused", Order = 7, EmitDefaultValue = false)] public List<string> Refused;
         [DataMember(Name = "totals", Order = 8)] public Totals Totals = new Totals();
         [DataMember(Name = "changes", Order = 9)] public List<ChangeReport> Changes = new List<ChangeReport>();
+        /// <summary>Since add-in 0.10.0, when a change named points: how shared coordinates sit on internal ones (Logic/Placement.cs SiteFrame).</summary>
+        [DataMember(Name = "coordinates", Order = 10, EmitDefaultValue = false)] public CoordinatesInfo Coordinates;
         /// <summary>The levels once every change has run, as the probe reports them.</summary>
         [DataMember(Name = "levels_after", Order = 10)] public List<LevelInfo> LevelsAfter = new List<LevelInfo>();
         [DataMember(Name = "element_count_total_before", Order = 11)] public int ElementCountTotalBefore;
@@ -155,6 +162,8 @@ namespace Flo2Rvt.Addin.Edit
         [DataMember(Name = "groups_ungrouped", Order = 15)] public int GroupsUngrouped;
         /// <summary>Since add-in 0.7.0: elements the kept level moves reshaped that nothing in the list asked for (reshaped_by_revit.unexpected).</summary>
         [DataMember(Name = "elements_reshaped_unexpected", Order = 16)] public int ElementsReshapedUnexpected;
+        /// <summary>Since add-in 0.10.0: the elements the kept changes added (each change's `added`).</summary>
+        [DataMember(Name = "elements_added", Order = 17)] public int ElementsAdded;
 
         public void Count(ChangeReport c)
         {
@@ -191,6 +200,7 @@ namespace Flo2Rvt.Addin.Edit
             }
             if (c.Groups != null && c.Groups.Ungrouped != null) GroupsUngrouped += c.Groups.Ungrouped.Count;
             if (c.ReshapedByRevit != null) ElementsReshapedUnexpected += c.ReshapedByRevit.Unexpected;
+            if (c.Added != null) ElementsAdded += c.Added.Count;
         }
     }
 
@@ -225,6 +235,9 @@ namespace Flo2Rvt.Addin.Edit
         [DataMember(Name = "deleted_by_revit", Order = 13, EmitDefaultValue = false)] public ReportedElements DeletedByRevit;
         /// <summary>Elements Revit changed while regenerating after the change (walls whose joins or attachments moved, elements on a moved level).</summary>
         [DataMember(Name = "modified_by_revit", Order = 14, EmitDefaultValue = false)] public ReportedElements ModifiedByRevit;
+        /// <summary>Since add-in 0.10.0, a change that adds (add_wall, add_floor, add_room, add_door): the element it made, as the model holds it after the change.</summary>
+        [DataMember(Name = "added", Order = 15, EmitDefaultValue = false)] public List<AddedElement> Added;
+        /// <summary>What Revit added on its own besides what the change made.</summary>
         [DataMember(Name = "added_by_revit", Order = 15, EmitDefaultValue = false)] public ReportedElements AddedByRevit;
         [DataMember(Name = "elevation", Order = 16, EmitDefaultValue = false)] public ElevationChange Elevation;
         /// <summary>move_levels_together: the offset, and each level's elevation before and after.</summary>
@@ -254,6 +267,120 @@ namespace Flo2Rvt.Addin.Edit
 
         /// <summary>Not written: whether a transaction was committed for it (EditRun counts them).</summary>
         public bool Committed;
+    }
+
+    /// <summary>
+    /// Since add-in 0.10.0: one element a change added, read from the model after its transaction.
+    /// Exactly one of wall, floor, room and door is given, for its kind.
+    /// </summary>
+    [DataContract]
+    public sealed class AddedElement
+    {
+        [DataMember(Name = "element_id", Order = 0)] public long ElementId;
+        /// <summary>Its IFC GlobalId, as Revit's IFC export of the new model writes it (its export id, compressed).</summary>
+        [DataMember(Name = "global_id", Order = 1, EmitDefaultValue = false)] public string GlobalId;
+        [DataMember(Name = "category", Order = 2, EmitDefaultValue = false)] public string Category;
+        [DataMember(Name = "revit_class", Order = 3, EmitDefaultValue = false)] public string RevitClass;
+        [DataMember(Name = "model_element", Order = 4)] public bool ModelElement;
+        /// <summary>Its type's family and own name, as the change named them; and the type's element id.</summary>
+        [DataMember(Name = "family", Order = 5, EmitDefaultValue = false)] public string Family;
+        [DataMember(Name = "type", Order = 6, EmitDefaultValue = false)] public string Type;
+        [DataMember(Name = "type_id", Order = 7, EmitDefaultValue = false)] public long TypeId;
+        /// <summary>The level it stands on, by name.</summary>
+        [DataMember(Name = "level", Order = 8, EmitDefaultValue = false)] public string Level;
+        /// <summary>The coordinates the change named its points in (shared or internal); every point below is given in both.</summary>
+        [DataMember(Name = "coordinates", Order = 9, EmitDefaultValue = false)] public string Coordinates;
+        [DataMember(Name = "wall", Order = 10, EmitDefaultValue = false)] public AddedWall Wall;
+        [DataMember(Name = "floor", Order = 11, EmitDefaultValue = false)] public AddedFloor Floor;
+        [DataMember(Name = "room", Order = 12, EmitDefaultValue = false)] public AddedRoom Room;
+        [DataMember(Name = "door", Order = 13, EmitDefaultValue = false)] public AddedDoor Door;
+    }
+
+    /// <summary>A plan point in feet, in shared and in internal coordinates, each [x, y].</summary>
+    [DataContract]
+    public sealed class PlanAt
+    {
+        [DataMember(Name = "shared_ft", Order = 0, EmitDefaultValue = false)] public List<double> SharedFt;
+        [DataMember(Name = "internal_ft", Order = 1)] public List<double> InternalFt;
+
+        /// <summary>The point both ways; with no frame (the model's shared coordinates unread), internal alone.</summary>
+        public static PlanAt Of(SiteFrame frame, PlanXY internalAt)
+        {
+            var at = new PlanAt { InternalFt = new List<double> { Lengths.Round(internalAt.X), Lengths.Round(internalAt.Y) } };
+            if (frame != null)
+            {
+                PlanXY shared = frame.ToShared(internalAt);
+                at.SharedFt = new List<double> { Lengths.Round(shared.X), Lengths.Round(shared.Y) };
+            }
+            return at;
+        }
+    }
+
+    /// <summary>A new wall as Revit holds it: its location line's ends, length and height.</summary>
+    [DataContract]
+    public sealed class AddedWall
+    {
+        [DataMember(Name = "start", Order = 0)] public PlanAt Start;
+        [DataMember(Name = "end", Order = 1)] public PlanAt End;
+        /// <summary>Its location line's length.</summary>
+        [DataMember(Name = "length_ft", Order = 2)] public double LengthFt;
+        [DataMember(Name = "length_mm", Order = 3)] public double LengthMm;
+        /// <summary>From its base to its top (Revit's Unconnected Height, or what a top level makes it).</summary>
+        [DataMember(Name = "height_ft", Order = 4)] public double HeightFt;
+        [DataMember(Name = "height_mm", Order = 5)] public double HeightMm;
+        /// <summary>The level its top is tied to, when it is.</summary>
+        [DataMember(Name = "top_level", Order = 6, EmitDefaultValue = false)] public string TopLevel;
+        /// <summary>Its type's thickness.</summary>
+        [DataMember(Name = "width_mm", Order = 7)] public double WidthMm;
+        /// <summary>Which line of the wall the change's line is (Revit's Location Line): wall_centerline, core_centerline, finish_face_exterior ...</summary>
+        [DataMember(Name = "location_line", Order = 8, EmitDefaultValue = false)] public string LocationLine;
+        /// <summary>join, or do_not_join, as the change said.</summary>
+        [DataMember(Name = "joins", Order = 9, EmitDefaultValue = false)] public string Joins;
+    }
+
+    /// <summary>A new floor: its area as Revit computes it, beside the area of the outline the change gave.</summary>
+    [DataContract]
+    public sealed class AddedFloor
+    {
+        [DataMember(Name = "area_ft2", Order = 0)] public double AreaFt2;
+        [DataMember(Name = "area_m2", Order = 1)] public double AreaM2;
+        [DataMember(Name = "outline_area_ft2", Order = 2)] public double OutlineAreaFt2;
+        [DataMember(Name = "outline_area_m2", Order = 3)] public double OutlineAreaM2;
+        [DataMember(Name = "thickness_mm", Order = 4)] public double ThicknessMm;
+        [DataMember(Name = "corners", Order = 5)] public int Corners;
+    }
+
+    /// <summary>A new room, as a person finds it on a plan.</summary>
+    [DataContract]
+    public sealed class AddedRoom
+    {
+        [DataMember(Name = "number", Order = 0, EmitDefaultValue = false)] public string Number;
+        [DataMember(Name = "name", Order = 1, EmitDefaultValue = false)] public string Name;
+        [DataMember(Name = "area_ft2", Order = 2)] public double AreaFt2;
+        [DataMember(Name = "area_m2", Order = 3)] public double AreaM2;
+        [DataMember(Name = "perimeter_mm", Order = 4)] public double PerimeterMm;
+        /// <summary>The room's own point (Room.Location).</summary>
+        [DataMember(Name = "location", Order = 5, EmitDefaultValue = false)] public PlanAt Location;
+        [DataMember(Name = "phase", Order = 6, EmitDefaultValue = false)] public string Phase;
+    }
+
+    /// <summary>A new door: the wall it is in, and where it stands along it.</summary>
+    [DataContract]
+    public sealed class AddedDoor
+    {
+        [DataMember(Name = "host_element_id", Order = 0)] public long HostElementId;
+        [DataMember(Name = "host_global_id", Order = 1, EmitDefaultValue = false)] public string HostGlobalId;
+        /// <summary>The add_wall change that made its wall, when the list named it so.</summary>
+        [DataMember(Name = "host_change_id", Order = 2, EmitDefaultValue = false)] public string HostChangeId;
+        /// <summary>The door's own point (its LocationPoint), on its wall's line.</summary>
+        [DataMember(Name = "location", Order = 3, EmitDefaultValue = false)] public PlanAt Location;
+        /// <summary>From the wall line's start to the door's point.</summary>
+        [DataMember(Name = "along_ft", Order = 4)] public double AlongFt;
+        [DataMember(Name = "along_mm", Order = 5)] public double AlongMm;
+        /// <summary>How far the point the change named was from the wall's line.</summary>
+        [DataMember(Name = "off_line_mm", Order = 6)] public double OffLineMm;
+        [DataMember(Name = "width_mm", Order = 7, EmitDefaultValue = false)] public double? WidthMm;
+        [DataMember(Name = "height_mm", Order = 8, EmitDefaultValue = false)] public double? HeightMm;
     }
 
     /// <summary>A kept level move's reshaped_by_revit (Logic/Reshapes.cs).</summary>

@@ -17,6 +17,9 @@
 // names, uncapped: a level move whose change says groups_in_the_way "ungroup" is tried again,
 // in a new transaction of its own, with only the groups those elements are in ungrouped first
 // (Logic/GroupsInTheWay.cs). Nothing is resolved here: an error still rolls the change back.
+//
+// Since add-in 0.10.0 a change may refuse itself inside its transaction (ChangeRefused: a room
+// placed where nothing encloses it), which rolls it back like an error, in its own words.
 
 using System;
 using System.Collections.Generic;
@@ -45,6 +48,14 @@ namespace Flo2Rvt.Addin.Edit
         public readonly HashSet<long> GroupInTheWayIds = new HashSet<long>();
         /// <summary>Since add-in 0.6.0: every element a constraint-in-the-way failure named, failing or additional, uncapped (Logic/ConstraintsInTheWay.cs keeps the constraints among them).</summary>
         public readonly HashSet<long> ConstraintInTheWayIds = new HashSet<long>();
+    }
+
+    /// <summary>A change that finds, inside its own transaction, that what it made is not what was asked (a room nothing encloses): it is rolled back, and the report says this, never "the Revit API refused it".</summary>
+    public sealed class ChangeRefused : Exception
+    {
+        public ChangeRefused(string why) : base(why)
+        {
+        }
     }
 
     internal sealed class RecordingPreprocessor : IFailuresPreprocessor
@@ -162,7 +173,7 @@ namespace Flo2Rvt.Addin.Edit
                     catch (Exception ex)
                     {
                         if (tx.HasStarted() && !tx.HasEnded()) tx.RollBack();
-                        result.RolledBackBecause = "the Revit API refused it: " + ex.GetType().Name + ": " + ex.Message;
+                        result.RolledBackBecause = ex is ChangeRefused ? ex.Message : "the Revit API refused it: " + ex.GetType().Name + ": " + ex.Message;
                         return result;
                     }
                     TransactionStatus status = tx.Commit();

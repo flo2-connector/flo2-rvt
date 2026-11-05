@@ -25,6 +25,13 @@ namespace Flo2Rvt.Addin.Probe
         [DataMember(Name = "exports", Order = 10)] public ExportsInfo Exports = new ExportsInfo();
         [DataMember(Name = "warnings", Order = 11)] public List<WarningInfo> Warnings = new List<WarningInfo>();
         [DataMember(Name = "warnings_total", Order = 12)] public int WarningsTotal;
+        /// <summary>Since add-in 0.10.0: every wall, floor and door type the model holds, by family and name, as an edit's add_wall, add_floor and add_door name them.</summary>
+        [DataMember(Name = "types", Order = 13, EmitDefaultValue = false)] public TypesInfo Types;
+        /// <summary>Since add-in 0.10.0: the model's placed rooms, each with its number, name, level, area, point and boundary (Revit's IFC export of the model holds no rooms).</summary>
+        [DataMember(Name = "rooms", Order = 14, EmitDefaultValue = false)] public List<RoomInfo> Rooms;
+        [DataMember(Name = "rooms_total", Order = 15, EmitDefaultValue = false)] public int RoomsTotal;
+        /// <summary>Since add-in 0.10.0: how shared coordinates (the IFC's) sit on internal ones.</summary>
+        [DataMember(Name = "coordinates", Order = 16, EmitDefaultValue = false)] public CoordinatesInfo Coordinates;
 
         public void WriteTo(string path)
         {
@@ -143,6 +150,69 @@ namespace Flo2Rvt.Addin.Probe
         [DataMember(Name = "elements", Order = 3, EmitDefaultValue = false)] public List<WarningElement> Elements;
         /// <summary>How many elements it flags in all, when more than are listed.</summary>
         [DataMember(Name = "elements_total", Order = 4, EmitDefaultValue = false)] public int ElementsTotal;
+    }
+
+    /// <summary>Since add-in 0.10.0: the types the model holds, which an edit may place.</summary>
+    [DataContract]
+    public sealed class TypesInfo
+    {
+        public const int Cap = 1000;
+        [DataMember(Name = "walls", Order = 0)] public List<TypeInfo> Walls = new List<TypeInfo>();
+        [DataMember(Name = "floors", Order = 1)] public List<TypeInfo> Floors = new List<TypeInfo>();
+        [DataMember(Name = "doors", Order = 2)] public List<TypeInfo> Doors = new List<TypeInfo>();
+        /// <summary>True when a list stopped at Cap.</summary>
+        [DataMember(Name = "truncated", Order = 3, EmitDefaultValue = false)] public bool Truncated;
+    }
+
+    [DataContract]
+    public sealed class TypeInfo
+    {
+        [DataMember(Name = "family", Order = 0)] public string Family;
+        [DataMember(Name = "type", Order = 1)] public string Type;
+        [DataMember(Name = "element_id", Order = 2)] public long ElementId;
+        /// <summary>A wall type's kind: Basic, Curtain or Stacked.</summary>
+        [DataMember(Name = "kind", Order = 3, EmitDefaultValue = false)] public string Kind;
+        /// <summary>A wall type's thickness, or a door type's width.</summary>
+        [DataMember(Name = "width_mm", Order = 4, EmitDefaultValue = false)] public double? WidthMm;
+        /// <summary>A floor type's thickness.</summary>
+        [DataMember(Name = "thickness_mm", Order = 5, EmitDefaultValue = false)] public double? ThicknessMm;
+        /// <summary>A door type's height.</summary>
+        [DataMember(Name = "height_mm", Order = 6, EmitDefaultValue = false)] public double? HeightMm;
+    }
+
+    /// <summary>Since add-in 0.10.0: a placed room, as a person and an edit's add_wall or add_room find it.</summary>
+    [DataContract]
+    public sealed class RoomInfo
+    {
+        public const int Cap = 2000;
+        public const int CornersCap = 500;
+        [DataMember(Name = "element_id", Order = 0)] public long ElementId;
+        [DataMember(Name = "number", Order = 1, EmitDefaultValue = false)] public string Number;
+        [DataMember(Name = "name", Order = 2, EmitDefaultValue = false)] public string Name;
+        [DataMember(Name = "level", Order = 3, EmitDefaultValue = false)] public string Level;
+        [DataMember(Name = "area_m2", Order = 4)] public double AreaM2;
+        /// <summary>The room's own point (Room.Location), [x, y] in feet.</summary>
+        [DataMember(Name = "location_shared_ft", Order = 5, EmitDefaultValue = false)] public List<double> LocationSharedFt;
+        [DataMember(Name = "location_internal_ft", Order = 6, EmitDefaultValue = false)] public List<double> LocationInternalFt;
+        /// <summary>Its boundary as Revit computes it (Room.GetBoundarySegments, the default boundary location: wall finish), each loop its corners [x, y] in shared feet, in order; the first loop is the outer one.</summary>
+        [DataMember(Name = "boundary_shared_ft", Order = 7, EmitDefaultValue = false)] public List<List<List<double>>> BoundarySharedFt;
+        /// <summary>True when a boundary segment is not straight: the corners then stand for its ends alone.</summary>
+        [DataMember(Name = "boundary_has_arcs", Order = 8, EmitDefaultValue = false)] public bool BoundaryHasArcs;
+    }
+
+    /// <summary>
+    /// Since add-in 0.10.0: how Revit's shared coordinates sit on its internal ones, shared =
+    /// R(angle)·internal + offset, in plan, as Revit's IFC exporter places its site for its default
+    /// coordinate base (addin/src/Edit/Logic/Placement.cs SiteFrame).
+    /// </summary>
+    [DataContract]
+    public sealed class CoordinatesInfo
+    {
+        /// <summary>The rotation from internal to shared, counterclockwise, in degrees: the project base point's angle to true north.</summary>
+        [DataMember(Name = "angle_deg", Order = 0)] public double AngleDeg;
+        [DataMember(Name = "offset_x_ft", Order = 1)] public double OffsetXFt;
+        [DataMember(Name = "offset_y_ft", Order = 2)] public double OffsetYFt;
+        [DataMember(Name = "how", Order = 3, EmitDefaultValue = false)] public string How;
     }
 
     /// <summary>An element a stored warning flags (FailureMessage.GetFailingElements, GetAdditionalElements). Since add-in 0.7.0.</summary>

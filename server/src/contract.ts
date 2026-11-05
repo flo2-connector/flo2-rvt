@@ -159,6 +159,8 @@ export const EditSummary = z.object({
   left_on_level: z.number().int().optional(),
   /** Since add-in 0.7.0: elements a kept level move reshaped that nothing in the list asked for, each listed in report.json's reshaped_by_revit; absent from an older report, which never measured it. */
   reshaped_unexpected: z.number().int().optional(),
+  /** Since add-in 0.10.0: the elements the kept changes added (add_wall, add_floor, add_room, add_door), each named in report.json's `added`; absent from an older report. */
+  elements_added: z.number().int().optional(),
   model_saved: z.boolean(),
 });
 export type EditSummary = z.infer<typeof EditSummary>;

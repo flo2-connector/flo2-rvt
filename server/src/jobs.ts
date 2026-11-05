@@ -131,6 +131,8 @@ export function editSummary(report: Record<string, unknown>): EditSummary {
     // Since add-in 0.7.0: what a kept level move reshaped that nothing in the list asked for. Left out
     // for an older report, which never measured it, rather than read as 0.
     ...(typeof totals.elements_reshaped_unexpected === 'number' ? { reshaped_unexpected: n('elements_reshaped_unexpected') } : {}),
+    // Since add-in 0.10.0: the elements the kept changes added (change-list version 3). Left out for an older report.
+    ...(typeof totals.elements_added === 'number' ? { elements_added: n('elements_added') } : {}),
     model_saved: rvt.written === true,
   };
 }
