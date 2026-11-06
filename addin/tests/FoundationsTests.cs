@@ -166,12 +166,12 @@ namespace Flo2Rvt.Addin.Tests
             });
 
             // ─── the IFC entity
-            Test("Revit's IFC export writes a foundation by its own Export to IFC As, then its type's, and a footing otherwise", () =>
+            Test("Revit's IFC export writes a foundation by its own Export to IFC As, then its type's, and with neither the add-in predicts nothing", () =>
             {
                 Eq("IfcPile", FoundationIfc.Written("IfcPile", null), "the pile's own");
                 Eq("IfcPile", FoundationIfc.Written(null, "IfcPileType.DRIVEN"), "its type's, with a predefined type");
                 Eq("IfcFooting", FoundationIfc.Written("IfcFooting", "IfcPileType"), "its own over its type's");
-                Eq("IfcFooting", FoundationIfc.Written(null, " "), "neither: a Structural Foundations instance placed as a footing");
+                Is(FoundationIfc.Written(null, " ") == null, "neither: Revit's export table decides, which revit-ifc's source does not hold, so nothing is said");
                 Eq("IfcPile", FoundationIfc.Expected(ChangeKinds.AddPile), "a pile");
                 Eq("IfcFooting", FoundationIfc.Expected(ChangeKinds.AddFooting), "a footing");
                 Is(FoundationIfc.Same("IFCPILE", "IfcPile"), "the exporter reads the class name whatever its case");
@@ -207,15 +207,29 @@ namespace Flo2Rvt.Addin.Tests
                 Eq("w1", wf.HostChangeId, "by its change");
                 Eq(600.0, wf.WidthMm.Value, "its width");
                 Eq("copied", wf.NewTypeWas, "on a copy of its type");
+                Eq("IfcFooting", wf.IfcEntity, "a wall footing is written an IfcFooting");
+                Eq(FoundationIfc.Predicted, wf.IfcEntityBasis, "which the add-in predicts and does not set");
                 AddedFoundation f1 = read.Changes[2].Added[0].Footing;
                 Eq(30.0, f1.RotationDeg, "turned as asked");
                 Eq("IfcFooting", f1.IfcEntity, "a footing is an IfcFooting");
+                Eq("IfcFooting", f1.IfcExportAs, "because the add-in set its own Export to IFC As");
+                Eq(FoundationIfc.SetByAddin, f1.IfcEntityBasis, "and says it set it");
+                Eq(FoundationTop.ByTop, f1.PlacedBy, "placed by its top as Revit holds it");
+                Eq(0.0, f1.TopCorrectionFt.Value, "Footing-Rectangular's insertion point is its top: no correction");
+                Is(f1.TopCorrectedBy == null && f1.OffsetFromLevelParameter == null, "so nothing was set or moved for it");
+                Eq(f1.TopElevationFt.Value, f1.ElevationAtTopFt.Value + f1.ProjectBasePointZFt.Value, "its top is Revit's Elevation at Top, from the project base point");
                 Eq("loaded", f1.FamilyWas, "from its family file");
                 Eq(-600.0, f1.TopAboveLevelMm.Value, "its top 600 mm below its level");
                 Is(f1.Sizes.Count(s => s.AskedFt.HasValue) == 3, "three sizes asked");
                 AddedFoundation p1 = read.Changes[4].Added[0].Pile;
                 Eq("IfcPile", p1.IfcExportAs, "the pile's own Export to IFC As");
                 Eq("IfcPile", p1.IfcEntity, "so its IFC is an IfcPile");
+                Eq(FoundationIfc.SetByAddin, p1.IfcEntityBasis, "set by the add-in");
+                Eq(FoundationTop.ByTop, p1.PlacedBy, "placed by its top");
+                Eq(-0.5, p1.TopCorrectionFt.Value, "its family's insertion point is its Minimum Embedment below its top, so it went 0.5 ft down");
+                Eq(FoundationTop.ByOffsetFromLevel, p1.TopCorrectedBy, "by its offset from its level");
+                Eq("FLOOR_HEIGHTABOVELEVEL_PARAM", p1.OffsetFromLevelParameter, "Height Offset From Level");
+                Is(Near(p1.InsertionElevationFt, -3.944882, 1e-9) && Near(p1.TopElevationFt.Value, -3.444882, 1e-9), "its insertion point 0.5 ft below its top, its top 1050 mm below its level");
                 Is(Near(p1.BottomElevationFt.Value, -23.129921, 1e-6), "6 m long from 1050 mm below its level");
                 Eq("not_applied", read.Changes[6].Status, "the footing whose family file holds no foundation family");
                 Eq(3, read.Families.Count, "three family files");
@@ -251,7 +265,15 @@ namespace Flo2Rvt.Addin.Tests
                     {
                         TopOffsetFt = -2,
                         TopAboveLevelFt = -2,
+                        TopElevationFt = -2,
+                        InsertionElevationFt = -2,
+                        PlacedBy = FoundationTop.ByTop,
+                        ElevationAtTopFt = -2,
+                        ProjectBasePointZFt = 0,
+                        TopCorrectionFt = 0,
                         IfcEntity = kind == ChangeKinds.AddPile ? FoundationIfc.Pile : FoundationIfc.Footing,
+                        IfcExportAs = kind == ChangeKinds.AddPile ? FoundationIfc.Pile : FoundationIfc.Footing,
+                        IfcEntityBasis = FoundationIfc.SetByAddin,
                         Sizes = new List<SizeReport> { new SizeReport { Name = "Width", Of = "type", ValueFt = 5, AskedFt = 5 } },
                     };
                     var e = new AddedElement { ElementId = 7 };
@@ -264,16 +286,18 @@ namespace Flo2Rvt.Addin.Tests
                 Is(ReportCheck.Violations(placed(ChangeKinds.AddPile)).Count == 0, string.Join("; ", ReportCheck.Violations(placed(ChangeKinds.AddPile))));
                 ChangeReport high = placed(ChangeKinds.AddFooting);
                 high.Added[0].Footing.TopAboveLevelFt = -0.5;
-                Is(ReportCheck.Violations(high).Any(v => v.Contains("its top stands -0.5 ft from its level, not the -2 ft top_offset asked")), string.Join("; ", ReportCheck.Violations(high)));
+                Is(ReportCheck.Violations(high).Any(v => v.Contains("stands -0.5 ft from its level, not the -2 ft top_offset asked")), string.Join("; ", ReportCheck.Violations(high)));
                 Is(FoundationCheck.Problems(high.Added[0].Footing, high.Kind).Count == 1, "the job reads it applied in part, in the same words");
                 ChangeReport narrow = placed(ChangeKinds.AddFooting);
                 narrow.Added[0].Footing.Sizes[0].ValueFt = 4;
                 Is(ReportCheck.Violations(narrow).Any(v => v.Contains("its \"Width\" is 4 ft, not the 5 ft asked")), string.Join("; ", ReportCheck.Violations(narrow)));
                 ChangeReport footed = placed(ChangeKinds.AddPile);
                 footed.Added[0].Pile.IfcEntity = FoundationIfc.Footing;
-                Is(ReportCheck.Violations(footed).Any(v => v.Contains("writes it as IfcFooting, not an IfcPile")), string.Join("; ", ReportCheck.Violations(footed)));
+                footed.Added[0].Pile.IfcExportAs = FoundationIfc.Footing;
+                Is(ReportCheck.Violations(footed).Any(v => v.Contains("the add-in set its Export to IFC As to IfcFooting, not IfcPile")), string.Join("; ", ReportCheck.Violations(footed)));
                 ChangeReport inPart = placed(ChangeKinds.AddPile);
                 inPart.Added[0].Pile.IfcEntity = FoundationIfc.Footing;
+                inPart.Added[0].Pile.IfcExportAs = FoundationIfc.Footing;
                 inPart.Status = ChangeStatus.AppliedInPart;
                 Is(ReportCheck.Violations(inPart).Count == 0, "one read applied in part may say so: " + string.Join("; ", ReportCheck.Violations(inPart)));
                 ChangeReport swapped = placed(ChangeKinds.AddPile);

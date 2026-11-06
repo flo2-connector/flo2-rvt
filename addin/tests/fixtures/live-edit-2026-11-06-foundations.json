@@ -1,0 +1,240 @@
+{
+ "_note": "Two changes of the first live footings-and-piles edit, flo2-rvt 0.13.0 (add-in 0.12.0), 2026-11-06, on Autodesk's public sample model rac_basic_sample_project.rvt, each as report.json listed it, less its modified_by_revit and added_by_revit: cap1 (add_footing, an M_Pile Cap-600 Pile on level Foundation, top_offset 0) and pile1 (add_pile, an M_Pile-Steel Pipe on the same level, top_offset -300 mm). The add-in of that day placed each by its family's insertion point: the pile's stood where top_offset put it, and its top (Revit's own Elevation at Top) 0.498688 ft higher, its type's Minimum Embedment (152 mm); the cap's top stood at its level. ifc_class_written_by_element_id is what the job's own IFC wrote, read from it by element id: the pile, whose Export to IFC As the add-in set, an IfcPile; the wall footing of the same edit (1098575) an IfcFooting; and the cap, with no Export to IFC As set, an IfcSlab (BASESLAB), though the report said IfcFooting.",
+ "addin_version": "0.12.0",
+ "ifc_class_written_by_element_id": {
+  "1098575": "IfcFooting",
+  "1098576": "IfcSlab",
+  "1098580": "IfcPile"
+ },
+ "changes": [
+  {
+   "index": 1,
+   "id": "cap1",
+   "kind": "add_footing",
+   "status": "applied",
+   "level": {
+    "name": "Foundation",
+    "element_id": 511122,
+    "global_id": "1bOeIks4fCNAuMrZZw4j3i",
+    "matched_by": "level_name"
+   },
+   "added": [
+    {
+     "element_id": 1098576,
+     "global_id": "3zayBjpXH5LejLKaZFHuKq",
+     "category": "Structural Foundations",
+     "revit_class": "FamilyInstance",
+     "model_element": true,
+     "family": "M_Pile Cap-600 Pile",
+     "type": "600 x 600 x 900mm",
+     "type_id": 512173,
+     "level": "Foundation",
+     "coordinates": "shared",
+     "footing": {
+      "location": {
+       "shared_ft": [
+        19.685039,
+        -32.808399
+       ],
+       "internal_ft": [
+        85.054493,
+        -27.908164
+       ]
+      },
+      "level_elevation_ft": -2.624672,
+      "top_offset_ft": 0,
+      "top_offset_mm": 0,
+      "insertion_elevation_ft": -2.624672,
+      "top_elevation_ft": -2.624672,
+      "bottom_elevation_ft": -23.300525,
+      "top_above_level_ft": 0,
+      "top_above_level_mm": 0,
+      "rotation_deg": 0,
+      "rotation_internal_deg": -37,
+      "structural_type": "Footing",
+      "ifc_entity": "IfcFooting",
+      "sizes": [
+       {
+        "name": "Cut-off",
+        "of": "type",
+        "value_ft": 0.492126,
+        "value_mm": 150
+       },
+       {
+        "name": "Length",
+        "of": "type",
+        "value_ft": 1.968504,
+        "value_mm": 600
+       },
+       {
+        "name": "Thickness",
+        "of": "type",
+        "value_ft": 0.984252,
+        "value_mm": 300
+       },
+       {
+        "name": "Width",
+        "of": "type",
+        "value_ft": 1.968504,
+        "value_mm": 600
+       },
+       {
+        "name": "Elevation at Bottom",
+        "of": "instance",
+        "value_ft": -23.300525,
+        "value_mm": -7102,
+        "read_only": true
+       },
+       {
+        "name": "Elevation at Bottom Survey",
+        "of": "instance",
+        "value_ft": -23.300525,
+        "value_mm": -7102,
+        "read_only": true
+       },
+       {
+        "name": "Elevation at Top",
+        "of": "instance",
+        "value_ft": -2.624672,
+        "value_mm": -800,
+        "read_only": true
+       },
+       {
+        "name": "Elevation at Top Survey",
+        "of": "instance",
+        "value_ft": -2.624672,
+        "value_mm": -800,
+        "read_only": true
+       },
+       {
+        "name": "Height Offset From Level",
+        "of": "instance",
+        "value_ft": 0,
+        "value_mm": 0
+       },
+       {
+        "name": "Length",
+        "of": "instance",
+        "value_ft": 1.968504,
+        "value_mm": 600,
+        "read_only": true
+       },
+       {
+        "name": "Width",
+        "of": "instance",
+        "value_ft": 1.968504,
+        "value_mm": 600,
+        "read_only": true
+       }
+      ]
+     }
+    }
+   ],
+   "seconds": 0.1
+  },
+  {
+   "index": 2,
+   "id": "pile1",
+   "kind": "add_pile",
+   "status": "applied_in_part",
+   "why": "the pile was placed, but its top stands -0.485564 ft from its level, not the -0.984252 ft top_offset asked: its family's insertion point is not its top",
+   "level": {
+    "name": "Foundation",
+    "element_id": 511122,
+    "global_id": "1bOeIks4fCNAuMrZZw4j3i",
+    "matched_by": "level_name"
+   },
+   "added": [
+    {
+     "element_id": 1098580,
+     "global_id": "3zayBjpXH5LejLKaZFHuKm",
+     "category": "Structural Foundations",
+     "revit_class": "FamilyInstance",
+     "model_element": true,
+     "family": "M_Pile-Steel Pipe",
+     "type": "600mm Diameter - 4500 deep",
+     "type_id": 1098578,
+     "level": "Foundation",
+     "coordinates": "shared",
+     "pile": {
+      "location": {
+       "shared_ft": [
+        19.685039,
+        -32.808399
+       ],
+       "internal_ft": [
+        85.054493,
+        -27.908164
+       ]
+      },
+      "level_elevation_ft": -2.624672,
+      "top_offset_ft": -0.984252,
+      "top_offset_mm": -300,
+      "insertion_elevation_ft": -3.608924,
+      "top_elevation_ft": -3.110236,
+      "bottom_elevation_ft": -18.372703,
+      "top_above_level_ft": -0.485564,
+      "top_above_level_mm": -148,
+      "rotation_deg": 37,
+      "rotation_internal_deg": 0,
+      "structural_type": "Footing",
+      "ifc_export_as": "IfcPile",
+      "ifc_entity": "IfcPile",
+      "copied_from": "600mm Diameter",
+      "new_type": "600mm Diameter - 4500 deep",
+      "new_type_was": "copied",
+      "sizes": [
+       {
+        "name": "Depth",
+        "of": "type",
+        "value_ft": 14.76378,
+        "value_mm": 4500,
+        "asked_ft": 14.76378,
+        "asked_mm": 4500
+       },
+       {
+        "name": "Diameter",
+        "of": "type",
+        "value_ft": 0.984252,
+        "value_mm": 300
+       },
+       {
+        "name": "Minimum Embedment",
+        "of": "type",
+        "value_ft": 0.498688,
+        "value_mm": 152
+       },
+       {
+        "name": "Radius",
+        "of": "type",
+        "value_ft": 0.492126,
+        "value_mm": 150
+       },
+       {
+        "name": "Elevation at Top",
+        "of": "instance",
+        "value_ft": -3.110236,
+        "value_mm": -948,
+        "read_only": true
+       },
+       {
+        "name": "Elevation at Top Survey",
+        "of": "instance",
+        "value_ft": -3.110236,
+        "value_mm": -948,
+        "read_only": true
+       },
+       {
+        "name": "Height Offset From Level",
+        "of": "instance",
+        "value_ft": -0.984252,
+        "value_mm": -300
+       }
+      ]
+     }
+    }
+   ],
+   "seconds": 3.2
+  }
+ ]
+}

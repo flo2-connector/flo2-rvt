@@ -1,4 +1,4 @@
-// GENERATED from schema/change-list.schema.json (sha256 6735495a23075ab873a4a4acbe4df027f80a9c4cbd8a50fcc69ba3decf9b405f) by scripts/gen-types.ts.
+// GENERATED from schema/change-list.schema.json (sha256 20bcfcc4547cad69aa2e15c8dc4b1791022b49f6e027f931a5b7cd3031ab9474) by scripts/gen-types.ts.
 // Do not edit: change the schema and run `npm run gen`.
 
 /**
@@ -354,7 +354,7 @@ export interface WallChangeReference {
   wall_change: ChangeId;
 }
 /**
- * Add an isolated footing: a Structural Foundations family instance (placed as Revit's StructuralType.Footing) at a point in plan on a level, its insertion point top_offset from the level, turned in plan by rotation_deg, of a type the model holds or one family_file brings, sized by sizes on the element or on a copy of its type (new_type). Revit's IFC export writes it as an IfcFooting. The report names the new footing (element id, GlobalId, family, type, level), its point in both coordinate systems, where its top and bottom stand, its rotation, and every length parameter of it and its type as Revit holds them, beside each size asked. Needs change-list version 4.
+ * Add an isolated footing: a Structural Foundations family instance (placed as Revit's StructuralType.Footing) at a point in plan on a level, its top (as Revit holds it) top_offset from the level, turned in plan by rotation_deg, of a type the model holds or one family_file brings, sized by sizes on the element or on a copy of its type (new_type). Since add-in 0.13.1 the add-in sets the new footing's own Export to IFC As (IFC_EXPORT_ELEMENT_AS) to IfcFooting, which Revit's IFC export takes before anything else, so it writes an IfcFooting (with nothing set, Revit's export table decides, and has written a pile cap as an IfcSlab); its type and every other element are left as they are. The report names the new footing (element id, GlobalId, family, type, level), its point in both coordinate systems, where its insertion point, top and bottom stand and the correction applied for its top, its rotation, the IFC class the add-in set, and every length parameter of it and its type as Revit holds them, beside each size asked. Needs change-list version 4.
  *
  * This interface was referenced by `ChangeList`'s JSON-Schema
  * via the `definition` "AddFooting".
@@ -385,7 +385,7 @@ export interface FoundationSizes {
   [k: string]: Length | undefined;
 }
 /**
- * Where a footing's or pile's insertion point stands above its level, below when negative; 0 when left out. Revit's own foundation families have their insertion point at their top centre, so this is where the footing's or pile's top stands; the report gives where its top and bottom stand as Revit holds them, so a family whose insertion point is elsewhere is seen, not assumed. flo2.io requires it, unless it is 0, to be a result of the calc record the edit names (numbers_from).
+ * Where a footing's or pile's top stands above its level, below when negative; 0 when left out. A family puts its insertion point where its author chose (a pile cap's is its top, a steel pipe pile's its embedment line, below its top), so since add-in 0.13.1 the add-in places the element, reads its top as Revit holds it (its read-only Elevation at Top) and moves it by the difference in the same change, on its offset from its level where Revit holds one, so its top stands here whatever its family's insertion point; one Revit holds no Elevation at Top for stands by its insertion point here, and its change says so. The report gives where its insertion point, top and bottom stand and the correction applied. flo2.io requires it, unless it is 0, to be a result of the calc record the edit names (numbers_from).
  */
 export interface TopOffset {
   value: number;
@@ -406,7 +406,7 @@ export interface AddWallFooting {
   new_type?: NewTypeName;
 }
 /**
- * Add a pile: a Structural Foundations family instance (placed as Revit's StructuralType.Footing, as add_footing places one) at a point in plan on a level, hanging plumb from its insertion point top_offset from the level, of a type the model holds or one family_file brings, sized by sizes on the element or on a copy of its type (new_type). Revit's category does not tell a pile from a footing, so the add-in sets the new pile's own Export to IFC As (IFC_EXPORT_ELEMENT_AS) to IfcPile, and Revit's IFC export writes it as an IfcPile; its type and every other element are left as they are. The report names the new pile as it names a footing. Needs change-list version 4.
+ * Add a pile: a Structural Foundations family instance (placed as Revit's StructuralType.Footing, as add_footing places one) at a point in plan on a level, hanging plumb from its top (as Revit holds it) top_offset from the level, of a type the model holds or one family_file brings, sized by sizes on the element or on a copy of its type (new_type). Revit's category does not tell a pile from a footing, so the add-in sets the new pile's own Export to IFC As (IFC_EXPORT_ELEMENT_AS) to IfcPile, and Revit's IFC export writes it as an IfcPile; its type and every other element are left as they are. The report names the new pile as it names a footing. Needs change-list version 4.
  *
  * This interface was referenced by `ChangeList`'s JSON-Schema
  * via the `definition` "AddPile".

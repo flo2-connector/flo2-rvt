@@ -43,7 +43,15 @@
 // says what the model was made from (`new_model`: no template in which units, or which template, its
 // bytes, sha256 and format; whether Revit made it and why not; the levels it started with) and lists
 // every wall, floor, door and foundation type the new model holds (`types`, the probe's own section),
-// for the next edit's changes to name.
+// for the next edit's changes to name. Add-in 0.13.1 writes version 2 still, with fields added: a
+// footing or pile says what it was placed by (`placed_by`), Revit's own Elevation at Top and the
+// project base point's height it is measured from, its bounding box's top, and the correction the
+// job applied for its top and how (`top_correction_ft`, `top_corrected_by`,
+// `offset_from_level_parameter`); `top_elevation_ft` is its top as Revit holds it where Revit holds
+// an Elevation at Top (its bounding box's top until then; the two agreed on both families the first
+// live edit placed);
+// and a footing, pile or wall footing says whether its IFC class was set by the add-in or predicted
+// (`ifc_entity_basis`; a wall footing names its `ifc_entity` too).
 
 using System.Collections.Generic;
 using System.Linq;
@@ -484,34 +492,53 @@ namespace Flo2Rvt.Addin.Edit
         /// <summary>The change's top_offset, 0 when it said none.</summary>
         [DataMember(Name = "top_offset_ft", Order = 2)] public double TopOffsetFt;
         [DataMember(Name = "top_offset_mm", Order = 3)] public double TopOffsetMm;
-        /// <summary>Where its insertion point stands (its LocationPoint's height).</summary>
+        /// <summary>Where its insertion point stands (its LocationPoint's height), once its top was put where asked.</summary>
         [DataMember(Name = "insertion_elevation_ft", Order = 4)] public double InsertionElevationFt;
-        /// <summary>Where its geometry's top and bottom stand (its bounding box), when Revit gives one.</summary>
+        /// <summary>
+        /// Where its top stands. Since add-in 0.13.1, Revit's own Elevation at Top taken to internal
+        /// feet (elevation_at_top_ft + project_base_point_z_ft) when placed_by is elevation_at_top;
+        /// else, and before 0.13.1 always, its bounding box's top. Its bottom is its bounding box's.
+        /// </summary>
         [DataMember(Name = "top_elevation_ft", Order = 5, EmitDefaultValue = false)] public double? TopElevationFt;
         [DataMember(Name = "bottom_elevation_ft", Order = 6, EmitDefaultValue = false)] public double? BottomElevationFt;
         /// <summary>Its top less its level's elevation: what flo2's check holds to top_offset.</summary>
         [DataMember(Name = "top_above_level_ft", Order = 7, EmitDefaultValue = false)] public double? TopAboveLevelFt;
         [DataMember(Name = "top_above_level_mm", Order = 8, EmitDefaultValue = false)] public double? TopAboveLevelMm;
+        /// <summary>Since add-in 0.13.1: what it was placed by (Logic/Foundations.cs FoundationTop): elevation_at_top (its top, as Revit holds it, at its level plus top_offset) or insertion_point (Revit holds no Elevation at Top for it).</summary>
+        [DataMember(Name = "placed_by", Order = 9, EmitDefaultValue = false)] public string PlacedBy;
+        /// <summary>Since add-in 0.13.1: Revit's own read-only Elevation at Top (STRUCTURAL_ELEVATION_AT_TOP) as Revit holds it, measured from the project base point, and the base point's own height in internal feet (BasePoint.Position.Z).</summary>
+        [DataMember(Name = "elevation_at_top_ft", Order = 10, EmitDefaultValue = false)] public double? ElevationAtTopFt;
+        [DataMember(Name = "project_base_point_z_ft", Order = 11, EmitDefaultValue = false)] public double? ProjectBasePointZFt;
+        /// <summary>Since add-in 0.13.1: its bounding box's top, which top_elevation_ft was until then.</summary>
+        [DataMember(Name = "box_top_elevation_ft", Order = 12, EmitDefaultValue = false)] public double? BoxTopElevationFt;
+        /// <summary>Since add-in 0.13.1: how far the job moved it once it was placed, up positive, so its top stands where top_offset says: 0 when its family's insertion point is its top; absent when placed by its insertion point.</summary>
+        [DataMember(Name = "top_correction_ft", Order = 13, EmitDefaultValue = false)] public double? TopCorrectionFt;
+        [DataMember(Name = "top_correction_mm", Order = 14, EmitDefaultValue = false)] public double? TopCorrectionMm;
+        /// <summary>Since add-in 0.13.1, when it was corrected: offset_from_level (offset_from_level_parameter, the BuiltInParameter set by the correction) or move (ElementTransformUtils.MoveElement).</summary>
+        [DataMember(Name = "top_corrected_by", Order = 15, EmitDefaultValue = false)] public string TopCorrectedBy;
+        [DataMember(Name = "offset_from_level_parameter", Order = 16, EmitDefaultValue = false)] public string OffsetFromLevelParameter;
         /// <summary>Its turn in plan, counterclockwise in degrees, in the change's coordinates (-180 to 180), and in internal ones.</summary>
-        [DataMember(Name = "rotation_deg", Order = 9)] public double RotationDeg;
-        [DataMember(Name = "rotation_internal_deg", Order = 10)] public double RotationInternalDeg;
+        [DataMember(Name = "rotation_deg", Order = 17)] public double RotationDeg;
+        [DataMember(Name = "rotation_internal_deg", Order = 18)] public double RotationInternalDeg;
         /// <summary>How Revit places it (FamilyInstance.StructuralType): Footing.</summary>
-        [DataMember(Name = "structural_type", Order = 11, EmitDefaultValue = false)] public string StructuralType;
-        /// <summary>Its own Export to IFC As (IFC_EXPORT_ELEMENT_AS), and its type's Export Type to IFC As (IFC_EXPORT_ELEMENT_TYPE_AS), when set.</summary>
-        [DataMember(Name = "ifc_export_as", Order = 12, EmitDefaultValue = false)] public string IfcExportAs;
-        [DataMember(Name = "ifc_export_type_as", Order = 13, EmitDefaultValue = false)] public string IfcExportTypeAs;
-        /// <summary>The entity Revit's IFC export writes for it by those (Logic/Foundations.cs FoundationIfc): IfcFooting or IfcPile.</summary>
-        [DataMember(Name = "ifc_entity", Order = 14, EmitDefaultValue = false)] public string IfcEntity;
+        [DataMember(Name = "structural_type", Order = 19, EmitDefaultValue = false)] public string StructuralType;
+        /// <summary>Its own Export to IFC As (IFC_EXPORT_ELEMENT_AS), and its type's Export Type to IFC As (IFC_EXPORT_ELEMENT_TYPE_AS), when set, as Revit holds them after the change.</summary>
+        [DataMember(Name = "ifc_export_as", Order = 20, EmitDefaultValue = false)] public string IfcExportAs;
+        [DataMember(Name = "ifc_export_type_as", Order = 21, EmitDefaultValue = false)] public string IfcExportTypeAs;
+        /// <summary>The class Revit's IFC export writes it as, by those (Logic/Foundations.cs FoundationIfc): IfcFooting or IfcPile. Not read from the IFC: the job's own IFC is the measurement.</summary>
+        [DataMember(Name = "ifc_entity", Order = 22, EmitDefaultValue = false)] public string IfcEntity;
+        /// <summary>Since add-in 0.13.1: set_by_addin (the job set its own Export to IFC As to ifc_entity, which the exporter takes first) or predicted (nothing set: a prediction).</summary>
+        [DataMember(Name = "ifc_entity_basis", Order = 23, EmitDefaultValue = false)] public string IfcEntityBasis;
         /// <summary>The type the change named, when it is placed from a copy of it.</summary>
-        [DataMember(Name = "copied_from", Order = 15, EmitDefaultValue = false)] public string CopiedFrom;
+        [DataMember(Name = "copied_from", Order = 24, EmitDefaultValue = false)] public string CopiedFrom;
         /// <summary>The change's new_type, and whether the job made it (copied) or placed one the family already held of that name and sizes (held).</summary>
-        [DataMember(Name = "new_type", Order = 16, EmitDefaultValue = false)] public string NewType;
-        [DataMember(Name = "new_type_was", Order = 17, EmitDefaultValue = false)] public string NewTypeWas;
+        [DataMember(Name = "new_type", Order = 25, EmitDefaultValue = false)] public string NewType;
+        [DataMember(Name = "new_type_was", Order = 26, EmitDefaultValue = false)] public string NewTypeWas;
         /// <summary>The change's family_file, and whether its family was loaded from it or already held.</summary>
-        [DataMember(Name = "family_file", Order = 18, EmitDefaultValue = false)] public string FamilyFile;
-        [DataMember(Name = "family_was", Order = 19, EmitDefaultValue = false)] public string FamilyWas;
+        [DataMember(Name = "family_file", Order = 27, EmitDefaultValue = false)] public string FamilyFile;
+        [DataMember(Name = "family_was", Order = 28, EmitDefaultValue = false)] public string FamilyWas;
         /// <summary>Every length parameter of it and its type, as Revit holds them, each size the change set beside it.</summary>
-        [DataMember(Name = "sizes", Order = 20)] public List<SizeReport> Sizes = new List<SizeReport>();
+        [DataMember(Name = "sizes", Order = 29)] public List<SizeReport> Sizes = new List<SizeReport>();
     }
 
     /// <summary>Since add-in 0.11.0: a wall foundation a change added, under its wall.</summary>
@@ -532,10 +559,13 @@ namespace Flo2Rvt.Addin.Edit
         /// <summary>Where its geometry's top and bottom stand (its bounding box), in internal feet.</summary>
         [DataMember(Name = "top_elevation_ft", Order = 9, EmitDefaultValue = false)] public double? TopElevationFt;
         [DataMember(Name = "bottom_elevation_ft", Order = 10, EmitDefaultValue = false)] public double? BottomElevationFt;
-        [DataMember(Name = "copied_from", Order = 11, EmitDefaultValue = false)] public string CopiedFrom;
-        [DataMember(Name = "new_type", Order = 12, EmitDefaultValue = false)] public string NewType;
-        [DataMember(Name = "new_type_was", Order = 13, EmitDefaultValue = false)] public string NewTypeWas;
-        [DataMember(Name = "sizes", Order = 14)] public List<SizeReport> Sizes = new List<SizeReport>();
+        /// <summary>Since add-in 0.13.1: the class Revit's IFC export writes it as, IfcFooting, and on what basis: predicted, since the job sets nothing on a wall foundation and revit-ifc writes every one an IfcFooting (Logic/Foundations.cs FoundationIfc.WallFooting).</summary>
+        [DataMember(Name = "ifc_entity", Order = 11, EmitDefaultValue = false)] public string IfcEntity;
+        [DataMember(Name = "ifc_entity_basis", Order = 12, EmitDefaultValue = false)] public string IfcEntityBasis;
+        [DataMember(Name = "copied_from", Order = 13, EmitDefaultValue = false)] public string CopiedFrom;
+        [DataMember(Name = "new_type", Order = 14, EmitDefaultValue = false)] public string NewType;
+        [DataMember(Name = "new_type_was", Order = 15, EmitDefaultValue = false)] public string NewTypeWas;
+        [DataMember(Name = "sizes", Order = 16)] public List<SizeReport> Sizes = new List<SizeReport>();
     }
 
     /// <summary>Since add-in 0.11.0: one length parameter of a new foundation or its type, as Revit holds it.</summary>

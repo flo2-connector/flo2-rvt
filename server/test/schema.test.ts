@@ -188,6 +188,20 @@ test('version 4: a list that adds a foundation says version 4, and each rule bes
   assert.deepEqual(ok.ok && ok.family_files, ['Footing-Rectangular.rfa', 'Pile-Steel Pipe.rfa'], 'each family file once, in the order the list first names it');
 });
 
+// Since flo2-rvt 0.14.1 (add-in 0.13.1): top_offset places a footing's or pile's TOP, as Revit holds it,
+// whatever its family's insertion point; the first live run placed a pile by its insertion point, which
+// its family puts at its embedment below its top. The schema's own words, which both generated sides
+// carry, say what the add-in does, and that it sets the IFC class of a footing as of a pile.
+test("the schema says top_offset places a footing's or pile's top as Revit holds it, and that the add-in sets each one's IFC class", () => {
+  const defs = schema.$defs as Record<string, { description?: string }>;
+  const top = String(defs.TopOffset?.description);
+  assert.match(top, /Where a footing's or pile's top stands above its level/);
+  assert.match(top, /Elevation at Top/);
+  assert.doesNotMatch(top, /insertion point at their top centre/, "the 0.12.0 words that did not hold for every family");
+  assert.match(String(defs.AddFooting?.description), /sets the new footing's own Export to IFC As \(IFC_EXPORT_ELEMENT_AS\) to IfcFooting/);
+  assert.match(String(defs.AddPile?.description), /hanging plumb from its top/);
+});
+
 test("the family files a list names are each named once, in the order the list first names them: the work item's family1, family2 ...", () => {
   const list = { version: 4, changes: [
     { kind: 'add_pile', level: { level_name: 'L1' }, point: { x: 0, y: 0, unit: 'ft' }, coordinates: 'internal', pile_type: { type: 'P' }, family_file: 'B.rfa' },

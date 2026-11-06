@@ -18,14 +18,23 @@
 // those sizes; a size of the element is set on the new element. Logic/Foundations.cs FoundationSizes
 // says which is which, and refuses a name that is neither, read-only, or the element's placement.
 //
-// ⭐ A FOOTING OR PILE stands at its family's insertion point: NewFamilyInstance(point, symbol,
-// level, StructuralType.Footing) at the level's elevation plus top_offset, moved up or down to it
-// should Revit set it elsewhere, then turned about the vertical through it (a footing alone). A
-// pile's own Export to IFC As is set to IfcPile, so Revit's IFC export writes an IfcPile; a footing
-// whose type says another class has its own set to IfcFooting (Logic/Foundations.cs FoundationIfc
-// says why that is enough). The report reads back where its insertion point, its top and its
-// bottom stand, so a family whose insertion point is not its top is seen: the change then reads
-// applied in part, as it does when a size is not what was asked.
+// ⭐ A FOOTING OR PILE stands with its TOP at the level's elevation plus top_offset (since add-in
+// 0.13.1; Logic/Foundations.cs FoundationTop): NewFamilyInstance(point, symbol, level,
+// StructuralType.Footing) with its insertion point there, moved up or down to it should Revit set
+// it elsewhere, turned about the vertical through it (a footing alone), its own Export to IFC As
+// set; then, in the same transaction, its top read as Revit holds it (its Elevation at Top, from
+// the project base point) and the difference applied: on its offset from its level when one
+// parameter is that (Height Offset From Level on Revit's own foundation families), so it keeps its
+// level and the offset reads in Revit as what it is, else by ElementTransformUtils.MoveElement.
+// A family whose insertion point is its top needs nothing; one Revit holds no Elevation at Top for
+// stands by its insertion point, as before 0.13.1, and its change says so. The report reads back
+// where its insertion point, its top and its bottom stand, the correction and how it was made; one
+// whose top is still not where asked reads applied in part, as it does when a size is not.
+//
+// ⭐ ITS IFC CLASS is set on EVERY footing and pile (since add-in 0.13.1): its own Export to IFC As
+// to IfcFooting or IfcPile, which Revit's IFC exporter takes before anything else, and the report
+// says it was set (Logic/Foundations.cs FoundationIfc says why, and why a footing with nothing set
+// cannot be predicted: the live edit's pile cap came out an IfcSlab).
 //
 // ⭐ A WALL FOOTING goes under a wall the model has, by GlobalId, or one an earlier add_wall made
 // (WallFoundation.Create), and Revit hangs it along the wall's base.
@@ -271,10 +280,14 @@ namespace Flo2Rvt.Addin.Jobs
                 }
             }
 
-            double z = level.ProjectElevation + topOffset;
+            double z = FoundationTop.Asked(level.ProjectElevation, topOffset);
+            double? baseZ = ModelTypes.ProjectBasePointZ(doc);
             double turn = pile ? 0 : Turn.InternalDegrees(change.RotationDeg ?? 0, change.Coordinates, adding.Frame);
             ElementId made = null, placedType = null;
             bool copied = false;
+            double? correction = null;
+            string correctedBy = null, offsetParameter = null;
+            string ifcSet = FoundationIfc.ToSet(change.Kind);
             string where = "(" + Lengths.Round(change.Point.X) + ", " + Lengths.Round(change.Point.Y) + " " + change.Point.Unit + ", " + change.Coordinates + ")";
             RunResult run = ChangeRunner.Run(doc, context.Data.RevitApp, "add a " + type.Type + " " + what + " on level " + level.Name, d =>
             {
@@ -313,15 +326,33 @@ namespace Flo2Rvt.Addin.Jobs
                     var p0 = new XYZ(at.X, at.Y, z);
                     ElementTransformUtils.RotateElement(d, fi.Id, Line.CreateBound(p0, p0 + XYZ.BasisZ), turn * Math.PI / 180.0);
                 }
-                // The entity Revit's IFC export writes: a pile's own Export to IFC As says IfcPile; a footing's says IfcFooting only where its type says another.
-                string expected = FoundationIfc.Expected(change.Kind);
-                if (!FoundationIfc.Same(FoundationIfc.Written(ModelTypes.Text(fi, BuiltInParameter.IFC_EXPORT_ELEMENT_AS), ModelTypes.Text(from, BuiltInParameter.IFC_EXPORT_ELEMENT_TYPE_AS)), expected))
+                // Its IFC class, set on every footing and pile: its own Export to IFC As, which the exporter takes first.
+                Parameter ifc = fi.get_Parameter(BuiltInParameter.IFC_EXPORT_ELEMENT_AS);
+                if (ifc == null || ifc.IsReadOnly || ifc.StorageType != StorageType.String || !ifc.Set(ifcSet))
                 {
-                    Parameter ifc = fi.get_Parameter(BuiltInParameter.IFC_EXPORT_ELEMENT_AS);
-                    if (ifc == null || ifc.IsReadOnly || ifc.StorageType != StorageType.String || !ifc.Set(expected))
+                    throw new ChangeRefused("Revit holds no Export to IFC As the job can set on the new " + what + ", so its IFC export would not write it as an " + ifcSet + "; it was not kept");
+                }
+                // Its top where top_offset says, as Revit holds its top: the difference applied on its offset from its level, else by a move.
+                d.Regenerate();
+                correction = FoundationTop.Correction(z, baseZ.HasValue ? FoundationTop.Internal(ModelTypes.ElevationAtTop(fi), baseZ.Value) : null);
+                if (correction.HasValue && correction.Value != 0)
+                {
+                    var lpNow = fi.Location as LocationPoint;
+                    Dictionary<HeldOffset, Parameter> heldBy;
+                    List<HeldOffset> placedBy = ModelTypes.PlacementParameters(fi, out heldBy);
+                    HeldOffset offset = lpNow != null ? FoundationTop.OffsetFromLevel(placedBy, lpNow.Point.Z, level.ProjectElevation) : null;
+                    Parameter op = offset != null ? heldBy[offset] : null;
+                    if (op != null && op.Set(offset.ValueFt.Value + correction.Value))
                     {
-                        throw new ChangeRefused("Revit holds no Export to IFC As the job can set on the new " + what + ", so its IFC export would not write it as an " + expected + "; it was not kept");
+                        correctedBy = FoundationTop.ByOffsetFromLevel;
+                        offsetParameter = offset.BuiltIn;
                     }
+                    else
+                    {
+                        ElementTransformUtils.MoveElement(d, fi.Id, new XYZ(0, 0, correction.Value));
+                        correctedBy = FoundationTop.ByMove;
+                    }
+                    d.Regenerate();
                 }
                 made = fi.Id;
                 placedType = from.Id;
@@ -341,6 +372,10 @@ namespace Flo2Rvt.Addin.Jobs
             XYZ point = lpKept != null ? lpKept.Point : new XYZ(at.X, at.Y, z);
             BoundingBoxXYZ box = kept.get_BoundingBox(null);
             double internalTurn = lpKept != null ? lpKept.Rotation * 180.0 / Math.PI : 0;
+            // Its top: Revit's Elevation at Top where it holds one (what the job placed it by), else its bounding box's.
+            double? heldTop = ModelTypes.ElevationAtTop(kept);
+            bool byTop = correction.HasValue && heldTop.HasValue && baseZ.HasValue;
+            double? top = byTop ? FoundationTop.Internal(heldTop, baseZ.Value) : box != null ? box.Max.Z : (double?)null;
             var f = new AddedFoundation
             {
                 Location = PlanAt.Of(adding.Frame, ModelTypes.XY(point)),
@@ -348,10 +383,18 @@ namespace Flo2Rvt.Addin.Jobs
                 TopOffsetFt = Lengths.Round(topOffset),
                 TopOffsetMm = Lengths.Round(Lengths.ToMm(topOffset)),
                 InsertionElevationFt = Lengths.Round(point.Z),
-                TopElevationFt = box != null ? Lengths.Round(box.Max.Z) : (double?)null,
+                TopElevationFt = top.HasValue ? Lengths.Round(top.Value) : (double?)null,
                 BottomElevationFt = box != null ? Lengths.Round(box.Min.Z) : (double?)null,
-                TopAboveLevelFt = box != null ? Lengths.Round(box.Max.Z - level.ProjectElevation) : (double?)null,
-                TopAboveLevelMm = box != null ? Lengths.Round(Lengths.ToMm(box.Max.Z - level.ProjectElevation)) : (double?)null,
+                TopAboveLevelFt = top.HasValue ? Lengths.Round(top.Value - level.ProjectElevation) : (double?)null,
+                TopAboveLevelMm = top.HasValue ? Lengths.Round(Lengths.ToMm(top.Value - level.ProjectElevation)) : (double?)null,
+                PlacedBy = byTop ? FoundationTop.ByTop : FoundationTop.ByInsertionPoint,
+                ElevationAtTopFt = heldTop.HasValue ? Lengths.Round(heldTop.Value) : (double?)null,
+                ProjectBasePointZFt = heldTop.HasValue && baseZ.HasValue ? Lengths.Round(baseZ.Value) : (double?)null,
+                BoxTopElevationFt = box != null ? Lengths.Round(box.Max.Z) : (double?)null,
+                TopCorrectionFt = correction.HasValue ? Lengths.Round(correction.Value) : (double?)null,
+                TopCorrectionMm = correction.HasValue ? Lengths.Round(Lengths.ToMm(correction.Value)) : (double?)null,
+                TopCorrectedBy = correctedBy,
+                OffsetFromLevelParameter = offsetParameter,
                 RotationInternalDeg = Lengths.Round(Turn.Normalize(internalTurn)),
                 RotationDeg = Lengths.Round(Turn.Normalize(Turn.InCoordinates(internalTurn, change.Coordinates, adding.Frame))),
                 StructuralType = kept.StructuralType.ToString(),
@@ -364,7 +407,9 @@ namespace Flo2Rvt.Addin.Jobs
                 FamilyWas = file != null ? file.Was : null,
                 Sizes = ModelTypes.Sizes(kept, placed, plan),
             };
-            f.IfcEntity = FoundationIfc.Written(f.IfcExportAs, f.IfcExportTypeAs);
+            // The class the job set, read back: the report says what was set, never a guess.
+            f.IfcEntity = ifcSet;
+            f.IfcEntityBasis = FoundationIfc.SetByAddin;
             if (pile) e.Pile = f;
             else e.Footing = f;
             Kept(r, e);
@@ -373,6 +418,12 @@ namespace Flo2Rvt.Addin.Jobs
             {
                 r.Status = ChangeStatus.AppliedInPart;
                 r.Why = "the " + what + " was placed, but " + string.Join("; ", problems);
+            }
+            // Never silently: one Revit holds no Elevation at Top for says it stands by its insertion point.
+            if (!byTop)
+            {
+                string noTop = baseZ.HasValue ? FoundationTop.NoTop(what) : FoundationTop.NoBasePoint(what);
+                r.Why = r.Why == null ? noTop : r.Why + "; " + noTop;
             }
         }
 
@@ -475,6 +526,9 @@ namespace Flo2Rvt.Addin.Jobs
                 LengthMm = Mm(length),
                 TopElevationFt = box != null ? Lengths.Round(box.Max.Z) : (double?)null,
                 BottomElevationFt = box != null ? Lengths.Round(box.Min.Z) : (double?)null,
+                // Nothing set on it: revit-ifc writes every wall foundation an IfcFooting, a prediction (Logic/Foundations.cs FoundationIfc).
+                IfcEntity = FoundationIfc.WallFooting,
+                IfcEntityBasis = FoundationIfc.Predicted,
                 CopiedFrom = change.NewType != null ? type.Type : null,
                 NewType = change.NewType,
                 NewTypeWas = change.NewType == null ? null : copied ? "copied" : "held",

@@ -1,5 +1,5 @@
 {
-  "_note": "A made-up report of add-in 0.11.0 (report version 2, fields added), shaped as flo2's own fixtures of a list and its report, for change_list, a version-4 list, on a made-up model: a wall, a wall footing under it sized on a copy of its type, two footings from a family file (one turned 30 degrees and sized on a copy of its type, one placed from that copy by name), both with their tops 600 mm below Level 1, two piles from a family file, 6 m long, their tops at the footings' undersides (1050 mm below the level), and a footing from a family file whose family is not a Structural Foundations one (not applied). Points are in mm in the list; the report gives each in feet in shared and internal coordinates, related by the additions fixture's made-up frame: shared = R(36.99 deg) internal + (-65.03, -61.7) ft; every elevation is internal feet. Read by server/test/edit.test.ts and addin/tests, and for flo2's check of footings and piles.",
+  "_note": "A made-up report of add-in 0.13.1 (report version 2, fields added; first written for add-in 0.11.0), shaped as flo2's own fixtures of a list and its report, for change_list, a version-4 list, on a made-up model: a wall, a wall footing under it sized on a copy of its type, two footings from a family file (one turned 30 degrees and sized on a copy of its type, one placed from that copy by name), both with their tops 600 mm below Level 1, two piles from a family file, 6 m long, their tops at the footings' undersides (1050 mm below the level), whose family puts its insertion point 0.5 ft (its Minimum Embedment) below its top, so the add-in set each pile's Height Offset From Level 0.5 ft lower once it was placed and its Elevation at Top stands where top_offset says; and a footing from a family file whose family is not a Structural Foundations one (not applied). Points are in mm in the list; the report gives each in feet in shared and internal coordinates, related by the additions fixture's made-up frame: shared = R(36.99 deg) internal + (-65.03, -61.7) ft; every elevation is internal feet, and the project base point stands at the internal origin's height, so Revit's Elevation at Top is the internal top. The add-in set the IFC class of each footing (IfcFooting) and pile (IfcPile); a wall footing's is predicted (revit-ifc writes every wall foundation an IfcFooting). Read by server/test/edit.test.ts and addin/tests, and for flo2's check of footings and piles.",
   "change_list": {
     "version": 4,
     "list_id": "foundation-1",
@@ -194,7 +194,7 @@
     "schema": "flo2-rvt/edit-report",
     "version": 2,
     "edit": {
-      "addin_version": "0.11.0",
+      "addin_version": "0.13.1",
       "started_at": "2026-11-05T12:00:00.0000000Z",
       "finished_at": "2026-11-05T12:02:10.0000000Z",
       "transactions_committed": 8,
@@ -333,6 +333,8 @@
               "length_mm": 6000,
               "top_elevation_ft": 0,
               "bottom_elevation_ft": -0.984252,
+              "ifc_entity": "IfcFooting",
+              "ifc_entity_basis": "predicted",
               "copied_from": "Bearing Footing - 900 x 300",
               "new_type": "Bearing Footing - 600 x 300",
               "new_type_was": "copied",
@@ -426,10 +428,18 @@
               "bottom_elevation_ft": -3.444882,
               "top_above_level_ft": -1.968504,
               "top_above_level_mm": -600.0,
+              "placed_by": "elevation_at_top",
+              "elevation_at_top_ft": -1.968504,
+              "project_base_point_z_ft": 0,
+              "box_top_elevation_ft": -1.968504,
+              "top_correction_ft": 0,
+              "top_correction_mm": 0,
               "rotation_deg": 30.0,
               "rotation_internal_deg": -6.99,
               "structural_type": "Footing",
+              "ifc_export_as": "IfcFooting",
               "ifc_entity": "IfcFooting",
+              "ifc_entity_basis": "set_by_addin",
               "copied_from": "1800 x 1200 x 450mm",
               "new_type": "1500 x 1500 x 450mm",
               "new_type_was": "copied",
@@ -513,10 +523,18 @@
               "bottom_elevation_ft": -3.444882,
               "top_above_level_ft": -1.968504,
               "top_above_level_mm": -600.0,
+              "placed_by": "elevation_at_top",
+              "elevation_at_top_ft": -1.968504,
+              "project_base_point_z_ft": 0,
+              "box_top_elevation_ft": -1.968504,
+              "top_correction_ft": 0,
+              "top_correction_mm": 0,
               "rotation_deg": 0.0,
               "rotation_internal_deg": -36.99,
               "structural_type": "Footing",
+              "ifc_export_as": "IfcFooting",
               "ifc_entity": "IfcFooting",
+              "ifc_entity_basis": "set_by_addin",
               "family_file": "Footing-Rectangular.rfa",
               "family_was": "loaded",
               "sizes": [
@@ -586,16 +604,25 @@
               "level_elevation_ft": 0,
               "top_offset_ft": -3.444882,
               "top_offset_mm": -1050.0,
-              "insertion_elevation_ft": -3.444882,
+              "insertion_elevation_ft": -3.944882,
               "top_elevation_ft": -3.444882,
               "bottom_elevation_ft": -23.129921,
               "top_above_level_ft": -3.444882,
               "top_above_level_mm": -1050.0,
+              "placed_by": "elevation_at_top",
+              "elevation_at_top_ft": -3.444882,
+              "project_base_point_z_ft": 0,
+              "box_top_elevation_ft": -3.444882,
+              "top_correction_ft": -0.5,
+              "top_correction_mm": -152.4,
+              "top_corrected_by": "offset_from_level",
+              "offset_from_level_parameter": "FLOOR_HEIGHTABOVELEVEL_PARAM",
               "rotation_deg": 36.99,
               "rotation_internal_deg": 0.0,
               "structural_type": "Footing",
               "ifc_export_as": "IfcPile",
               "ifc_entity": "IfcPile",
+              "ifc_entity_basis": "set_by_addin",
               "family_file": "Pile-Steel Pipe.rfa",
               "family_was": "loaded",
               "sizes": [
@@ -612,6 +639,25 @@
                   "value_mm": 6000.0,
                   "asked_ft": 19.685039,
                   "asked_mm": 6000.0
+                },
+                {
+                  "name": "Minimum Embedment",
+                  "of": "type",
+                  "value_ft": 0.5,
+                  "value_mm": 152.4
+                },
+                {
+                  "name": "Elevation at Top",
+                  "of": "instance",
+                  "value_ft": -3.444882,
+                  "value_mm": -1050.0,
+                  "read_only": true
+                },
+                {
+                  "name": "Height Offset From Level",
+                  "of": "instance",
+                  "value_ft": -3.944882,
+                  "value_mm": -1202.4
                 }
               ]
             }
@@ -655,16 +701,25 @@
               "level_elevation_ft": 0,
               "top_offset_ft": -3.444882,
               "top_offset_mm": -1050.0,
-              "insertion_elevation_ft": -3.444882,
+              "insertion_elevation_ft": -3.944882,
               "top_elevation_ft": -3.444882,
               "bottom_elevation_ft": -23.129921,
               "top_above_level_ft": -3.444882,
               "top_above_level_mm": -1050.0,
+              "placed_by": "elevation_at_top",
+              "elevation_at_top_ft": -3.444882,
+              "project_base_point_z_ft": 0,
+              "box_top_elevation_ft": -3.444882,
+              "top_correction_ft": -0.5,
+              "top_correction_mm": -152.4,
+              "top_corrected_by": "offset_from_level",
+              "offset_from_level_parameter": "FLOOR_HEIGHTABOVELEVEL_PARAM",
               "rotation_deg": 36.99,
               "rotation_internal_deg": 0.0,
               "structural_type": "Footing",
               "ifc_export_as": "IfcPile",
               "ifc_entity": "IfcPile",
+              "ifc_entity_basis": "set_by_addin",
               "family_file": "Pile-Steel Pipe.rfa",
               "family_was": "loaded",
               "sizes": [
@@ -681,6 +736,25 @@
                   "value_mm": 6000.0,
                   "asked_ft": 19.685039,
                   "asked_mm": 6000.0
+                },
+                {
+                  "name": "Minimum Embedment",
+                  "of": "type",
+                  "value_ft": 0.5,
+                  "value_mm": 152.4
+                },
+                {
+                  "name": "Elevation at Top",
+                  "of": "instance",
+                  "value_ft": -3.444882,
+                  "value_mm": -1050.0,
+                  "read_only": true
+                },
+                {
+                  "name": "Height Offset From Level",
+                  "of": "instance",
+                  "value_ft": -3.944882,
+                  "value_mm": -1202.4
                 }
               ]
             }
