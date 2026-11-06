@@ -62,6 +62,12 @@ test('the logger drops secret-looking fields and URL values', () => {
 test("ADDIN_VERSION is the add-in's own <Version>, which a setup writes into each description and a check reads back", () => {
   const csproj = readFileSync(new URL('../../addin/Flo2RvtProbe.csproj', import.meta.url), 'utf8');
   assert.equal(/<Version>([^<]+)<\/Version>/.exec(csproj)?.[1], ADDIN_VERSION);
+  // And the version every report says it was written by (report.json's probe.addin_version and
+  // edit.addin_version, ProbeJob.AddinVersion), a third copy kept by hand. flo2-rvt 0.14.1 moved
+  // the <Version> and ADDIN_VERSION to 0.13.1 and left this one at 0.13.0, so add-in 0.13.1 named
+  // itself 0.13.0 in every report: nothing held it to the other two until this line.
+  const probeJob = readFileSync(new URL('../../addin/src/Jobs/ProbeJob.cs', import.meta.url), 'utf8');
+  assert.equal(/public const string AddinVersion = "([^"]+)";/.exec(probeJob)?.[1], ADDIN_VERSION, "the version report.json names is the add-in's own");
   assert.equal(setupMark(), `(flo2-rvt add-in ${ADDIN_VERSION})`);
   assert.equal(markedAddinVersion(`flo2-rvt edit: a change list applied. ${setupMark()}`), ADDIN_VERSION);
   assert.equal(markedAddinVersion('flo2-rvt read-only probe: report.json, sheets.pdf and model.ifc from a Revit 2024 model.'), null, 'an older registration names none');

@@ -101,8 +101,10 @@ namespace Flo2Rvt.Addin.Tests
             Test("the family files a list names arrive each once, in the order the list first names them, and Revit names each family by its file", () =>
             {
                 CheckedList r = ReadList(SharedCase(root, Foundation));
-                List<string> files = FamilyFiles.Of(r.List);
+                // Since add-in 0.14.0 each with the category its changes need (DoorsTests.cs): a footing's or pile's is Structural Foundations.
+                List<string> files = FamilyFiles.Of(r.List).Select(f => f.File).ToList();
                 Is(files.SequenceEqual(new[] { "Footing-Rectangular.rfa", "Pile-Steel Pipe.rfa" }), string.Join(", ", files));
+                Is(FamilyFiles.Of(r.List).All(f => f.Category == FamilyFiles.StructuralFoundations), "a foundation's family file is a Structural Foundations family's");
                 Eq("family1.rfa", FamilyFiles.InputName(0), "the first arrives as the edit Activity's family1");
                 Eq("family8.rfa", FamilyFiles.InputName(7), "the eighth as family8");
                 Eq("Pile-Steel Pipe", FamilyFiles.FamilyName("Pile-Steel Pipe.rfa"), "a family is named by its file");
@@ -234,7 +236,7 @@ namespace Flo2Rvt.Addin.Tests
                 Eq("not_applied", read.Changes[6].Status, "the footing whose family file holds no foundation family");
                 Eq(3, read.Families.Count, "three family files");
                 Is(read.Families.Select(x => x.Input).SequenceEqual(new[] { "family1.rfa", "family2.rfa", "family3.rfa" }), "in the order the list first names them");
-                Is(read.Families.Select(x => x.FamilyFile).SequenceEqual(FamilyFiles.Of(list.List)), "the list's own order");
+                Is(read.Families.Select(x => x.FamilyFile).SequenceEqual(FamilyFiles.Of(list.List).Select(f => f.File)), "the list's own order");
                 Eq(FamilyFileReport.NotLoaded, read.Families[2].Was, "a family file whose family is no foundation is not loaded");
                 Eq(6, read.Totals.ElementsAdded, "elements added");
                 foreach (ChangeReport c in read.Changes)

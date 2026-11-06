@@ -5,7 +5,8 @@
 // serves an edit's four outputs and its report's counts, after a restart too. Since contract v4
 // (flo2-rvt 0.12.0), the family files a version 4 list names: each handed over once by flo2.io,
 // checked against the list and its limits before Autodesk is asked, uploaded by size and sha256,
-// and handed to the WorkItem as family1, family2 ... in the order the list first names them.
+// and handed to the WorkItem as family1, family2 ... in the order the list first names them. Since
+// contract v7 (flo2-rvt 0.15.0, change-list version 6), a door's family file goes the same way.
 
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -314,6 +315,62 @@ describe('an edit whose list names family files', () => {
   });
 });
 
+// Since contract v7 (flo2-rvt 0.15.0, change-list version 6): add_door, as add_footing and add_pile,
+// names a family file the design keeps, and it is handed over, checked and uploaded as theirs are.
+const DOORS = {
+  version: 6,
+  list_id: 'doors-2',
+  changes: [
+    { kind: 'add_wall', id: 'w1', level: { level_name: 'Level 1' }, start: { x: 0, y: 0, unit: 'mm' }, end: { x: 6000, y: 0, unit: 'mm' }, coordinates: 'internal', wall_type: { type: 'Generic - 200mm' }, top: { height: { value: 3000, unit: 'mm' } } },
+    { kind: 'add_door', id: 'd1', host: { wall_change: 'w1' }, point: { x: 1500, y: 0, unit: 'mm' }, coordinates: 'internal', door_type: { family: 'Single-Flush', type: '36" x 84"' }, family_file: 'Single-Flush.rfa', sizes: { Width: { value: 36, unit: 'in' }, Height: { value: 80, unit: 'in' } }, new_type: '36" x 80"' },
+    { kind: 'add_footing', id: 'f1', level: { level_name: 'Level 1' }, point: { x: 1500, y: 1500, unit: 'mm' }, coordinates: 'internal', footing_type: { family: 'Footing-Rectangular', type: '1800 x 1200 x 450mm' }, family_file: 'Footing-Rectangular.rfa' },
+    { kind: 'add_door', id: 'd2', host: { wall_change: 'w1' }, point: { x: 4000, y: 0, unit: 'mm' }, coordinates: 'internal', door_type: { family: 'Single-Flush', type: '36" x 84"' }, family_file: 'Single-Flush.rfa', sizes: { Width: { value: 32, unit: 'in' }, Height: { value: 80, unit: 'in' } }, new_type: '32" x 80"' },
+  ],
+};
+/** Made-up bytes standing for a door family file. */
+const DOOR_RFA = Buffer.alloc(25_000, 'Single-Flush.rfa stand-in bytes ');
+
+describe("an edit whose list names a door's family file", () => {
+  let h: Harness;
+  before(async () => {
+    h = await startHarness();
+  });
+  after(() => h.close());
+  const bucket = `flo2rvt-${CLIENT_ID.toLowerCase()}-t`;
+  const withFamilies = (families: unknown[]) => {
+    const m = jobMeta(h.aps);
+    (m['flo2.io/job'] as Record<string, unknown>).families = families;
+    return m;
+  };
+
+  test("uploads it as a foundation's is, by size and sha256, the door's family1 before the footing's family2, in the order the list first names them", async () => {
+    const footing = familyHandover(h.aps, 'Footing-Rectangular.rfa', FOOTING_RFA);
+    const door = familyHandover(h.aps, 'Single-Flush.rfa', DOOR_RFA);
+    const r = await call(h, 'rvt_edit_start', { file: 'rac_basic_sample_project.rvt', change_list: DOORS }, withFamilies([footing, door]));
+    const out = r.result?.structuredContent as { job_id: string; state: string; family_files: Array<Record<string, unknown>> };
+    assert.equal(out.state, 'submitted', JSON.stringify(r));
+    assert.deepEqual(out.family_files, [
+      { family_file: 'Single-Flush.rfa', input: 'family1', size: DOOR_RFA.length, sha256: sha(DOOR_RFA) },
+      { family_file: 'Footing-Rectangular.rfa', input: 'family2', size: FOOTING_RFA.length, sha256: sha(FOOTING_RFA) },
+    ]);
+    assert.ok(h.aps.objects.get(`${bucket}/${out.job_id}/family1.rfa`)?.bytes.equals(DOOR_RFA), "the door's family file is family1.rfa");
+    assert.ok(h.aps.objects.get(`${bucket}/${out.job_id}/family2.rfa`)?.bytes.equals(FOOTING_RFA));
+    const wi = h.aps.workItems.at(-1) as { arguments: Record<string, { url: string; verb: string }> };
+    assert.deepEqual(Object.keys(wi.arguments).sort(), ['changes', 'family1', 'family2', 'ifc', 'report', 'result', 'rvtFile', 'sheets']);
+    const uploaded = JSON.parse(h.aps.objects.get(`${bucket}/${out.job_id}/changes.json`)!.bytes.toString('utf8'));
+    assert.deepEqual(uploaded.changes[1].sizes, { Height: { unit: 'in', value: 80 }, Width: { unit: 'in', value: 36 } }, "the door's sizes go as the person approved them");
+  });
+
+  test('refuses, before anything reaches Autodesk, a list that names one family file for a door and for a footing', async () => {
+    const before = h.aps.calls.length;
+    const both = { ...DOORS, changes: [DOORS.changes[0], DOORS.changes[1], { ...DOORS.changes[2], family_file: 'Single-Flush.rfa' }] };
+    const why = refusal(await call(h, 'rvt_edit_start', { file: 'x.rvt', change_list: both }, withFamilies([familyHandover(h.aps, 'Single-Flush.rfa', DOOR_RFA)])));
+    assert.match(why, /changes\.2\.family_file: names "Single-Flush\.rfa", which change 2 \(add_door\) names for a Doors family/);
+    assert.match(refusal(await call(h, 'rvt_edit_start', { file: 'x.rvt', change_list: DOORS }, withFamilies([familyHandover(h.aps, 'Footing-Rectangular.rfa', FOOTING_RFA)]))), /names the family file "Single-Flush\.rfa", and flo2\.io did not hand it over; no job was started/);
+    assert.equal(h.aps.calls.length, before, 'nothing reached Autodesk');
+  });
+});
+
 describe('an edit none of whose changes was kept', () => {
   test('hands over report.json alone, and says no model was saved', async () => {
     const h = await startHarness({ statuses: ['success'], writes: ['report.json'] });
@@ -410,6 +467,38 @@ describe("an edit's report summary", () => {
     }
     const wall = report.changes.find((c) => c.kind === 'add_wall_footing')?.added?.[0]?.wall_footing ?? {};
     assert.equal(wall.ifc_entity_basis, 'predicted', 'nothing set on a wall footing: its class is a prediction, said so');
+  });
+
+  // Since add-in 0.14.0 a door may come from a door family file and be sized as a new type (change-list
+  // version 6); the made-up report flo2 reads gives each door's sizes beside each asked, for its check.
+  test("from a report of add-in 0.14.0, counts the doors added, and each door from a family file gives its new type and every size it holds beside each asked", () => {
+    const f = fixture('sample-edit-report-doors.json');
+    const report = f.report as { edit: { addin_version: string }; families: Array<Record<string, unknown>>; changes: Array<{ id: string; kind: string; status: string; why?: string; added?: Array<{ door?: Record<string, unknown> }> }> };
+    const s = editSummary(report as unknown as Record<string, unknown>);
+    assert.equal(s.elements_added, 4, 'a wall and three doors');
+    assert.equal(s.not_applied, 1, 'the door naming a footing family file');
+    assert.ok(EditSummary.safeParse(s).success, 'in the contract');
+    assert.equal(report.edit.addin_version, '0.14.0');
+    const list = f.change_list as { changes: Array<{ id: string; sizes?: Record<string, { value: number; unit: string }>; new_type?: string }> };
+    const toFt = (l: { value: number; unit: string }) => (l.unit === 'in' ? l.value / 12 : l.unit === 'mm' ? l.value / 304.8 : l.unit === 'm' ? (l.value * 1000) / 304.8 : l.value);
+    const doors = report.changes.filter((c) => c.kind === 'add_door' && c.status === 'applied');
+    assert.equal(doors.length, 3);
+    for (const c of doors) {
+      const door = c.added?.[0]?.door ?? {};
+      const asked = list.changes.find((x) => x.id === c.id);
+      assert.equal(door.new_type, asked?.new_type, c.id);
+      assert.equal(door.family_file, 'Single-Flush.rfa');
+      assert.equal(door.copied_from, '36" x 84"');
+      const sizes = door.sizes as Array<{ name: string; of: string; value_ft: number; asked_ft?: number }>;
+      for (const [name, length] of Object.entries(asked?.sizes ?? {})) {
+        const held = sizes.find((x) => x.name === name);
+        assert.equal(held?.of, 'type', `${c.id} ${name} is a type parameter, set on the copy`);
+        assert.ok(Math.abs(Number(held?.asked_ft) - toFt(length)) < 1e-6 && Math.abs(Number(held?.value_ft) - toFt(length)) < 1e-6, `${c.id} ${name} as asked, within flo2-rvt's tolerance`);
+      }
+    }
+    assert.deepEqual(doors.map((c) => c.added?.[0]?.door?.new_type_was), ['copied', 'copied', 'held'], 'the third door placed the first copy again');
+    assert.deepEqual(report.families.map((x) => [x.family_file, x.was, x.category_needed]), [['Single-Flush.rfa', 'loaded', 'Doors'], ['Footing-Rectangular.rfa', 'not_loaded', 'Doors']]);
+    assert.match(String(report.changes.find((c) => c.id === 'd4')?.why), /in the category Structural Foundations, not Doors/);
   });
 
   test('from a version-1 report (add-in 0.2.0), reads as before, without the counts it did not keep', () => {

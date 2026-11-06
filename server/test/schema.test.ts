@@ -9,7 +9,7 @@ import { readFileSync } from 'node:fs';
 import { describe, test } from 'node:test';
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import { csharpFor, schemaSha256, typescriptFor } from '../../scripts/gen-types.ts';
-import { ADDING_KINDS, ChangeListShape, MAX_CHANGE_LIST_BYTES, MAX_FAMILY_FILES, MAX_REFERENCES, addsSomething, canonicalJson, checkChangeList, familyFilesOf, feetOf, outlineProblem, pointFeet, sha256Hex, signedArea } from '../src/change-list.ts';
+import { ADDING_KINDS, ChangeListShape, FAMILY_FILE_CATEGORIES, MAX_CHANGE_LIST_BYTES, MAX_FAMILY_FILES, MAX_REFERENCES, addsSomething, canonicalJson, checkChangeList, familyFilesOf, feetOf, outlineProblem, pointFeet, sha256Hex, signedArea } from '../src/change-list.ts';
 import type { ChangeList } from '../src/types/change-list.ts';
 
 const schemaBytes = readFileSync(new URL('../../schema/change-list.schema.json', import.meta.url));
@@ -88,7 +88,9 @@ test('the C# types and their schema hash are generated from the schema as it is 
   assert.equal(readFileSync(new URL('../../addin/Generated/change-list.schema.sha256', import.meta.url), 'utf8').trim(), sha);
   for (const kind of ['delete_elements_on_level', 'delete_elements_by_global_id', 'set_level_elevation', 'move_levels_together']) assert.ok(cs.includes(`"${kind}"`));
   assert.ok(cs.includes('public static class GroupsInTheWayValues'), 'groups_in_the_way\'s values, for the add-in');
-  assert.ok(cs.includes('public static readonly long[] VersionValues = { 0, 1, 2, 3, 4, 5 };'), 'the versions this schema reads');
+  assert.ok(cs.includes('public static readonly long[] VersionValues = { 0, 1, 2, 3, 4, 5, 6 };'), 'the versions this schema reads');
+  const addDoor = /public sealed partial class AddDoor\b[\s\S]*?\n {4}\}\n/.exec(cs)?.[0] ?? '';
+  for (const field of ['public string FamilyFile { get; set; }', 'public Dictionary<string, Length> Sizes { get; set; }', 'public string NewType { get; set; }']) assert.ok(addDoor.includes(field), `since version 6 a door's ${field}, for the add-in`);
   for (const kind of ['add_footing', 'add_wall_footing', 'add_pile']) assert.ok(cs.includes(`"${kind}"`), `${kind}, for the add-in`);
   assert.ok(cs.includes('public Dictionary<string, Length> Sizes { get; set; }'), "a foundation's sizes, a map of names to lengths, for the add-in");
   assert.ok(cs.includes('public Length TopOffset { get; set; }') && cs.includes('public double? RotationDeg { get; set; }'), 'a top offset is a length, a turn a number');
@@ -232,4 +234,69 @@ test('a list adds something when any of its changes adds an element or a level: 
   assert.deepEqual([...ADDING_KINDS], ['add_level', 'add_wall', 'add_floor', 'add_room', 'add_door', 'add_footing', 'add_wall_footing', 'add_pile']);
   assert.equal(addsSomething({ version: 5, changes: [{ kind: 'add_level', name: 'L', elevation: { value: 0, unit: 'ft' }, relative_to: 'project_origin' }] } as ChangeList), true);
   assert.equal(addsSomething({ version: 5, changes: [{ kind: 'set_level_elevation', level: { level_name: 'L' }, elevation: { value: 1, unit: 'ft' }, relative_to: 'project_origin' }, { kind: 'delete_elements_on_level', level: { level_name: 'L' } }] } as ChangeList), false);
+});
+
+// Since flo2-rvt 0.15.0 (change-list version 6): add_door, as add_footing and add_pile, may name a
+// door family file the design keeps (family_file) and size a new type copied from the named one
+// (sizes, new_type). A family file's family must be in the category its changes need, so one file
+// named by a door and by a foundation is refused before anyone is asked.
+test("version 6: a door that names a family file, sizes or new_type says version 6, and each rule beside the schema says where and why", () => {
+  const wall = { kind: 'add_wall', id: 'w1', level: { level_name: 'Level 1' }, start: { x: 0, y: 0, unit: 'mm' }, end: { x: 6000, y: 0, unit: 'mm' }, coordinates: 'internal', wall_type: { type: 'Generic - 200mm' }, top: { height: { value: 3, unit: 'm' } } };
+  const door = { kind: 'add_door', id: 'd1', host: { wall_change: 'w1' }, point: { x: 1500, y: 0, unit: 'mm' }, coordinates: 'internal', door_type: { family: 'Single-Flush', type: '36" x 84"' }, family_file: 'Single-Flush.rfa', sizes: { Width: { value: 36, unit: 'in' }, Height: { value: 80, unit: 'in' } }, new_type: '36" x 80"' };
+  const footing = { kind: 'add_footing', id: 'f1', level: { level_name: 'Level 1' }, point: { x: 1500, y: 1500, unit: 'mm' }, coordinates: 'internal', footing_type: { type: '1800 x 1200 x 450mm' }, family_file: 'Footing-Rectangular.rfa' };
+  const pile = { kind: 'add_pile', id: 'p1', level: { level_name: 'Level 1' }, point: { x: 4500, y: 1500, unit: 'mm' }, coordinates: 'internal', pile_type: { type: 'Standard' }, family_file: 'Pile-Steel Pipe.rfa' };
+  const why = (list: unknown) => {
+    const r = checkChangeList(list);
+    return r.ok ? '' : r.errors.join(' | ');
+  };
+  const omit = (c: Record<string, unknown>, ...keys: string[]) => Object.fromEntries(Object.entries(c).filter(([k]) => !keys.includes(k)));
+  assert.match(why({ version: 5, changes: [wall, omit(door, 'sizes', 'new_type')] }), /changes\.1\.family_file needs version 6; say "version": 6/);
+  const v5 = why({ version: 5, changes: [wall, omit(door, 'family_file')] });
+  assert.match(v5, /changes\.1\.sizes needs version 6; say "version": 6/);
+  assert.match(v5, /changes\.1\.new_type needs version 6; say "version": 6/);
+  assert.ok(checkChangeList({ version: 5, changes: [wall, omit(door, 'family_file', 'sizes', 'new_type')] }).ok, "a door of version 3's vocabulary still reads as version 5");
+  assert.match(why({ version: 6, changes: [wall, omit(door, 'sizes')] }), /changes\.1\.new_type: names a copy of the type with sizes set on it; give sizes, or leave new_type out/);
+  assert.match(why({ version: 6, changes: [wall, { ...door, sizes: { Width: { value: 40_000, unit: 'm' } } }] }), /changes\.1\.sizes\["Width"\]: beyond Revit's model extent/);
+  assert.match(
+    why({ version: 6, changes: [wall, door, { ...footing, family_file: 'Single-Flush.rfa' }] }),
+    /changes\.2\.family_file: names "Single-Flush\.rfa", which change 2 \(add_door\) names for a Doors family; an add_footing's family is in the Structural Foundations category, so one family file cannot serve both/,
+  );
+  assert.match(
+    why({ version: 6, changes: [pile, wall, { ...door, family_file: 'Pile-Steel Pipe.rfa' }] }),
+    /changes\.2\.family_file: names "Pile-Steel Pipe\.rfa", which change 1 \(add_pile\) names for a Structural Foundations family; an add_door's family is in the Doors category/,
+  );
+  assert.ok(checkChangeList({ version: 6, changes: [footing, { ...pile, family_file: 'Footing-Rectangular.rfa' }] }).ok, 'a footing and a pile share the Structural Foundations category');
+  const nine = [...Array.from({ length: 5 }, (_, i) => ({ ...door, id: `d${i}`, family_file: `Door-${i}.rfa` })), ...Array.from({ length: 4 }, (_, i) => ({ ...footing, id: `f${i}`, family_file: `Footing-${i}.rfa` }))];
+  assert.match(why({ version: 6, changes: [wall, ...nine] }), new RegExp(`the list names 9 family files; the most one list may name is ${MAX_FAMILY_FILES}`), 'doors and foundations count together');
+  const ok = checkChangeList({ version: 6, changes: [wall, door, { ...door, id: 'd2', point: { x: 4000, y: 0, unit: 'mm' } }, footing] });
+  assert.ok(ok.ok, ok.ok ? '' : ok.errors.join('; '));
+  assert.deepEqual(ok.ok && ok.family_files, ['Single-Flush.rfa', 'Footing-Rectangular.rfa'], "a door's family file travels as a foundation's, each once, in the order the list first names it");
+});
+
+test('each family file is in the category its changes need: Doors for add_door, Structural Foundations for add_footing and add_pile', () => {
+  assert.deepEqual(FAMILY_FILE_CATEGORIES, { add_door: 'Doors', add_footing: 'Structural Foundations', add_pile: 'Structural Foundations' });
+  const list = { version: 6, changes: [
+    { kind: 'add_door', host: { global_id: GID }, point: { x: 0, y: 0, unit: 'ft' }, coordinates: 'internal', door_type: { type: 'D' }, family_file: 'D.rfa' },
+    { kind: 'add_pile', level: { level_name: 'L1' }, point: { x: 0, y: 0, unit: 'ft' }, coordinates: 'internal', pile_type: { type: 'P' }, family_file: 'P.rfa' },
+    { kind: 'add_door', host: { global_id: GID }, point: { x: 1, y: 0, unit: 'ft' }, coordinates: 'internal', door_type: { type: 'D' }, family_file: 'D.rfa' },
+  ] } as ChangeList;
+  assert.deepEqual(familyFilesOf(list), ['D.rfa', 'P.rfa']);
+});
+
+test("the schema says a family file's family is in the category its changes need, and that a door, as a foundation, may come from one and be sized as a new type", () => {
+  const defs = schema.$defs as Record<string, { description?: string; properties?: Record<string, { $ref?: string }> }>;
+  const file = String(defs.FamilyFile?.description);
+  assert.match(file, /in the category the change naming it needs: Doors for add_door, Structural Foundations for add_footing and add_pile/);
+  assert.match(file, /a list that names one from a door and from a foundation is refused/);
+  const door = defs.AddDoor;
+  assert.equal(door?.properties?.family_file?.$ref, '#/$defs/FamilyFile');
+  assert.equal(door?.properties?.sizes?.$ref, '#/$defs/FoundationSizes', "a door's sizes are a foundation's: one def");
+  assert.equal(door?.properties?.new_type?.$ref, '#/$defs/NewTypeName');
+  assert.match(String(door?.description), /family_file, sizes and new_type need version 6/);
+  assert.match(String(door?.description), /a type the model holds is never changed/);
+  assert.match(String(defs.FoundationSizes?.description), /The sizes a door or foundation change sets/);
+  assert.match(String(defs.FoundationSizes?.description), /a door's sizes may be one, and need not/);
+  assert.match(String(defs.NewTypeName?.description), /The name of the type a door or foundation is placed from/);
+  const version = schema.properties as Record<string, { description?: string }>;
+  assert.match(String(version.version?.description), /Version 6 \(flo2-rvt 0\.15\.0, add-in 0\.14\.0\) adds add_door's family_file, sizes and new_type/);
 });
