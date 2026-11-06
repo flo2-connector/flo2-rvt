@@ -13,7 +13,12 @@
 // add-in holds them to (Logic/Foundations.cs, ChangeListCheck.cs): a footing's or pile's point,
 // its top_offset and every size within the model extent; new_type only beside sizes; a wall
 // footing's wall_change exactly one add_wall change before it; and at most MAX_FAMILY_FILES family
-// files in one list, which flo2.io hands over with the job (contract.ts JobContext.families).
+// files in one list, which flo2.io hands over with the job (contract.ts JobContext.families). Since
+// flo2-rvt 0.14.0, version 5's add_level says version 5, its elevation lies within the model extent,
+// and no two add_level changes of one list name the same new level (the add-in holds the same,
+// ChangeListCheck.cs; that no level of the model holds the name is the add-in's to judge, with the
+// model before it, Logic/NewLevels.cs). A new model's first list must add something (addsSomething):
+// the new-model job refuses one that does not (jobs.ts startNewModel; the add-in, Logic/NewModel.cs).
 //
 // ⭐ ITS CANONICAL FORM: the JSON with every object's keys sorted, no whitespace. That is the
 // exact byte string flo2-rvt uploads as changes.json, and its SHA-256 is the change list's
@@ -47,6 +52,8 @@ export const CONSTRAINTS_VERSION = 2;
 export const ADD_ELEMENTS_VERSION = 3;
 /** The first change-list version that reads add_footing, add_wall_footing and add_pile (flo2-rvt 0.12.0). */
 export const FOUNDATIONS_VERSION = 4;
+/** The first change-list version that reads add_level (flo2-rvt 0.14.0). */
+export const LEVELS_VERSION = 5;
 /** The most family files (family_file, counted once each) one list may name (the add-in's FamilyFiles.Max). */
 export const MAX_FAMILY_FILES = 8;
 /** How close two points must be to be one, in feet (the add-in's Placement.ToleranceFt, LevelMoves.ToleranceFt). */
@@ -133,6 +140,13 @@ export function outlineProblem(o: readonly XY[]): string | null {
 
 /** The change kinds that add a foundation (change-list version 4). */
 export const FOUNDATION_KINDS = ['add_footing', 'add_wall_footing', 'add_pile'] as const;
+/** Every change kind that adds something to the model: a level (version 5), an element (3) or a foundation (4). The add-in's ReportCheck.Adds. */
+export const ADDING_KINDS = ['add_level', 'add_wall', 'add_floor', 'add_room', 'add_door', ...FOUNDATION_KINDS] as const;
+
+/** Whether the list adds anything: what a new model's first list must do, since an empty model is not a result anyone asked for. */
+export function addsSomething(list: ChangeList): boolean {
+  return list.changes.some((c) => (ADDING_KINDS as readonly string[]).includes(c.kind));
+}
 
 /**
  * The family files a list names, each once, in the order the list first names them: the n-th
@@ -199,7 +213,16 @@ export function checkChangeList(value: unknown): CheckedChangeList {
     extent(`changes.${i}.point`, pointFeet(c.point));
     if (c.top_offset !== undefined) lengthWithin(`changes.${i}.top_offset`, c.top_offset);
   };
+  // Each new level's name, with the change that adds it first: no two add_level changes may name one.
+  const newLevels = new Map<string, number>();
   list.changes.forEach((c, i) => {
+    if (c.kind === 'add_level') {
+      if (list.version < LEVELS_VERSION) errors.push(`changes.${i}.kind: add_level needs version ${LEVELS_VERSION}; say "version": ${LEVELS_VERSION}`);
+      lengthWithin(`changes.${i}.elevation`, c.elevation);
+      const first = newLevels.get(c.name);
+      if (first !== undefined) errors.push(`changes.${i}.name: names the level ${JSON.stringify(c.name)}, which change ${first + 1} adds already; each new level is named once`);
+      else newLevels.set(c.name, i);
+    }
     if (c.kind === 'delete_elements_by_global_id') references += c.elements.length;
     if ((c.kind === 'delete_elements_on_level' || c.kind === 'set_level_elevation' || c.kind === 'add_wall' || c.kind === 'add_floor' || c.kind === 'add_room') && 'global_id' in c.level) references += 1;
     if (c.kind === 'move_levels_together') references += c.levels.filter((l) => 'global_id' in l).length;

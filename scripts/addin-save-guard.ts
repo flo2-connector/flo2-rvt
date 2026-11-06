@@ -12,7 +12,11 @@
 //     Document.EditFamily returned (never the model), which it closes without saving
 //     (.Close(false)); it commits nothing and calls no other save;
 //   · the probe's own files (addin/src/Jobs/ProbeJob.cs, addin/src/Probe/) never name
-//     ChangeRunner, SaveResult or EditJob, so nothing the probe runs can commit or save the model.
+//     ChangeRunner, SaveResult or EditJob, so nothing the probe runs can commit or save the model;
+//   · since add-in 0.13.0, a new project document (Application.NewProjectDocument, the new-model
+//     job's model) is made only in addin/src/Jobs/JobBox.cs, the one place a model is opened, which
+//     closes every model it opens or makes without saving it (.Close(false)); the model a new-model
+//     job keeps is saved, as an edit's is, by the one save path.
 //
 // Comments are read past (a comment may name the calls it explains); everything else counts.
 //
@@ -26,6 +30,9 @@ const ROOT = fileURLToPath(new URL('..', import.meta.url));
 export const COMMIT_FILE = 'addin/src/Edit/ChangeRunner.cs';
 export const SAVE_FILE = 'addin/src/Edit/SaveResult.cs';
 export const FAMILY_SAVE_FILE = 'addin/src/Probe/FamilySave.cs';
+export const NEW_MODEL_FILE = 'addin/src/Jobs/JobBox.cs';
+const NEW_PROJECT = /\.NewProjectDocument\(/;
+const CLOSE = /\.Close\(([^)]*)\)/g;
 const COMMIT = /\.Commit\(|\.Assimilate\(/;
 const SAVE = /\.Save\(|\.SaveAs\(|SynchronizeWithCentral|RelinquishOwnership/;
 const SAVE_AS = /\.SaveAs\(/g;
@@ -114,6 +121,10 @@ export function checkSources(files: Record<string, string>): Finding[] {
       if (file === SAVE_FILE && (/\.Save\(/.test(text) || /SynchronizeWithCentral/.test(text))) findings.push({ file, line, rule: 'the save path saves once, with SaveAs, as a new file' });
       if (file === SAVE_FILE) saveAsCalls += (text.match(SAVE_AS) ?? []).length;
       if (PROBE_FILES.test(file) && EDIT_PATHS.test(text)) findings.push({ file, line, rule: 'the probe never reaches the edit job, its commit or its save' });
+      if (NEW_PROJECT.test(text) && file !== NEW_MODEL_FILE) findings.push({ file, line, rule: `a new project document is made only in ${NEW_MODEL_FILE}` });
+      if (file === NEW_MODEL_FILE) {
+        for (const m of text.matchAll(CLOSE)) if ((m[1] as string).trim() !== 'false') findings.push({ file, line, rule: 'the job box closes every model it opens or makes without saving it (.Close(false))' });
+      }
     });
   }
   if (SAVE_FILE in files && saveAsCalls !== 1) findings.push({ file: SAVE_FILE, line: 0, rule: `the save path holds exactly one SaveAs call (it holds ${saveAsCalls})` });
@@ -152,5 +163,5 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     console.error('The add-in commits and saves only on the edit job\'s one path, and the probe never reaches it.');
     process.exit(1);
   }
-  console.log(`${Object.keys(files).length} add-in files: commits only in ${COMMIT_FILE}, one save of the model in ${SAVE_FILE}, which the probe never reaches, and one save of a family document in ${FAMILY_SAVE_FILE}`);
+  console.log(`${Object.keys(files).length} add-in files: commits only in ${COMMIT_FILE}, one save of the model in ${SAVE_FILE}, which the probe never reaches, one save of a family document in ${FAMILY_SAVE_FILE}, and a new model made only in ${NEW_MODEL_FILE}`);
 }

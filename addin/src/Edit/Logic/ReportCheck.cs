@@ -22,7 +22,10 @@
 //   · (since 0.11.0) a foundation change's element is the kind it asked for (a footing, a pile, a
 //     wall footing), and one read applied is all that was asked (Logic/Foundations.cs
 //     FoundationCheck): its top where top_offset put it, each size asked as Revit holds it, a pile
-//     written to IFC as an IfcPile and a footing as an IfcFooting, a wall footing under a wall.
+//     written to IFC as an IfcPile and a footing as an IfcFooting, a wall footing under a wall;
+//   · (since 0.13.0) an add_level change's element is a new level, and one read applied is all that
+//     was asked (Logic/NewLevels.cs Problems): named as asked, where it was asked to stand, a
+//     building storey with its storey's GlobalId.
 //
 // The lists are read as the report lists them: past ElementTally.Cap a set is truncated, and
 // only its listed elements are checked.
@@ -153,10 +156,10 @@ namespace Flo2Rvt.Addin.Edit.Logic
             }
         }
 
-        /// <summary>The kinds of change that add an element (change-list version 3, and since add-in 0.11.0 version 4's foundations).</summary>
+        /// <summary>The kinds of change that add an element (change-list version 3, since add-in 0.11.0 version 4's foundations, and since 0.13.0 version 5's levels).</summary>
         public static bool Adds(string kind)
         {
-            return kind == ChangeKinds.AddWall || kind == ChangeKinds.AddFloor || kind == ChangeKinds.AddRoom || kind == ChangeKinds.AddDoor || Founds(kind);
+            return kind == ChangeKinds.AddWall || kind == ChangeKinds.AddFloor || kind == ChangeKinds.AddRoom || kind == ChangeKinds.AddDoor || Founds(kind) || kind == ChangeKinds.AddLevel;
         }
 
         /// <summary>The kinds of change that add a foundation (change-list version 4).</summary>
@@ -165,10 +168,10 @@ namespace Flo2Rvt.Addin.Edit.Logic
             return kind == ChangeKinds.AddFooting || kind == ChangeKinds.AddWallFooting || kind == ChangeKinds.AddPile;
         }
 
-        /// <summary>The kinds whose points a change names in its coordinates (a wall footing names none: it follows its wall).</summary>
+        /// <summary>The kinds whose points a change names in its coordinates (a wall footing names none: it follows its wall; a level names none: it is a height).</summary>
         public static bool Places(string kind)
         {
-            return Adds(kind) && kind != ChangeKinds.AddWallFooting;
+            return Adds(kind) && kind != ChangeKinds.AddWallFooting && kind != ChangeKinds.AddLevel;
         }
 
         /// <summary>Since add-in 0.10.0: what a change added.</summary>
@@ -190,7 +193,20 @@ namespace Flo2Rvt.Addin.Edit.Logic
                 }
                 if (e.Room != null && r.Status == ChangeStatus.Applied && !(e.Room.AreaFt2 > 0)) found.Add(at + "reads applied though room " + (e.Room.Number ?? e.ElementId.ToString(CultureInfo.InvariantCulture)) + " has no area: it is not enclosed");
                 Founded(r, e, at, found);
+                Leveled(r, e, at, found);
             }
+        }
+
+        /// <summary>Since add-in 0.13.0: an add_level change's element is a new level, and all that was asked when it reads applied.</summary>
+        private static void Leveled(ChangeReport r, AddedElement e, string at, List<string> found)
+        {
+            if (r.Kind != ChangeKinds.AddLevel) return;
+            if (e.NewLevel == null)
+            {
+                found.Add(at + "element " + e.ElementId.ToString(CultureInfo.InvariantCulture) + " of an add_level change is not named as a new level");
+                return;
+            }
+            if (r.Status == ChangeStatus.Applied) foreach (string p in NewLevels.Problems(e.NewLevel, e.NewLevel.Name)) found.Add(at + "reads applied though " + p);
         }
 
         /// <summary>Since add-in 0.11.0: a foundation change's element, of its kind, and all that was asked when it reads applied.</summary>

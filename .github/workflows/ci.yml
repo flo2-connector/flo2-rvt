@@ -45,7 +45,9 @@ jobs:
       # edit job's one path commits (Edit/ChangeRunner.cs) and saves a model (Edit/SaveResult.cs,
       # one SaveAs, a new file); since add-in 0.12.0 a family document the probe saves out of the
       # model is saved only in Probe/FamilySave.cs (one SaveAs, on the document EditFamily opened,
-      # closed unsaved). The rule, and its tests, are scripts/addin-save-guard.ts.
+      # closed unsaved); since add-in 0.13.0 a new model is made (NewProjectDocument) only in the job
+      # box, Jobs/JobBox.cs, which closes every model unsaved. The rule, and its tests, are
+      # scripts/addin-save-guard.ts.
       - name: The add-in commits and saves a model only on the edit job's one path, and a family document only in the probe's family save
         run: node scripts/addin-save-guard.ts
       # Reference assemblies only (Revit 2024 API and IFC API, the Design Automation bridge, .NET 4.8), from NuGet.

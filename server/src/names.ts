@@ -14,6 +14,14 @@ export const PROBE_NAME = 'Flo2RvtProbe';
 export const APPBUNDLE_NAME = PROBE_NAME;
 /** The edit Activity's unqualified id. */
 export const EDIT_NAME = 'Flo2RvtEdit';
+/**
+ * Since flo2-rvt 0.14.0 (add-in 0.13.0): the new-model job's Activity. Its own, rather than the edit
+ * Activity with no model: the edit Activity's model input stays required, so Design Automation itself
+ * fails an edit that lost its model before Revit starts, and an edit can never quietly become a new
+ * model; the add-in tells the jobs apart by the files each Activity hands over (JobSelection.cs), and
+ * no Activity but this one has a parameter that puts new-model.json in the working folder.
+ */
+export const NEW_MODEL_NAME = 'Flo2RvtNew';
 /** The alias every AppBundle and Activity uses. */
 export const ALIAS = 'prod';
 /** The AppBundle zip CI builds (addin/dist/) and a setup uploads. */
@@ -28,12 +36,13 @@ export const BUNDLE_FILE = 'Flo2RvtProbe.bundle.zip';
  * stair, 0.10.0 new content: walls, floors, rooms and doors added, and the probe's types, rooms and
  * coordinates, 0.11.0 foundations: footings, wall footings and piles added, family files loaded,
  * and the probe's foundation types with their sizes, 0.12.0 the probe saves the families a person
- * names out of the model as .rfa files), and it is what a person's app must carry
+ * names out of the model as .rfa files, 0.13.0 a new model made from Revit's own project or a template
+ * file and filled in one job, and add_level), and it is what a person's app must carry
  * for a job to run there: a setup writes it into the AppBundle's and each Activity's
  * description, and a job's check reads it back (server/src/setup.ts). It is not the bundle's
  * sha256, which changes with every CI build of the same add-in.
  */
-export const ADDIN_VERSION = '0.12.0';
+export const ADDIN_VERSION = '0.13.0';
 
 /** What a setup ends each description with, so a check can read which add-in an Activity runs. */
 export function setupMark(addinVersion = ADDIN_VERSION): string {
@@ -51,8 +60,8 @@ export function appBundleIdFor(owner: string): string {
   return `${owner}.${APPBUNDLE_NAME}+${ALIAS}`;
 }
 
-/** flo2-rvt's jobs. */
-export type JobKind = 'probe' | 'edit';
+/** flo2-rvt's jobs: since 0.14.0 `new`, a new model made and filled in one job. */
+export type JobKind = 'probe' | 'edit' | 'new';
 
 /**
  * The OAuth scopes a job's token needs, and nothing more:
@@ -181,10 +190,50 @@ export function familyInput(n: number): { parameter: string; name: string } {
   return { parameter: `family${n}`, name: `family${n}.rfa` };
 }
 
+/**
+ * Since flo2-rvt 0.14.0 (add-in 0.13.0): what a new model starts from, handed to the add-in as the
+ * new-model Activity's required input `newModel`, `new-model.json`, in canonical form:
+ * `{"from":"no_template","units":"imperial"|"metric","version":1}` (Revit's own project with no
+ * template, Application.NewProjectDocument(UnitSystem)) or `{"from":"template","template_file":"<the
+ * design's name for it>","version":1}` (Application.NewProjectDocument(path), the template handed over
+ * as the optional input `template`, `template.rte`). The template is a plain input the add-in opens
+ * itself: no Activity's command line has /i, so the engine never opens it, and a template handed over
+ * as /i is opened and locked by Design Automation and NewProjectDocument then throws (Autodesk's APS
+ * blog, Xiaodong Liang, 2019-03-20, "When working with NewProjectDocument by Automation API";
+ * Autodesk's Design Automation troubleshooting page says the same of a model: leave /i out and open
+ * it in the add-in by its localName).
+ */
+export const NEW_MODEL_PARAMETER = 'newModel';
+export const NEW_MODEL_SPEC_NAME = 'new-model.json';
+export const TEMPLATE_PARAMETER = 'template';
+export const TEMPLATE_NAME = 'template.rte';
+/** The most bytes a template may be (the contract's template.size): an office template is tens of MiB. */
+export const MAX_TEMPLATE_BYTES = 128 * 1024 * 1024;
+/**
+ * Whether a name is one a template file may have: a Revit project template (.rte) by its file name,
+ * 1 to 200 characters before `.rte`, with no folder, none of < > : " / \\ | ? * and no control
+ * character (as the change list's FamilyFile is a .rfa's).
+ */
+export function isTemplateFile(name: string): boolean {
+  const m = /^(.{1,200})\.[Rr][Tt][Ee]$/su.exec(name);
+  return !!m && !/[<>:"/\\|?*]/.test(m[1] as string) && ![...(m[1] as string)].some((ch) => ch.codePointAt(0)! < 0x20);
+}
+/** The units a new model with no template is made in: Revit's UnitSystem, Imperial or Metric. */
+export const NEW_MODEL_UNITS = ['imperial', 'metric'] as const;
+
+/** The new-model job's outputs: an edit's, of a model made in the job. model.rvt is optional: a list none of whose changes was kept saves none. */
+export const NEW_MODEL_OUTPUTS: readonly OutputSpec[] = [
+  { name: 'report.json', parameter: 'report', contentType: 'application/json', required: true, description: 'What the new model started from, what each change added or could not do and why, and every wall, floor, door and foundation type the new model holds.' },
+  { name: 'model.rvt', parameter: 'result', contentType: 'application/octet-stream', required: false, description: 'The NEW model, made from Revit\'s own project or a template and saved with the changes kept. Absent when no change was kept.' },
+  { name: 'sheets.pdf', parameter: 'sheets', contentType: 'application/pdf', required: false, description: "The new model's printable sheets in one PDF. Absent when it has none (a model made from no template has none), or no change was kept." },
+  { name: 'model.ifc', parameter: 'ifc', contentType: 'application/x-step', required: false, description: "Revit's own IFC export of the new model, IFC4 Design Transfer View with base quantities. Absent when no change was kept." },
+];
+
 /** Each job's Activity, inputs beyond the model, and outputs. */
 export const JOBS: Readonly<Record<JobKind, { activity: string; outputs: readonly OutputSpec[]; changeList: boolean }>> = {
   probe: { activity: PROBE_NAME, outputs: OUTPUTS, changeList: false },
   edit: { activity: EDIT_NAME, outputs: EDIT_OUTPUTS, changeList: true },
+  new: { activity: NEW_MODEL_NAME, outputs: NEW_MODEL_OUTPUTS, changeList: true },
 };
 /** The one object that is not in the contract's list: the WorkItem id, so a status call after a restart can find the job. */
 export const RECORD_NAME = 'workitem.json';
@@ -194,10 +243,10 @@ export function objectKey(jobId: string, name: string): string {
   return `${jobId}/${name}`;
 }
 
-/** The fully qualified Activity a WorkItem names: `<nickname>.Flo2RvtProbe+prod`, or `<nickname>.Flo2RvtEdit+prod`. */
+/** The fully qualified Activity a WorkItem names: `<nickname>.Flo2RvtProbe+prod`, `<nickname>.Flo2RvtEdit+prod` or `<nickname>.Flo2RvtNew+prod`. */
 export function activityIdFor(nickname: string, kind: JobKind = 'probe'): string {
   return `${nickname}.${JOBS[kind].activity}+${ALIAS}`;
 }
 
-/** What both Activities' command line runs. The add-in opens `input.rvt` itself (no `/i`). */
+/** What every Activity's command line runs. The add-in opens `input.rvt` itself, or makes a new model (no `/i`). */
 export const COMMAND_LINE = `$(engine.path)\\\\revitcoreconsole.exe /al "$(appbundles[${APPBUNDLE_NAME}].path)"`;

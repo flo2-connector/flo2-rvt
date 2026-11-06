@@ -17,7 +17,10 @@
 // sizes name 1 to 16 parameters, each once; new_type comes only beside sizes; a wall footing's
 // wall_change names exactly one add_wall change before it; and a list names at most
 // FamilyFiles.Max family files (Logic/Foundations.cs). The typed reader reads sizes, a JSON
-// object of names, as a dictionary (UseSimpleDictionaryFormat).
+// object of names, as a dictionary (UseSimpleDictionaryFormat). Since add-in 0.13.0, version 5's
+// add_level needs version 5, its elevation lies within the model extent, and no two add_level
+// changes of one list name the same new level (that no level of the model holds the name is judged
+// with the model before it, Logic/NewLevels.cs).
 //
 // PURE LOGIC: no Revit type here, so addin/tests runs it on any OS.
 
@@ -61,6 +64,8 @@ namespace Flo2Rvt.Addin.Edit.Logic
         public const long AddElementsVersion = 3;
         /// <summary>The first change-list version that reads add_footing, add_wall_footing and add_pile (add-in 0.11.0).</summary>
         public const long FoundationsVersion = 4;
+        /// <summary>The first change-list version that reads add_level (add-in 0.13.0).</summary>
+        public const long LevelsVersion = 5;
         /// <summary>The most sizes one foundation change may set.</summary>
         public const int MaxSizes = 16;
 
@@ -69,6 +74,7 @@ namespace Flo2Rvt.Addin.Edit.Logic
         private static readonly Regex FamilyFilePattern = new Regex(ChangeListSchema.FamilyFilePattern, RegexOptions.CultureInvariant);
         private static readonly string[] UnitNames = { LengthUnitValues.Mm, LengthUnitValues.M, LengthUnitValues.Ft, LengthUnitValues.In };
         private static readonly string[] Datums = { SetLevelElevationRelativeToValues.ProjectOrigin, SetLevelElevationRelativeToValues.ElevationBase };
+        private static readonly string[] LevelDatums = { AddLevelRelativeToValues.ProjectOrigin, AddLevelRelativeToValues.ElevationBase };
         private static readonly string[] Systems = { CoordinatesValues.Shared, CoordinatesValues.Internal };
         private static readonly string[] Joins = { WallJoinsValues.Join, WallJoinsValues.DoNotJoin };
 
@@ -140,6 +146,8 @@ namespace Flo2Rvt.Addin.Edit.Logic
             private int current;
             /// <summary>The family files the list names, each once (Logic/Foundations.cs FamilyFiles).</summary>
             private readonly List<string> familyFiles = new List<string>();
+            /// <summary>Since add-in 0.13.0: each new level's name, with the change that adds it first.</summary>
+            private readonly Dictionary<string, int> newLevels = new Dictionary<string, int>(StringComparer.Ordinal);
 
             public Walk(List<string> errors)
             {
@@ -418,6 +426,24 @@ namespace Flo2Rvt.Addin.Edit.Logic
                         if (m.TryGetValue("wall", out x)) WallNamed(x, at + ".wall", "name the wall once: by global_id or by wall_change");
                         if (m.TryGetValue("wall_footing_type", out x)) TypeNamed(x, at + ".wall_footing_type");
                         Sized(m, at);
+                        break;
+                    case ChangeKinds.AddLevel:
+                        m = Object(e, at, new[] { "kind", "id", "name", "elevation", "relative_to" }, new[] { "kind", "name", "elevation", "relative_to" });
+                        if (m == null) return;
+                        if (version < LevelsVersion) Fail(at + ".kind", kind + " needs version " + LevelsVersion + "; say \"version\": " + LevelsVersion);
+                        if (m.TryGetValue("name", out x))
+                        {
+                            string name = Text(x, at + ".name", 1, 256, null);
+                            int first;
+                            if (name != null && newLevels.TryGetValue(name, out first)) Fail(at + ".name", "names the level " + Quote(name) + ", which change " + (first + 1) + " adds already; each new level is named once");
+                            else if (name != null) newLevels[name] = current;
+                        }
+                        if (m.TryGetValue("elevation", out x)) Length(x, at + ".elevation");
+                        if (m.TryGetValue("relative_to", out x))
+                        {
+                            string datum = Text(x, at + ".relative_to", 1, 64, null);
+                            if (datum != null && Array.IndexOf(LevelDatums, datum) < 0) Fail(at + ".relative_to", "must be one of " + string.Join(", ", LevelDatums));
+                        }
                         break;
                     default:
                         Fail(at, "kind " + Quote(kind) + " is not in the vocabulary (" + string.Join(", ", ChangeKinds.All) + ")");

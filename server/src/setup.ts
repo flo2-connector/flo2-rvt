@@ -27,7 +27,8 @@
 // runs) with the AppBundle this server holds: CI's build for this server's commit, put beside it
 // by flo2.io's install with its sha256 checked (ops/flo2-rvt-install in the flo2 repo). Its bytes
 // are read and hashed at each use and must match the sha256 beside them and the sha256 the person
-// approved; then the AppBundle and its prod alias, both Activities and their prod aliases, and
+// approved; then the AppBundle and its prod alias, every Activity (the probe's, the edit's and, since
+// add-in 0.13.0, the new-model job's) and their prod aliases, and
 // Autodesk's monthly cap. GET, POST, PATCH and PUT only: never DELETE.
 //
 // ⭐ IT NEVER SETS A NICKNAME (since 0.5.1; 6ab9996ca4bdbc45:fact:root-cause-a-persons-first-setup-
@@ -143,7 +144,7 @@ export function judgeActivity(owner: string, kind: JobKind, got: Record<string, 
 }
 
 /** The jobs a check reads the Activities of. */
-const kindsOf = (job: JobKind | 'all'): JobKind[] => (job === 'all' ? ['probe', 'edit'] : [job]);
+const kindsOf = (job: JobKind | 'all'): JobKind[] => (job === 'all' ? ['probe', 'edit', 'new'] : [job]);
 
 /** rvt_setup_check: whether the app holds what the job needs, by GETs alone, and what a setup would do. */
 export async function checkSetup(ctx: ApsContext, clientId: string, job: JobKind | 'all', opts: { plan: boolean; bundle: BundleState }): Promise<SetupCheckResult> {

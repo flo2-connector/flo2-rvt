@@ -1,4 +1,4 @@
-// GENERATED from schema/change-list.schema.json (sha256 884b503029e97edef488fc7dd98136fd7197f276f0a6bc5f54eea3f95a58158c) by scripts/gen-types.ts.
+// GENERATED from schema/change-list.schema.json (sha256 6735495a23075ab873a4a4acbe4df027f80a9c4cbd8a50fcc69ba3decf9b405f) by scripts/gen-types.ts.
 // Do not edit: change the schema and run `npm run gen`.
 
 /**
@@ -18,7 +18,8 @@ export type Change =
   | AddDoor
   | AddFooting
   | AddWallFooting
-  | AddPile;
+  | AddPile
+  | AddLevel;
 /**
  * An optional id for one change, echoed in the job's report next to what Revit did with it.
  *
@@ -112,7 +113,7 @@ export type NewTypeName = string;
 export type WallReference = GlobalIdReference | WallChangeReference;
 
 /**
- * A list of changes for one Revit model, in flo2-rvt's fixed vocabulary. The agent writes only this data; one reviewed add-in maps each change kind to the Revit API. Version 0 defined the envelope, the element reference and three change kinds; version 1 adds move_levels_together and set_level_elevation's groups_in_the_way; version 2 adds a level move's constraints_in_the_way; version 3 adds new content, add_wall, add_floor, add_room and add_door, each placed from the model's own loaded types; version 4 adds foundations, add_footing, add_wall_footing and add_pile, each from a type the model holds or, for a footing or pile, a family file the design keeps. flo2-rvt's edit job runs the changes in order, each in its own transaction, saving the result as a NEW .rvt and never changing the input.
+ * A list of changes for one Revit model, in flo2-rvt's fixed vocabulary. The agent writes only this data; one reviewed add-in maps each change kind to the Revit API. Version 0 defined the envelope, the element reference and three change kinds; version 1 adds move_levels_together and set_level_elevation's groups_in_the_way; version 2 adds a level move's constraints_in_the_way; version 3 adds new content, add_wall, add_floor, add_room and add_door, each placed from the model's own loaded types; version 4 adds foundations, add_footing, add_wall_footing and add_pile, each from a type the model holds or, for a footing or pile, a family file the design keeps; version 5 adds add_level, a level by name at an elevation. flo2-rvt's edit job runs the changes in order, each in its own transaction, saving the result as a NEW .rvt and never changing the input; its new-model job (flo2-rvt 0.14.0) runs a list the same way on a model it has just made, from Revit's own no-template project or a template file.
  */
 export interface ChangeList {
   /**
@@ -120,9 +121,9 @@ export interface ChangeList {
    */
   $schema?: string;
   /**
-   * The change-list format version. A new change kind or field that an older add-in could not read bumps it. Version 1 (flo2-rvt 0.6.0, add-in 0.5.0) adds move_levels_together and set_level_elevation's groups_in_the_way, and a list that uses either says 1; a list of version 0's vocabulary reads as it always did, as version 0 or 1. Version 2 (flo2-rvt 0.7.0, add-in 0.6.0) adds a level move's constraints_in_the_way, and a list that uses it says 2; every list of version 1 reads as it did, as version 1 or 2. Version 3 (flo2-rvt 0.11.0, add-in 0.10.0) adds add_wall, add_floor, add_room and add_door, and a list that uses any of them says 3; every list of version 2 reads as it did, as version 2 or 3. Version 4 (flo2-rvt 0.12.0, add-in 0.11.0) adds add_footing, add_wall_footing and add_pile, and a list that uses any of them says 4; every list of version 3 reads as it did, as version 3 or 4.
+   * The change-list format version. A new change kind or field that an older add-in could not read bumps it. Version 1 (flo2-rvt 0.6.0, add-in 0.5.0) adds move_levels_together and set_level_elevation's groups_in_the_way, and a list that uses either says 1; a list of version 0's vocabulary reads as it always did, as version 0 or 1. Version 2 (flo2-rvt 0.7.0, add-in 0.6.0) adds a level move's constraints_in_the_way, and a list that uses it says 2; every list of version 1 reads as it did, as version 1 or 2. Version 3 (flo2-rvt 0.11.0, add-in 0.10.0) adds add_wall, add_floor, add_room and add_door, and a list that uses any of them says 3; every list of version 2 reads as it did, as version 2 or 3. Version 4 (flo2-rvt 0.12.0, add-in 0.11.0) adds add_footing, add_wall_footing and add_pile, and a list that uses any of them says 4; every list of version 3 reads as it did, as version 3 or 4. Version 5 (flo2-rvt 0.14.0, add-in 0.13.0) adds add_level, and a list that uses it says 5; every list of version 4 reads as it did, as version 4 or 5.
    */
-  version: 0 | 1 | 2 | 3 | 4;
+  version: 0 | 1 | 2 | 3 | 4 | 5;
   /**
    * An optional id the author gives the list, echoed in the job's report.
    */
@@ -421,6 +422,25 @@ export interface AddPile {
   sizes?: FoundationSizes;
   new_type?: NewTypeName;
   top_offset?: TopOffset;
+}
+/**
+ * Add a level by name at an elevation, as drawing a level in Revit does (Level.Create): a new datum with its Building Story setting on, so Revit's IFC export writes an IfcBuildingStorey for it. Its name must be one no level of the model holds (case and spaces count), and no other add_level of the list may name it. Its elevation is measured as set_level_elevation's is: from the project origin (Revit's ProjectElevation) or from the level's Elevation Base (Revit's Elevation); in a new model the two are the same. Later changes of the same list place walls, floors, rooms, doors and foundations on it by its name (level_name). Nothing else is made: no plan view of it. The report names the new level (element id, the GlobalId of the IfcBuildingStorey Revit's export gives it, its elevation both ways as Revit holds it, beside the elevation asked). Usable in any edit, and in a new model's first list. flo2.io requires its elevation, as a wall's height, to be a result of the calc record the edit names (numbers_from). Needs change-list version 5.
+ *
+ * This interface was referenced by `ChangeList`'s JSON-Schema
+ * via the `definition` "AddLevel".
+ */
+export interface AddLevel {
+  kind: 'add_level';
+  id?: ChangeId;
+  /**
+   * The new level's name, exactly as Revit will hold it; later changes name the level by it.
+   */
+  name: string;
+  elevation: Length;
+  /**
+   * What the elevation is measured from: the project origin (Revit's ProjectElevation), or the new level's own Elevation Base setting, which its level type gives (Revit's Elevation).
+   */
+  relative_to: 'project_origin' | 'elevation_base';
 }
 /**
  * A length with its unit. The add-in converts it to Revit's internal feet (1 ft = 304.8 mm exactly).

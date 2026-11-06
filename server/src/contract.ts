@@ -1,11 +1,11 @@
-// The gateway ↔ flo2-rvt contract, v5 (v4, and the families a probe saves out of the model), as types and validators. Everything the
+// The gateway ↔ flo2-rvt contract, v6 (v5, and a new model made and filled in one job), as types and validators. Everything the
 // agent sends is untrusted and bounded here; everything that decides what
 // flo2-rvt does with Autodesk (the token, the client id, the input file and the
 // time limit) comes only from the hidden context the gateway sets.
 
 import * as z from 'zod/v4';
 import { ChangeListShape } from './change-list.ts';
-import { ENGINE, MAX_SAVE_FAMILIES } from './names.ts';
+import { ENGINE, MAX_SAVE_FAMILIES, NEW_MODEL_UNITS } from './names.ts';
 
 /**
  * The contract's version: 1 added rvt_edit_start beside v0's two tools; 2 adds to an edit's
@@ -32,8 +32,17 @@ import { ENGINE, MAX_SAVE_FAMILIES } from './names.ts';
  * `sha256` as the add-in saved it, and the probe's report_summary names `families_saved` and
  * `families_not_saved` (with why). Nothing of v4 changed: a v4 gateway, which sends no
  * save_families, still works, and keeps no family output, since it is not one it knows.
+ * 6 (flo2-rvt 0.14.0, add-in 0.13.0) adds a NEW MODEL made and filled in one job: the tool
+ * rvt_new_model_start {units | template_file, change_list, max_minutes?}, which takes no model, its
+ * own Activity (Flo2RvtNew, which a setup now registers beside the probe's and the edit's, and
+ * rvt_setup_check's `job` may name, `new`), the hidden context's `template` (TemplateHandover, the
+ * .rte a new model starts from, handed over as a family file is), the start result's `new_model`
+ * (what it starts from, as uploaded), and, on rvt_job_status, a new model's report_summary: an
+ * edit's with `new_model` and `types_held`. Change-list version 5 (add_level) is read by every job
+ * that takes a list. Nothing of v5 changed: a v5 gateway offers no new-model job, and its edits run
+ * as before.
  */
-export const CONTRACT_VERSION = 5;
+export const CONTRACT_VERSION = 6;
 
 /** The `_meta` keys of the contract. */
 export const META_JOB = 'flo2.io/job';
@@ -75,6 +84,28 @@ export const FamilyFileHandover = z.object({
 });
 export type FamilyFileHandover = z.infer<typeof FamilyFileHandover>;
 
+/**
+ * Since contract v6: the TEMPLATE a new model starts from (rvt_new_model_start's template_file),
+ * handed over as a family file is.
+ *
+ *   template_file  exactly the start's template_file (case counts): the name of the .rte the design
+ *                  keeps, which the gateway resolves in the design as it resolves a family file
+ *   download_url   a short-lived link the gateway mints for those bytes
+ *   size           its bytes (names.ts MAX_TEMPLATE_BYTES at most)
+ *   sha256         of its bytes, read when the person was asked: flo2-rvt uploads only these bytes
+ *
+ * flo2-rvt refuses a new model, naming the file, before anything is uploaded, unless `template` is
+ * there exactly when the start names a template_file, and is that file; any other job is refused
+ * when it carries one.
+ */
+export const TemplateHandover = z.object({
+  template_file: z.string().min(1).max(1024),
+  download_url: z.url({ protocol: /^https?$/ }).max(8192),
+  size: z.number().int().positive(),
+  sha256: z.string().regex(/^[0-9a-fA-F]{64}$/),
+});
+export type TemplateHandover = z.infer<typeof TemplateHandover>;
+
 /** Hidden context, set by the gateway on every tools/call as params._meta["flo2.io/job"]. */
 export const JobContextSchema = z.object({
   person_id: z.string().min(1).max(256),
@@ -94,8 +125,10 @@ export const JobContextSchema = z.object({
       sha256: z.string().regex(/^[0-9a-fA-F]{64}$/),
     })
     .optional(),
-  /** Since contract v4, on rvt_edit_start only: the family files the change list names (FamilyFileHandover). */
+  /** Since contract v4, on rvt_edit_start (and since v6 rvt_new_model_start) only: the family files the change list names (FamilyFileHandover). */
   families: z.array(FamilyFileHandover).max(64).optional(),
+  /** Since contract v6, on rvt_new_model_start only, when it names a template_file: the template (TemplateHandover). */
+  template: TemplateHandover.optional(),
   limits: z.object({
     max_processing_sec: z.number().int().positive(),
   }),
@@ -119,6 +152,10 @@ export function expiresAtMs(value: string | number): number {
   if (/^\d+(\.\d+)?$/.test(value)) return expiresAtMs(Number(value));
   return Date.parse(value);
 }
+
+/** What the change list is, in the words both tools that take one show the agent. */
+const CHANGE_LIST_WORDS =
+  "The changes, in flo2-rvt's fixed vocabulary (schema/change-list.schema.json, version 5; a list of an earlier version still reads): delete_elements_on_level, delete_elements_by_global_id, set_level_elevation, move_levels_together (version 1: several levels moved by one offset in one transaction), add_wall, add_floor, add_room and add_door (version 3), add_footing, add_wall_footing and add_pile (version 4, each from a type the model holds or, for a footing or pile, a family file the design keeps, named by family_file), and add_level (version 5: a level by name at an elevation; later changes place on it by its name). Applied in order, each in its own transaction. A level move's groups_in_the_way (version 1) is \"refuse\" unless the list says \"ungroup\", which only the person may agree to.";
 
 /** The agent's arguments to rvt_probe_start. */
 export const ProbeStartArgs = z.object({
@@ -152,9 +189,7 @@ export type ProbeStartResult = z.infer<typeof ProbeStartResult>;
 /** The agent's arguments to rvt_edit_start: the model, the change list, the time limit. */
 export const EditStartArgs = z.object({
   file: z.string().min(1).max(1024).describe('The design file to edit: its name or id in the design, as flo2 lists it. It is never changed: the result is a new model.'),
-  change_list: ChangeListShape.describe(
-    "The changes, in flo2-rvt's fixed vocabulary (schema/change-list.schema.json, version 4; a list of an earlier version still reads): delete_elements_on_level, delete_elements_by_global_id, set_level_elevation, move_levels_together (version 1: several levels moved by one offset in one transaction), add_wall, add_floor, add_room and add_door (version 3), and add_footing, add_wall_footing and add_pile (version 4, each from a type the model holds or, for a footing or pile, a family file the design keeps, named by family_file). Applied in order, each in its own transaction. A level move's groups_in_the_way (version 1) is \"refuse\" unless the list says \"ungroup\", which only the person may agree to.",
-  ),
+  change_list: ChangeListShape.describe(CHANGE_LIST_WORDS),
   max_minutes: z
     .number()
     .int()
@@ -179,9 +214,58 @@ export const EditStartResult = z.object({
 });
 export type EditStartResult = z.infer<typeof EditStartResult>;
 
+/**
+ * Since contract v6: the agent's arguments to rvt_new_model_start. No model: the job makes one, from
+ * Revit's own project with no template in `units`, or from `template_file`, a .rte the design keeps;
+ * exactly one of the two (jobs.ts startNewModel refuses either both or neither, by name).
+ */
+export const NewModelStartArgs = z.object({
+  units: z
+    .enum(NEW_MODEL_UNITS)
+    .optional()
+    .describe(
+      "Start from Revit's own project with NO template (Application.NewProjectDocument(UnitSystem)), in imperial or metric units: no file needed. Its levels and types are Revit's defaults, which the job's report lists (types; levels_at_start); a type the new model does not hold is refused per change, naming those it holds, and families come in through family_file. Give units or template_file, not both.",
+    ),
+  template_file: z
+    .string()
+    .min(1)
+    .max(1024)
+    .optional()
+    .describe(
+      'Start from a Revit project template (.rte, saved by Revit 2024 or older) the design keeps, by its file name in the design (Application.NewProjectDocument(path)): its levels, types, views and units are the new model\'s. flo2.io hands it over with the job, as it hands over a family file. Give units or template_file, not both.',
+    ),
+  change_list: ChangeListShape.describe(`${CHANGE_LIST_WORDS} A new model's first list must add something (add_level, add_wall, add_floor, add_room, add_door, add_footing, add_wall_footing or add_pile): an empty model is not a result anyone asked for. In a new model, shared coordinates are its internal ones, unless its template sets them otherwise (the report's coordinates say).`),
+  max_minutes: z
+    .number()
+    .int()
+    .min(1)
+    .max(30)
+    .default(15)
+    .describe('The most processing minutes the job may use, 1 to 30. Default 15. flo2.io may set a lower limit.'),
+});
+
+export const NewModelStartResult = z.object({
+  job_id: z.string(),
+  state: z.literal('submitted'),
+  engine: z.literal(ENGINE),
+  /** The SHA-256 of the change list as flo2-rvt uploaded it (canonical JSON): what will run. */
+  change_list_sha256: z.string(),
+  /** What the new model starts from, as flo2-rvt handed it to the add-in: no template in its units, or the template uploaded, by its size and sha256. */
+  new_model: z.object({
+    from: z.enum(['no_template', 'template']),
+    units: z.enum(NEW_MODEL_UNITS).optional(),
+    template_file: z.string().optional(),
+    size: z.number().int().optional(),
+    sha256: z.string().optional(),
+  }),
+  /** As an edit's: each family file the list names, as uploaded, with the work item input that carries it. */
+  family_files: z.array(z.object({ family_file: z.string(), input: z.string(), size: z.number().int(), sha256: z.string() })).optional(),
+});
+export type NewModelStartResult = z.infer<typeof NewModelStartResult>;
+
 /** The agent's arguments to rvt_job_status. */
 export const JobStatusArgs = z.object({
-  job_id: z.string().min(1).max(64).describe('The job_id rvt_probe_start or rvt_edit_start returned.'),
+  job_id: z.string().min(1).max(64).describe('The job_id rvt_probe_start, rvt_edit_start or rvt_new_model_start returned.'),
 });
 
 /** A probe's report, counted. */
@@ -224,7 +308,26 @@ export const EditSummary = z.object({
 });
 export type EditSummary = z.infer<typeof EditSummary>;
 
-export const ReportSummary = z.union([ProbeSummary, EditSummary]);
+/**
+ * Since contract v6: a new model's report, counted: an edit's, with what the model started from
+ * (and, when Revit could not make it, why), how many levels Revit's own project or the template gave
+ * it before the list ran, and how many types of each kind it holds (report.json's `types` names
+ * them, as the probe's report does, for the next edit's changes to name).
+ */
+export const NewModelSummary = EditSummary.extend({
+  new_model: z.object({
+    from: z.string(),
+    units: z.string().optional(),
+    template_file: z.string().optional(),
+    created: z.boolean(),
+    error: z.string().optional(),
+    levels_at_start: z.number().int().optional(),
+  }),
+  types_held: z.object({ walls: z.number().int(), floors: z.number().int(), doors: z.number().int(), foundations: z.number().int() }).optional(),
+});
+export type NewModelSummary = z.infer<typeof NewModelSummary>;
+
+export const ReportSummary = z.union([ProbeSummary, NewModelSummary, EditSummary]);
 
 export const JobStatusResult = z.object({
   job_id: z.string(),
@@ -240,7 +343,7 @@ export type JobStatusResult = z.infer<typeof JobStatusResult>;
 
 /** The gateway's arguments to rvt_setup_check: which job's Activity to read (default both), and whether to say what a setup would do. */
 export const SetupCheckArgs = z.object({
-  job: z.enum(['probe', 'edit', 'all']).default('all').describe("Which job's Activity to read: probe, edit, or all (both)."),
+  job: z.enum(['probe', 'edit', 'new', 'all']).default('all').describe("Which job's Activity to read: probe, edit, new (since contract v6, the new-model job's), or all (every one)."),
   plan: z.boolean().default(false).describe('Also say what a setup would do on this app (it keeps a nickname the app has, and sets none).'),
 });
 

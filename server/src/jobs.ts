@@ -25,6 +25,14 @@
 // the add-in as save-families.json on every probe (an empty list when it saves none), and on success
 // each family the report names saved is served as family<n>.rfa with its family, its file name and
 // its sha256 (familyOutputs), the bytes held to the size the report gives.
+//
+// Since 0.14.0 (contract v6) the NEW-MODEL job (startNewModel): no model in; what the model starts
+// from, Revit's own project with no template in `units` or a template file the design keeps
+// (`template_file`, taken from the hidden context's `template` as a family file is taken from
+// `families`), checked before anything is asked of Autodesk, with a list that must add something;
+// then its own Activity (Flo2RvtNew) read first, as every start's, and new-model.json (canonical),
+// the template as template.rte, the list and its family files uploaded; on success an edit's outputs,
+// summarized with what the model started from and the types it holds (newModelSummary).
 
 import { createHash } from 'node:crypto';
 import { ApsError, type ApsContext } from './aps/http.ts';
@@ -40,12 +48,15 @@ import {
 } from './aps/oss.ts';
 import { DA_PATH, createWorkItem, getNickname, getWorkItem, processingSeconds, type XrefArgument } from './aps/da.ts';
 import { apsFetch } from './aps/http.ts';
-import { CHANGE_LIST_SCHEMA, canonicalJson, checkChangeList } from './change-list.ts';
+import { ADDING_KINDS, CHANGE_LIST_SCHEMA, addsSomething, canonicalJson, checkChangeList } from './change-list.ts';
 import {
   expiresAtMs,
   type FamilyFileHandover,
   type EditStartResult,
   type EditSummary,
+  type NewModelStartResult,
+  type NewModelSummary,
+  type TemplateHandover,
   type JobContext,
   type ProbeSummary,
   type JobStatusResult,
@@ -68,14 +79,20 @@ import {
   MAX_FAMILY_FILE_BYTES,
   MAX_SAVED_FAMILY_BYTES,
   MAX_SAVE_FAMILIES,
+  MAX_TEMPLATE_BYTES,
+  NEW_MODEL_PARAMETER,
+  NEW_MODEL_SPEC_NAME,
   RECORD_NAME,
   SAVE_FAMILIES_NAME,
   SAVE_FAMILIES_PARAMETER,
+  TEMPLATE_NAME,
+  TEMPLATE_PARAMETER,
   activityIdFor,
   bucketKeyFor,
   familyInput,
   isFamilyOutput,
   isJobId,
+  isTemplateFile,
   newJobId,
   objectKey,
   type JobKind,
@@ -113,7 +130,7 @@ const FAILURE_TEXT: Record<string, string> = {
   failedUploadOptional: 'An optional result (the PDF, the IFC or the edited model) could not be stored; the others were.',
 };
 
-const KIND_WORD: Record<JobKind, string> = { probe: 'probe', edit: 'edit' };
+const KIND_WORD: Record<JobKind, string> = { probe: 'probe', edit: 'edit', new: 'new-model job' };
 
 interface CachedJob {
   workitemId: string;
@@ -136,6 +153,14 @@ interface JobRecord {
   family_files?: Array<{ input: string; size: number; sha256: string }>;
   /** Since 0.13.0: how many families a probe was asked to save (no names: save-families.json and the report hold them). */
   save_families?: number;
+  /** Since 0.14.0, a new model's: what it starts from (no names: new-model.json and the report hold them). */
+  new_model?: { from: 'no_template' | 'template'; units?: string; template_size?: number; template_sha256?: string };
+}
+
+/** Since 0.14.0: what a new model starts from, as the add-in reads it (new-model.json), and its template as handed over. */
+interface NewModelStart {
+  spec: { version: 1; from: 'no_template'; units: 'imperial' | 'metric' } | { version: 1; from: 'template'; template_file: string };
+  template?: TemplateHandover;
 }
 
 /** One family file of an edit, matched to its work item input. */
@@ -289,6 +314,36 @@ export function probeFamiliesSummary(report: Record<string, unknown>): Pick<Prob
   };
 }
 
+const text = (v: unknown, max: number) => (typeof v === 'string' && v ? v.slice(0, max) : undefined);
+
+/**
+ * Since 0.14.0: what a new model's report.json says: an edit's summary, with what the model started
+ * from (and why Revit could not make it, when it could not), how many levels it started with, and how
+ * many types of each kind it holds (report.json's `types` names them, as the probe's report does).
+ */
+export function newModelSummary(report: Record<string, unknown>): NewModelSummary {
+  const nm = report.new_model && typeof report.new_model === 'object' ? (report.new_model as Record<string, unknown>) : {};
+  const template = nm.template && typeof nm.template === 'object' ? (nm.template as Record<string, unknown>) : {};
+  const from = nm.from === 'template' || nm.from === 'no_template' ? nm.from : 'unknown';
+  const units = from === 'no_template' ? text(nm.units, 20) : undefined;
+  const file = from === 'template' ? text(template.file, 1024) : undefined;
+  const error = text(nm.error, 500);
+  const types = report.types && typeof report.types === 'object' ? (report.types as Record<string, unknown>) : undefined;
+  const count = (k: string) => (Array.isArray(types?.[k]) ? (types[k] as unknown[]).length : 0);
+  return {
+    ...editSummary(report),
+    new_model: {
+      from,
+      ...(units ? { units } : {}),
+      ...(file ? { template_file: file } : {}),
+      created: nm.created === true,
+      ...(error ? { error } : {}),
+      ...(Array.isArray(nm.levels_at_start) ? { levels_at_start: nm.levels_at_start.length } : {}),
+    },
+    ...(types ? { types_held: { walls: count('walls'), floors: count('floors'), doors: count('doors'), foundations: count('foundations') } } : {}),
+  };
+}
+
 function hashOf(value: string): string {
   return createHash('sha256').update(value).digest('hex');
 }
@@ -371,6 +426,7 @@ export class JobService {
    */
   async startProbe(ctx: JobContext, maxMinutes: number, saveFamilies?: readonly string[], signal?: AbortSignal): Promise<ProbeStartResult> {
     if (ctx.families?.length) throw new Refusal('flo2.io handed over family files with a probe, which reads the model alone and loads nothing; no job was started.');
+    if (ctx.template) throw new Refusal('flo2.io handed over a template with a probe, which reads a model and makes none; no job was started.');
     const names = checkSaveFamilies(saveFamilies);
     const { result } = await this.start('probe', ctx, maxMinutes, undefined, [], signal, names);
     return { ...result, ...(names.length ? { save_families: names } : {}) };
@@ -378,6 +434,7 @@ export class JobService {
 
   /** rvt_edit_start: the same, with the change list checked and uploaded beside the model as changes.json. */
   async startEdit(ctx: JobContext, maxMinutes: number, changeList: unknown, signal?: AbortSignal): Promise<EditStartResult> {
+    if (ctx.template) throw new Refusal('flo2.io handed over a template with an edit, which changes a model and makes none; no job was started.');
     const checked = checkChangeList(changeList);
     if (!checked.ok) {
       throw new Refusal(`The change list is not one the edit job takes, so no job was started: ${checked.errors.join('; ')}.`);
@@ -388,6 +445,56 @@ export class JobService {
     return {
       ...result,
       change_list_sha256: checked.sha256,
+      ...(families.length ? { family_files: families.map((f) => ({ family_file: f.handed.family_file, input: f.input, size: f.handed.size, sha256: f.handed.sha256.toLowerCase() })) } : {}),
+    };
+  }
+
+  /**
+   * Since 0.14.0, rvt_new_model_start: a NEW model, made by the add-in from Revit's own project with
+   * no template in `units`, or from `template_file`, the .rte flo2.io hands over as `template`, and
+   * filled with the change list in the same job. Everything is checked before Autodesk is asked: what
+   * it starts from, said exactly once; no model handed over; the list, as an edit's, adding something;
+   * its family files, as an edit's.
+   */
+  async startNewModel(ctx: JobContext, maxMinutes: number, from: { units?: 'imperial' | 'metric' | undefined; template_file?: string | undefined }, changeList: unknown, signal?: AbortSignal): Promise<NewModelStartResult> {
+    if (ctx.input) throw new Refusal("flo2.io handed over a model with a new model's job, which opens none: it makes a new one. No job was started.");
+    if (from.units !== undefined && from.template_file !== undefined) {
+      throw new Refusal('rvt_new_model_start takes either units or template_file, not both: the new model starts from Revit\'s own project with no template, in those units, or from that template, which gives its own. No job was started.');
+    }
+    if (from.units === undefined && from.template_file === undefined) {
+      throw new Refusal('rvt_new_model_start says what the new model starts from: either units ("imperial" or "metric"), for Revit\'s own project with no template, or template_file, a template (.rte) the design keeps. No job was started.');
+    }
+    let fresh: NewModelStart;
+    if (from.template_file !== undefined) {
+      const name = from.template_file;
+      if (!isTemplateFile(name)) {
+        throw new Refusal(`template_file names a Revit project template (.rte) the design keeps, by its file name: ${JSON.stringify(name.slice(0, 80))} is not one (a name of 1 to 200 characters before .rte, with no folder and none of < > : " / \\ | ? * or a control character). No job was started.`);
+      }
+      const t = ctx.template;
+      if (!t) throw new Refusal(`flo2.io did not hand over the template "${name}"; no job was started. flo2.io hands over the template a new model starts from, from the design, as it hands over a family file.`);
+      if (t.template_file !== name) throw new Refusal(`flo2.io handed over the template "${t.template_file}", not "${name}"; no job was started.`);
+      if (t.size > MAX_TEMPLATE_BYTES) throw new Refusal(`The template "${name}" is ${t.size} bytes (${mib(t.size)}); a template may be at most ${MAX_TEMPLATE_BYTES} bytes (${mib(MAX_TEMPLATE_BYTES)}); no job was started.`);
+      fresh = { spec: { version: 1, from: 'template', template_file: name }, template: t };
+    } else {
+      if (ctx.template) throw new Refusal(`flo2.io handed over a template with a new model that starts from no template (units "${from.units}"); no job was started.`);
+      fresh = { spec: { version: 1, from: 'no_template', units: from.units as 'imperial' | 'metric' } };
+    }
+    const checked = checkChangeList(changeList);
+    if (!checked.ok) {
+      throw new Refusal(`The change list is not one the new-model job takes, so no job was started: ${checked.errors.join('; ')}.`);
+    }
+    if (!addsSomething(checked.list)) {
+      throw new Refusal(`A new model's first change list adds nothing (no ${ADDING_KINDS.slice(0, -1).join(', ')} or ${ADDING_KINDS.at(-1)}): an empty model is not a result anyone asked for, so no job was started.`);
+    }
+    const families = matchFamilies(checked.family_files, ctx.families);
+    const { result } = await this.start('new', ctx, maxMinutes, { canonical: checked.canonical, sha256: checked.sha256 }, families, signal, [], fresh);
+    return {
+      ...result,
+      change_list_sha256: checked.sha256,
+      new_model:
+        fresh.spec.from === 'template'
+          ? { from: 'template', template_file: fresh.spec.template_file, size: (fresh.template as TemplateHandover).size, sha256: (fresh.template as TemplateHandover).sha256.toLowerCase() }
+          : { from: 'no_template', units: fresh.spec.units },
       ...(families.length ? { family_files: families.map((f) => ({ family_file: f.handed.family_file, input: f.input, size: f.handed.size, sha256: f.handed.sha256.toLowerCase() })) } : {}),
     };
   }
@@ -435,11 +542,13 @@ export class JobService {
     families: readonly FamilyUpload[],
     signal?: AbortSignal,
     saveFamilies: readonly string[] = [],
+    fresh?: NewModelStart,
   ): Promise<{ result: ProbeStartResult }> {
     const word = KIND_WORD[kind];
-    const input = ctx.input;
-    if (!input) throw new Refusal(`flo2.io did not hand over the file to ${word}; ask flo2.io to start the ${word} again.`);
-    if (!/\.rvt$/i.test(input.file_name)) {
+    // A new model's job takes no model: it makes one (startNewModel refused one handed over).
+    const input = kind === 'new' ? undefined : ctx.input;
+    if (kind !== 'new' && !input) throw new Refusal(`flo2.io did not hand over the file to ${word}; ask flo2.io to start the ${word} again.`);
+    if (input && !/\.rvt$/i.test(input.file_name)) {
       throw new Refusal(`The ${word} opens Revit project files (.rvt) only.`);
     }
     const limitSec = Math.min(maxMinutes * 60, ctx.limits.max_processing_sec);
@@ -456,43 +565,54 @@ export class JobService {
     const bucketKey = bucketKeyFor(ctx.aps.client_id);
     const jobId = newJobId();
     const started = this.now();
-    this.logger.info(`${kind}_start`, { job_id: jobId, size: input.size, limit_sec: limitSec });
+    this.logger.info(`${kind}_start`, { job_id: jobId, ...(input ? { size: input.size } : {}), ...(fresh ? { from: fresh.spec.from } : {}), limit_sec: limitSec });
 
     // The app first, by GETs alone: no bucket and no upload on an app that cannot run the job.
     const nickname = await this.nickname(aps, ctx.aps.client_id);
     const activityId = await this.requireActivity(aps, ctx.aps.client_id, nickname, kind);
     await this.bucket(aps, bucketKey);
 
-    // The input, from flo2's short-lived download link straight into the bucket.
-    let download: Response;
-    try {
-      const init: RequestInit = { redirect: 'follow' };
-      if (signal) init.signal = signal;
-      download = await (this.opts.fetch ?? fetch)(input.download_url, init);
-    } catch {
-      if (signal?.aborted) throw new Refusal('The call was cancelled before the input reached Autodesk.');
-      throw new Refusal("flo2-rvt could not read the file from flo2.io's download link.");
+    // The input, from flo2's short-lived download link straight into the bucket. A new model has none.
+    if (input) {
+      let download: Response;
+      try {
+        const init: RequestInit = { redirect: 'follow' };
+        if (signal) init.signal = signal;
+        download = await (this.opts.fetch ?? fetch)(input.download_url, init);
+      } catch {
+        if (signal?.aborted) throw new Refusal('The call was cancelled before the input reached Autodesk.');
+        throw new Refusal("flo2-rvt could not read the file from flo2.io's download link.");
+      }
+      if (download.status !== 200 || !download.body) {
+        await download.body?.cancel();
+        throw new Refusal(`flo2.io's download link answered HTTP ${download.status}; no job was started.`);
+      }
+      const declared = download.headers.get('content-length');
+      if (declared !== null && Number(declared) !== input.size) {
+        await download.body.cancel();
+        throw new Refusal('The file flo2.io served is not the size flo2.io said; no job was started.');
+      }
+      try {
+        await uploadStream(aps, bucketKey, objectKey(jobId, INPUT_NAME), download.body, {
+          size: input.size,
+          sha256: input.sha256,
+          contentType: 'application/octet-stream',
+        }, this.opts.upload);
+      } catch (err) {
+        if (err instanceof IntegrityError) throw new Refusal(`${err.message}; no job was started.`);
+        throw err;
+      }
+      this.logger.info(`${kind}_input_uploaded`, { job_id: jobId, ms: this.now() - started });
     }
-    if (download.status !== 200 || !download.body) {
-      await download.body?.cancel();
-      throw new Refusal(`flo2.io's download link answered HTTP ${download.status}; no job was started.`);
+    // A new model's: what it starts from, canonical, and the template beside it as a plain input.
+    if (fresh) {
+      await putSmallObject(aps, bucketKey, objectKey(jobId, NEW_MODEL_SPEC_NAME), Buffer.from(canonicalJson(fresh.spec), 'utf8'), 'application/json');
+      if (fresh.template) {
+        await this.carry(aps, bucketKey, objectKey(jobId, TEMPLATE_NAME), fresh.template, `the template "${fresh.template.template_file}"`, signal);
+        this.logger.info('new_template_uploaded', { job_id: jobId, size: fresh.template.size, sha256: fresh.template.sha256.toLowerCase() });
+      }
+      this.logger.info('new_model_spec_uploaded', { job_id: jobId, from: fresh.spec.from });
     }
-    const declared = download.headers.get('content-length');
-    if (declared !== null && Number(declared) !== input.size) {
-      await download.body.cancel();
-      throw new Refusal('The file flo2.io served is not the size flo2.io said; no job was started.');
-    }
-    try {
-      await uploadStream(aps, bucketKey, objectKey(jobId, INPUT_NAME), download.body, {
-        size: input.size,
-        sha256: input.sha256,
-        contentType: 'application/octet-stream',
-      }, this.opts.upload);
-    } catch (err) {
-      if (err instanceof IntegrityError) throw new Refusal(`${err.message}; no job was started.`);
-      throw err;
-    }
-    this.logger.info(`${kind}_input_uploaded`, { job_id: jobId, ms: this.now() - started });
     if (changes) {
       // The change list, in the canonical form its SHA-256 names: the add-in reads exactly these bytes.
       await putSmallObject(aps, bucketKey, objectKey(jobId, CHANGES_NAME), Buffer.from(changes.canonical, 'utf8'), 'application/json');
@@ -511,9 +631,10 @@ export class JobService {
 
     // The WorkItem: Design Automation reads and writes the bucket with the same token.
     const headers = { Authorization: `Bearer ${ctx.aps.access_token}` };
-    const args: Record<string, XrefArgument> = {
-      [INPUT_PARAMETER]: { url: objectUrn(bucketKey, objectKey(jobId, INPUT_NAME)), verb: 'get', headers },
-    };
+    const args: Record<string, XrefArgument> = {};
+    if (input) args[INPUT_PARAMETER] = { url: objectUrn(bucketKey, objectKey(jobId, INPUT_NAME)), verb: 'get', headers };
+    if (fresh) args[NEW_MODEL_PARAMETER] = { url: objectUrn(bucketKey, objectKey(jobId, NEW_MODEL_SPEC_NAME)), verb: 'get', headers };
+    if (fresh?.template) args[TEMPLATE_PARAMETER] = { url: objectUrn(bucketKey, objectKey(jobId, TEMPLATE_NAME)), verb: 'get', headers };
     if (changes) args[CHANGES_PARAMETER] = { url: objectUrn(bucketKey, objectKey(jobId, CHANGES_NAME)), verb: 'get', headers };
     if (kind === 'probe') args[SAVE_FAMILIES_PARAMETER] = { url: objectUrn(bucketKey, objectKey(jobId, SAVE_FAMILIES_NAME)), verb: 'get', headers };
     for (const f of families) args[f.input] = { url: objectUrn(bucketKey, objectKey(jobId, f.object)), verb: 'get', headers };
@@ -546,6 +667,14 @@ export class JobService {
       ...(changes ? { change_list_sha256: changes.sha256 } : {}),
       ...(families.length ? { family_files: families.map((f) => ({ input: f.input, size: f.handed.size, sha256: f.handed.sha256.toLowerCase() })) } : {}),
       ...(saveFamilies.length ? { save_families: saveFamilies.length } : {}),
+      ...(fresh
+        ? {
+            new_model:
+              fresh.spec.from === 'template'
+                ? { from: 'template' as const, template_size: (fresh.template as TemplateHandover).size, template_sha256: (fresh.template as TemplateHandover).sha256.toLowerCase() }
+                : { from: 'no_template' as const, units: fresh.spec.units },
+          }
+        : {}),
     };
     try {
       await putSmallObject(aps, bucketKey, objectKey(jobId, RECORD_NAME), Buffer.from(JSON.stringify(record)), 'application/json');
@@ -591,6 +720,7 @@ export class JobService {
       appbundle_version: result.appbundle.version,
       probe_version: result.activities[0]?.version,
       edit_version: result.activities[1]?.version,
+      new_model_version: result.activities[2]?.version,
       monthly_hours: result.monthly_hours.reported ?? undefined,
       ready: result.check.ready,
     });
@@ -619,7 +749,7 @@ export class JobService {
     if (typeof record.workitem_id !== 'string' || !/^[A-Za-z0-9-]{1,64}$/.test(record.workitem_id)) {
       throw new Refusal("The job's record in Autodesk's storage cannot be read.");
     }
-    if (record.job !== undefined && record.job !== 'probe' && record.job !== 'edit') throw new Refusal("The job's record in Autodesk's storage names a job flo2-rvt does not run.");
+    if (record.job !== undefined && record.job !== 'probe' && record.job !== 'edit' && record.job !== 'new') throw new Refusal("The job's record in Autodesk's storage names a job flo2-rvt does not run.");
     const asked = typeof record.save_families === 'number' && Number.isInteger(record.save_families) && record.save_families >= 0 ? Math.min(record.save_families, MAX_SAVE_FAMILIES) : 0;
     const found: CachedJob = { workitemId: record.workitem_id, clientHash: hashOf(ctx.aps.client_id), kind: record.job ?? 'probe', saveFamilies: asked };
     this.remember(jobId, found);
@@ -632,7 +762,7 @@ export class JobService {
     jobId: string,
     signal?: AbortSignal,
   ): Promise<{ result: JobStatusResult; outputs?: OutputMeta[]; usage?: UsageMeta }> {
-    if (!isJobId(jobId)) throw new Refusal('That is not a job id rvt_probe_start or rvt_edit_start returned.');
+    if (!isJobId(jobId)) throw new Refusal('That is not a job id rvt_probe_start, rvt_edit_start or rvt_new_model_start returned.');
     const aps = this.aps(ctx, signal);
     const { workitemId, kind, saveFamilies } = await this.findJob(aps, ctx, jobId);
     const wi = await getWorkItem(aps, workitemId);
@@ -672,7 +802,7 @@ export class JobService {
       try {
         report = JSON.parse((await readSmallObject(aps, reportUrl, MAX_REPORT_BYTES)).toString('utf8')) as Record<string, unknown>;
         const count = (key: string) => (Array.isArray(report?.[key]) ? (report[key] as unknown[]).length : 0);
-        result.report_summary = kind === 'edit' ? editSummary(report) : { levels: count('levels'), sheets: count('sheets'), links: count('links'), ...probeFamiliesSummary(report) };
+        result.report_summary = kind === 'new' ? newModelSummary(report) : kind === 'edit' ? editSummary(report) : { levels: count('levels'), sheets: count('sheets'), links: count('links'), ...probeFamiliesSummary(report) };
       } catch (err) {
         this.logger.warn('report_summary_unread', { job_id: jobId, reason: err instanceof Error ? err.name : 'unknown' });
       }

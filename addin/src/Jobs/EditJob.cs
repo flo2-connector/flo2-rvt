@@ -27,6 +27,16 @@
 // ⭐ FOUNDATIONS (since 0.11.0, change-list version 4): the family files the list names are loaded
 // first, each in its own transaction, then add_footing, add_wall_footing and add_pile run in order
 // with every other change (EditJob.Foundations.cs).
+//
+// ⭐ LEVELS (since 0.13.0, change-list version 5): add_level, in EditJob.Levels.cs, in its own
+// transaction like every change; later changes place on the new level by its name.
+//
+// ⭐ A NEW MODEL (since 0.13.0, the new-model job, Jobs/NewModelJob.cs): the job box makes the model
+// (Jobs/JobBox.cs ExecuteNew) and this job fills it exactly as it edits one, with what an edit
+// does not need: a list that adds nothing is refused, the report says what the model was made from
+// and the levels it started with (new_model), lists every type the new model holds (types, as the
+// probe does), and its file section is the saved model.rvt's. When Revit made no model, the report
+// says why, and nothing is saved or exported.
 
 using System;
 using System.Collections.Generic;
@@ -54,6 +64,10 @@ namespace Flo2Rvt.Addin.Jobs
             var report = new EditReport();
             report.Edit.AddinVersion = ProbeJob.AddinVersion;
             report.Edit.StartedAt = Now();
+            // Since add-in 0.13.0: the new-model job runs this one, on the model the box made for it.
+            NewModelInfo fresh = context.NewModel;
+            string job = fresh != null ? JobSelection.NewModel : Name;
+            report.NewModel = fresh;
             ReadVersions(context, report);
             string reportPath = Path.Combine(context.WorkingFolder, ReportName);
 
@@ -62,6 +76,14 @@ namespace Flo2Rvt.Addin.Jobs
             CheckedList list = ChangeListCheck.Read(bytes);
             report.ChangeList.Sha256 = list.Sha256;
             report.ChangeList.Bytes = list.Bytes;
+            if (fresh != null && doc == null)
+            {
+                // Revit made no model: nothing to fill, save or export.
+                NewModel.Refuse(report, fresh.Error ?? "Revit made no project document");
+                if (list.Ok) report.ChangeList.Changes = list.List.Changes.Count;
+                Finish(null, report, reportPath, new List<string>());
+                return true;
+            }
             if (!list.Ok)
             {
                 report.Outcome = ListOutcome.Refused;
@@ -75,6 +97,17 @@ namespace Flo2Rvt.Addin.Jobs
             report.ChangeList.ListId = list.List.ListId;
             report.ChangeList.Description = list.List.Description;
             report.ChangeList.Changes = list.List.Changes.Count;
+            if (fresh != null)
+            {
+                fresh.LevelsAtStart = ProbeJob.Levels(doc);
+                if (!NewModel.AddsSomething(list.List.Changes.Select(c => c.Kind)))
+                {
+                    NewModel.Refuse(report, NewModel.AddsNothing);
+                    ListTypes(doc, report, new List<string>());
+                    Finish(doc, report, reportPath, new List<string>());
+                    return true;
+                }
+            }
 
             context.Heartbeat.Step("indexing the model's elements by IFC GlobalId and Revit class");
             ElementIndex index = ElementIndex.Build(doc);
@@ -86,7 +119,7 @@ namespace Flo2Rvt.Addin.Jobs
             var probeWarnings = new List<string>();
             // The changes that add share the coordinate frame and the walls the list made (EditJob.Additions.cs).
             var adding = new Adding();
-            if (list.List.Changes.Any(c => ReportCheck.Adds(c.Kind)))
+            if (fresh != null || list.List.Changes.Any(c => ReportCheck.Adds(c.Kind)))
             {
                 try
                 {
@@ -120,13 +153,15 @@ namespace Flo2Rvt.Addin.Jobs
             if (ListOutcome.SavesAModel(statuses))
             {
                 context.Heartbeat.Step("exporting model.ifc of the edited model");
-                report.Exports.ModelIfc = Guard("model.ifc", () => Exports.Ifc(doc, context.WorkingFolder, Name), probeWarnings);
+                report.Exports.ModelIfc = Guard("model.ifc", () => Exports.Ifc(doc, context.WorkingFolder, job), probeWarnings);
                 context.Heartbeat.Step("printing the edited model's sheets to sheets.pdf");
-                report.Exports.SheetsPdf = Guard("sheets.pdf", () => Exports.Pdf(doc, context.WorkingFolder, Exports.PrintableSheets(doc), Name), probeWarnings);
+                report.Exports.SheetsPdf = Guard("sheets.pdf", () => Exports.Pdf(doc, context.WorkingFolder, Exports.PrintableSheets(doc), job), probeWarnings);
                 context.Heartbeat.Step("saving the edited model as a new model.rvt");
                 report.Exports.ModelRvt = SaveResult.Write(doc, context.WorkingFolder);
                 report.Edit.Saved = report.Exports.ModelRvt.Written;
                 if (!report.Edit.Saved) probeWarnings.Add("model.rvt was not written: " + report.Exports.ModelRvt.Error);
+                // A new model opened no file: its file section is the model it saved, as Revit reads its header.
+                if (fresh != null && report.Edit.Saved) SavedFile(Path.Combine(context.WorkingFolder, SaveResult.FileName), report, probeWarnings);
             }
             else
             {
@@ -135,14 +170,50 @@ namespace Flo2Rvt.Addin.Jobs
                 report.Exports.SheetsPdf = SaveResult.NotRun(why);
                 report.Exports.ModelIfc = SaveResult.NotRun(why);
             }
+            // A new model's types, for the next edit's changes to name: listed even when no change was
+            // kept, so a first list whose types the model does not hold says what it does hold.
+            if (fresh != null) ListTypes(doc, report, probeWarnings);
             Finish(doc, report, reportPath, probeWarnings);
             return true;
         }
 
+        /// <summary>Since add-in 0.13.0: every wall, floor, door and foundation type the new model holds, as the probe lists a model's (Edit/ModelTypes.cs).</summary>
+        private static void ListTypes(Document doc, EditReport report, List<string> jobWarnings)
+        {
+            try
+            {
+                report.Types = ModelTypes.Report(doc);
+            }
+            catch (Exception ex)
+            {
+                report.TypesUnread = ex.GetType().Name + ": " + ex.Message;
+                jobWarnings.Add("the new model's types could not be read: " + report.TypesUnread);
+            }
+        }
+
+        /// <summary>Since add-in 0.13.0: the saved new model's header (BasicFileInfo), as the probe reads an input's.</summary>
+        private static void SavedFile(string path, EditReport report, List<string> jobWarnings)
+        {
+            try
+            {
+                BasicFileInfo info = BasicFileInfo.Extract(path);
+                report.File.Format = info.Format;
+                report.File.IsWorkshared = info.IsWorkshared;
+                report.File.IsCentral = info.IsCentral;
+                report.File.SavedInCurrentVersion = info.IsSavedInCurrentVersion;
+                report.File.SavedInLaterVersion = info.IsSavedInLaterVersion;
+            }
+            catch (Exception ex)
+            {
+                jobWarnings.Add("the saved model's header could not be read: " + ex.GetType().Name + ": " + ex.Message);
+            }
+        }
+
         private static void Finish(Document doc, EditReport report, string path, List<string> jobWarnings)
         {
-            report.LevelsAfter = ProbeJob.Levels(doc);
-            report.ElementCountTotalAfter = CountElements(doc);
+            // A new model Revit would not make has no document to read.
+            report.LevelsAfter = doc != null ? ProbeJob.Levels(doc) : new List<LevelInfo>();
+            report.ElementCountTotalAfter = doc != null ? CountElements(doc) : 0;
             int total;
             report.Warnings = ProbeJob.Warnings(doc, jobWarnings, out total, MaxWarningKinds, "edit");
             report.WarningsTotal = total;
@@ -192,7 +263,7 @@ namespace Flo2Rvt.Addin.Jobs
             var r = new ChangeReport { Index = i, Id = change.Id, Kind = change.Kind };
             try
             {
-                if (ReportCheck.Adds(change.Kind) && adding.Frame == null && change.Coordinates == CoordinatesValues.Shared)
+                if (ReportCheck.Places(change.Kind) && adding.Frame == null && change.Coordinates == CoordinatesValues.Shared)
                 {
                     r.Status = ChangeStatus.NotApplied;
                     r.Why = "the model's shared coordinates could not be read, so a point in them cannot be placed (the job's warnings say why)";
@@ -211,6 +282,7 @@ namespace Flo2Rvt.Addin.Jobs
                     case ChangeKinds.AddFooting: AddFooting(context, index, adding, change, r); break;
                     case ChangeKinds.AddWallFooting: AddWallFooting(context, index, adding, change, r); break;
                     case ChangeKinds.AddPile: AddPile(context, index, adding, change, r); break;
+                    case ChangeKinds.AddLevel: AddLevel(context, index, change, r); break;
                     default:
                         r.Status = ChangeStatus.NotApplied;
                         r.Why = "the kind is not in this add-in's vocabulary";
