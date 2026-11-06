@@ -41,10 +41,12 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
-      # Before anything is built: the probe commits nothing and never saves, and only the
-      # edit job's one path commits (Edit/ChangeRunner.cs) and saves (Edit/SaveResult.cs,
-      # one SaveAs, a new file). The rule, and its tests, are scripts/addin-save-guard.ts.
-      - name: The add-in commits and saves only on the edit job's one path
+      # Before anything is built: the probe commits nothing and never saves the model, and only the
+      # edit job's one path commits (Edit/ChangeRunner.cs) and saves a model (Edit/SaveResult.cs,
+      # one SaveAs, a new file); since add-in 0.12.0 a family document the probe saves out of the
+      # model is saved only in Probe/FamilySave.cs (one SaveAs, on the document EditFamily opened,
+      # closed unsaved). The rule, and its tests, are scripts/addin-save-guard.ts.
+      - name: The add-in commits and saves a model only on the edit job's one path, and a family document only in the probe's family save
         run: node scripts/addin-save-guard.ts
       # Reference assemblies only (Revit 2024 API and IFC API, the Design Automation bridge, .NET 4.8), from NuGet.
       - run: dotnet restore addin/Flo2RvtProbe.csproj --locked-mode

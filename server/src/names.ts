@@ -27,12 +27,13 @@ export const BUNDLE_FILE = 'Flo2RvtProbe.bundle.zip';
  * own ground expected, rooms, climbs and the warnings a move added, 0.9.0 a stair run's climb and its
  * stair, 0.10.0 new content: walls, floors, rooms and doors added, and the probe's types, rooms and
  * coordinates, 0.11.0 foundations: footings, wall footings and piles added, family files loaded,
- * and the probe's foundation types with their sizes), and it is what a person's app must carry
+ * and the probe's foundation types with their sizes, 0.12.0 the probe saves the families a person
+ * names out of the model as .rfa files), and it is what a person's app must carry
  * for a job to run there: a setup writes it into the AppBundle's and each Activity's
  * description, and a job's check reads it back (server/src/setup.ts). It is not the bundle's
  * sha256, which changes with every CI build of the same add-in.
  */
-export const ADDIN_VERSION = '0.11.0';
+export const ADDIN_VERSION = '0.12.0';
 
 /** What a setup ends each description with, so a check can read which add-in an Activity runs. */
 export function setupMark(addinVersion = ADDIN_VERSION): string {
@@ -98,20 +99,53 @@ export function isJobId(value: string): boolean {
 
 export interface OutputSpec {
   /** The file name the gateway saves, and the object's name under `<job_id>/`. */
-  name: 'report.json' | 'sheets.pdf' | 'model.ifc' | 'model.rvt';
+  name: 'report.json' | 'sheets.pdf' | 'model.ifc' | 'model.rvt' | `family${number}.rfa`;
   /** The Activity parameter, and the WorkItem argument, that carries it. */
-  parameter: 'report' | 'sheets' | 'ifc' | 'result';
+  parameter: 'report' | 'sheets' | 'ifc' | 'result' | `family${number}`;
   contentType: string;
   /** A required output's absence fails the WorkItem; an optional one may be missing. */
   required: boolean;
   description: string;
 }
 
+/**
+ * Since flo2-rvt 0.13.0 (add-in 0.12.0): the families a probe is asked to save out of the model
+ * (rvt_probe_start's save_families, at most MAX_SAVE_FAMILIES), each by its name exactly. Every
+ * probe hands the add-in the list as its input `saveFamilies`, `save-families.json` (canonical JSON,
+ * `{"families":[...],"version":1}`, the list empty when it saves none), so no WorkItem leaves an
+ * input out. The add-in saves each loadable family the model holds under that name as `<name>.rfa`,
+ * in Revit 2024's format, and hands the n-th name's back as the optional output `family<n>`,
+ * `family<n>.rfa` (familyOutput); its report says what came of each (families_saved).
+ */
+export const SAVE_FAMILIES_PARAMETER = 'saveFamilies';
+export const SAVE_FAMILIES_NAME = 'save-families.json';
+export const MAX_SAVE_FAMILIES = 8;
+/**
+ * A family the probe saves is meant to be an edit's family_file, so it is held to a family file's
+ * limits: at most MAX_FAMILY_FILE_BYTES each, and MAX_FAMILY_FILES_BYTES all a probe saves (the
+ * add-in's FamilySaves.MaxBytes and MaxTotalBytes); one past them is reported and not kept.
+ */
+export const MAX_SAVED_FAMILY_BYTES = 32 * 1024 * 1024;
+export const MAX_SAVED_FAMILIES_BYTES = 64 * 1024 * 1024;
+
+/** The output the n-th (from 1) family a probe saves goes back as: its Activity parameter and its file name. */
+export function familyOutput(n: number): { parameter: `family${number}`; name: `family${number}.rfa` } {
+  if (!Number.isInteger(n) || n < 1 || n > MAX_SAVE_FAMILIES) throw new Error('not a family output');
+  return { parameter: `family${n}`, name: `family${n}.rfa` };
+}
+
 export const OUTPUTS: readonly OutputSpec[] = [
-  { name: 'report.json', parameter: 'report', contentType: 'application/json', required: true, description: 'What the probe read: levels, sheets, links, element counts, versions, warnings.' },
+  { name: 'report.json', parameter: 'report', contentType: 'application/json', required: true, description: 'What the probe read: levels, sheets, links, element counts, versions, warnings, and what came of each family it was asked to save.' },
   { name: 'sheets.pdf', parameter: 'sheets', contentType: 'application/pdf', required: false, description: 'Every printable sheet in one PDF. Absent when the model has none.' },
   { name: 'model.ifc', parameter: 'ifc', contentType: 'application/x-step', required: false, description: "Revit's own IFC export, IFC4 Design Transfer View with base quantities." },
+  ...Array.from({ length: MAX_SAVE_FAMILIES }, (_, i): OutputSpec => {
+    const f = familyOutput(i + 1);
+    return { name: f.name, parameter: f.parameter, contentType: 'application/octet-stream', required: false, description: `Family ${i + 1} of those the probe was asked to save, as a family file (.rfa, Revit 2024), when it names so many and the model holds it as a loadable family. Absent otherwise.` };
+  }),
 ];
+
+/** Whether an output is a family a probe saved (family1.rfa ... family8.rfa). */
+export const isFamilyOutput = (name: string): boolean => /^family[1-8]\.rfa$/.test(name);
 
 /** The edit job's outputs. model.rvt is optional: a list none of whose changes was kept saves no model. */
 export const EDIT_OUTPUTS: readonly OutputSpec[] = [

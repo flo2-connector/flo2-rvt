@@ -68,7 +68,7 @@ describe('rvt_probe_start with save_families: the names', () => {
 
 describe('a probe that saves families, from start to success', () => {
   let h: Harness;
-  let clock = Date.parse('2023-07-26T02:46:05Z');
+  const clock = Date.parse('2023-07-26T02:46:05Z');
   let jobId = '';
   before(async () => {
     h = await startHarness({ statuses: ['success'] }, () => clock);

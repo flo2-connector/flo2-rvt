@@ -66,8 +66,11 @@ import {
   FAMILY_INPUTS,
   INPUT_NAME,
   INPUT_PARAMETER,
+  MAX_SAVE_FAMILIES,
   OUTPUTS,
   PROBE_NAME,
+  SAVE_FAMILIES_NAME,
+  SAVE_FAMILIES_PARAMETER,
   familyInput,
   setupMark,
 } from '../names.ts';
@@ -79,10 +82,19 @@ interface Versioned {
   uploadParameters?: { endpointURL: string; formData: Record<string, string> };
 }
 
-/** The Activity the probe runs: no /i, the add-in opens input.rvt itself. */
+/**
+ * The Activity the probe runs: no /i, the add-in opens input.rvt itself. Since add-in 0.12.0 it
+ * takes the families to save (saveFamilies, required: every probe hands the list over, empty when
+ * it saves none, so no WorkItem leaves an input out) and puts each saved family as an optional
+ * output family1 ... family8, which a probe that saves fewer leaves unwritten, as it leaves
+ * sheets.pdf unwritten for a model with no printable sheet (a WorkItem then still ends in success:
+ * measured on the first live probe, 6ab9996ca4bdbc45:fact:the-first-live-probe-ran-in-108-seconds-
+ * and-its-outputs-wait-on-the-gateways-s3-host-check-2026-10-31).
+ */
 export function activityBody(nickname: string): Record<string, unknown> {
   const parameters: Record<string, unknown> = {
     [INPUT_PARAMETER]: { verb: 'get', localName: INPUT_NAME, required: true, description: 'The Revit model to probe. It is read, never changed.' },
+    [SAVE_FAMILIES_PARAMETER]: { verb: 'get', localName: SAVE_FAMILIES_NAME, required: true, description: `The families to save out of the model as .rfa files, by name, at most ${MAX_SAVE_FAMILIES} (JSON; an empty list saves none).` },
   };
   for (const out of OUTPUTS) {
     parameters[out.parameter] = { verb: 'put', localName: out.name, required: out.required, description: out.description };
@@ -92,7 +104,7 @@ export function activityBody(nickname: string): Record<string, unknown> {
     parameters,
     engine: ENGINE,
     appbundles: [`${nickname}.${APPBUNDLE_NAME}+${ALIAS}`],
-    description: `flo2-rvt read-only probe: report.json, sheets.pdf and model.ifc from a Revit 2024 model. ${setupMark()}`,
+    description: `flo2-rvt read-only probe: report.json, sheets.pdf and model.ifc from a Revit 2024 model, and up to ${MAX_SAVE_FAMILIES} families it is asked to save, each as .rfa. ${setupMark()}`,
   };
 }
 

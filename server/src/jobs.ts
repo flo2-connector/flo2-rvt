@@ -18,6 +18,13 @@
 // nothing else, each and all within their sizes), fetched from flo2.io's link into the bucket,
 // checked by size and sha256, and handed to the WorkItem as family1, family2 ... in the order the
 // list first names them (names.ts familyInput).
+//
+// Since 0.13.0 (contract v5) a probe also saves the families a person names out of the model
+// (save_families): checked before anything is asked of Autodesk (checkSaveFamilies: at most 8, each
+// once, each one a family file's name may be, so it loads in an edit under the same name), handed to
+// the add-in as save-families.json on every probe (an empty list when it saves none), and on success
+// each family the report names saved is served as family<n>.rfa with its family, its file name and
+// its sha256 (familyOutputs), the bytes held to the size the report gives.
 
 import { createHash } from 'node:crypto';
 import { ApsError, type ApsContext } from './aps/http.ts';
@@ -33,13 +40,14 @@ import {
 } from './aps/oss.ts';
 import { DA_PATH, createWorkItem, getNickname, getWorkItem, processingSeconds, type XrefArgument } from './aps/da.ts';
 import { apsFetch } from './aps/http.ts';
-import { checkChangeList } from './change-list.ts';
+import { CHANGE_LIST_SCHEMA, canonicalJson, checkChangeList } from './change-list.ts';
 import {
   expiresAtMs,
   type FamilyFileHandover,
   type EditStartResult,
   type EditSummary,
   type JobContext,
+  type ProbeSummary,
   type JobStatusResult,
   type OutputMeta,
   type ProbeStartResult,
@@ -58,10 +66,15 @@ import {
   JOBS,
   MAX_FAMILY_FILES_BYTES,
   MAX_FAMILY_FILE_BYTES,
+  MAX_SAVED_FAMILY_BYTES,
+  MAX_SAVE_FAMILIES,
   RECORD_NAME,
+  SAVE_FAMILIES_NAME,
+  SAVE_FAMILIES_PARAMETER,
   activityIdFor,
   bucketKeyFor,
   familyInput,
+  isFamilyOutput,
   isJobId,
   newJobId,
   objectKey,
@@ -106,6 +119,8 @@ interface CachedJob {
   workitemId: string;
   clientHash: string;
   kind: JobKind;
+  /** Since 0.13.0: how many families a probe was asked to save (0 for an edit, or a probe of an older record). */
+  saveFamilies: number;
 }
 
 interface JobRecord {
@@ -119,6 +134,8 @@ interface JobRecord {
   change_list_sha256?: string;
   /** Since 0.12.0: the family files the edit's list named, as uploaded (no names: the list holds them). */
   family_files?: Array<{ input: string; size: number; sha256: string }>;
+  /** Since 0.13.0: how many families a probe was asked to save (no names: save-families.json and the report hold them). */
+  save_families?: number;
 }
 
 /** One family file of an edit, matched to its work item input. */
@@ -130,6 +147,77 @@ interface FamilyUpload {
 }
 
 const mib = (bytes: number) => `${Math.round((bytes / (1024 * 1024)) * 10) / 10} MiB`;
+
+/** The change-list schema's FamilyFile: what a family file's name may be (and so the name a saved family loads under). */
+const FAMILY_FILE = new RegExp(((CHANGE_LIST_SCHEMA.$defs as Record<string, { pattern: string }>).FamilyFile as { pattern: string }).pattern);
+/** The most characters a family's name may have and still be a family file's name (FamilyFile's {1,200}). */
+const MAX_FAMILY_NAME = 200;
+
+/**
+ * The families a probe is asked to save (rvt_probe_start's save_families), each held to what a
+ * family file's name may be, or the refusal that names what is wrong. A saved family is meant to be
+ * an edit's family_file, and an edit loads a family under its file's name (Logic/Foundations.cs
+ * FamilyFiles.FamilyName), so a family whose name no family file may have would load as another;
+ * it is refused here rather than renamed. Two names that differ only in case are one file name on
+ * Windows, where cloud Revit saves them. Nothing is asked of Autodesk before this passes.
+ */
+export function checkSaveFamilies(names: readonly string[] | undefined): string[] {
+  if (!names?.length) return [];
+  if (names.length > MAX_SAVE_FAMILIES) throw new Refusal(`save_families names ${names.length} families; a probe saves at most ${MAX_SAVE_FAMILIES}. No job was started.`);
+  const seen = new Map<string, string>();
+  for (const name of names) {
+    const same = seen.get(name.toLowerCase());
+    if (same === name) throw new Refusal(`save_families names "${name}" twice; each family is saved once. No job was started.`);
+    if (same !== undefined) throw new Refusal(`save_families names ${JSON.stringify(same)} and ${JSON.stringify(name)}, which differ only in case: Windows, where cloud Revit saves them, holds them as one file name. No job was started.`);
+    seen.set(name.toLowerCase(), name);
+    if (name.length > MAX_FAMILY_NAME) {
+      throw new Refusal(`save_families: ${JSON.stringify(`${name.slice(0, 20)}…`)} is ${name.length} characters; a family saved as a family file may have a name of at most ${MAX_FAMILY_NAME} (a family file's name is at most ${MAX_FAMILY_NAME + 4}, .rfa included). No job was started.`);
+    }
+    if (!FAMILY_FILE.test(`${name}.rfa`)) {
+      throw new Refusal(
+        `save_families: ${JSON.stringify(name)} cannot be saved under its own name: a family file's name may not hold < > : " / \\ | ? * or a control character, and an edit loads a family under its file's name, so it would load as another family. Rename the family in Revit first, or leave it out. No job was started.`,
+      );
+    }
+  }
+  return [...names];
+}
+
+/** One saved family as the report names it (addin/src/Probe/ProbeReport.cs SavedFamilyInfo). */
+interface SavedFamily {
+  family: string;
+  was: string;
+  file?: string;
+  output?: string;
+  bytes?: number;
+  sha256?: string;
+  why?: string;
+}
+
+/** The report's families_saved, each entry in the shape the report promises, or [] when it has none. */
+export function familiesSavedOf(report: Record<string, unknown>): SavedFamily[] {
+  if (!Array.isArray(report.families_saved)) return [];
+  return (report.families_saved as unknown[]).filter((e): e is SavedFamily => {
+    if (!e || typeof e !== 'object') return false;
+    const f = e as Record<string, unknown>;
+    return typeof f.family === 'string' && f.family.length <= 1024 && (f.was === 'saved' || f.was === 'not_saved');
+  });
+}
+
+/** Whether a saved entry is one the gateway may keep: its file the family's own name, its output, size and sha256 well formed. */
+function servable(f: SavedFamily): boolean {
+  return (
+    f.was === 'saved' &&
+    f.file === `${f.family}.rfa` &&
+    typeof f.output === 'string' &&
+    isFamilyOutput(f.output) &&
+    typeof f.bytes === 'number' &&
+    Number.isInteger(f.bytes) &&
+    f.bytes > 0 &&
+    f.bytes <= MAX_SAVED_FAMILY_BYTES &&
+    typeof f.sha256 === 'string' &&
+    /^[0-9a-f]{64}$/.test(f.sha256)
+  );
+}
 
 /**
  * The family files the hidden context hands over, matched to those the list names (each once, in
@@ -188,6 +276,16 @@ export function editSummary(report: Record<string, unknown>): EditSummary {
     // Since add-in 0.10.0: the elements the kept changes added (change-list version 3). Left out for an older report.
     ...(typeof totals.elements_added === 'number' ? { elements_added: n('elements_added') } : {}),
     model_saved: rvt.written === true,
+  };
+}
+
+/** What a probe's summary says of the families it was asked to save: each saved, and each not, with why. Empty for a report with none. */
+export function probeFamiliesSummary(report: Record<string, unknown>): Pick<ProbeSummary, 'families_saved' | 'families_not_saved'> {
+  if (!Array.isArray(report.families_saved)) return {};
+  const all = familiesSavedOf(report);
+  return {
+    families_saved: all.filter(servable).map((f) => ({ family: f.family, file: f.file as string, output: f.output as string, bytes: f.bytes as number })),
+    families_not_saved: all.filter((f) => !servable(f)).map((f) => ({ family: f.family, why: typeof f.why === 'string' && f.why ? f.why.slice(0, 500) : f.was === 'saved' ? 'the report names it saved in a shape flo2-rvt does not serve' : 'the report gives no reason' })),
   };
 }
 
@@ -266,11 +364,16 @@ export class JobService {
     }
   }
 
-  /** rvt_probe_start: upload the input to the person's transient bucket and submit the WorkItem. */
-  async startProbe(ctx: JobContext, maxMinutes: number, signal?: AbortSignal): Promise<ProbeStartResult> {
+  /**
+   * rvt_probe_start: upload the input to the person's transient bucket and submit the WorkItem.
+   * Since 0.13.0 with the families it is asked to save (checkSaveFamilies), handed to the add-in on
+   * every probe as save-families.json and said back in the result.
+   */
+  async startProbe(ctx: JobContext, maxMinutes: number, saveFamilies?: readonly string[], signal?: AbortSignal): Promise<ProbeStartResult> {
     if (ctx.families?.length) throw new Refusal('flo2.io handed over family files with a probe, which reads the model alone and loads nothing; no job was started.');
-    const { result } = await this.start('probe', ctx, maxMinutes, undefined, [], signal);
-    return result;
+    const names = checkSaveFamilies(saveFamilies);
+    const { result } = await this.start('probe', ctx, maxMinutes, undefined, [], signal, names);
+    return { ...result, ...(names.length ? { save_families: names } : {}) };
   }
 
   /** rvt_edit_start: the same, with the change list checked and uploaded beside the model as changes.json. */
@@ -331,6 +434,7 @@ export class JobService {
     changes: { canonical: string; sha256: string } | undefined,
     families: readonly FamilyUpload[],
     signal?: AbortSignal,
+    saveFamilies: readonly string[] = [],
   ): Promise<{ result: ProbeStartResult }> {
     const word = KIND_WORD[kind];
     const input = ctx.input;
@@ -394,6 +498,11 @@ export class JobService {
       await putSmallObject(aps, bucketKey, objectKey(jobId, CHANGES_NAME), Buffer.from(changes.canonical, 'utf8'), 'application/json');
       this.logger.info('edit_change_list_uploaded', { job_id: jobId, change_list_sha256: changes.sha256 });
     }
+    // The families a probe saves, on every probe (none is an empty list), so no WorkItem leaves an input out.
+    if (kind === 'probe') {
+      await putSmallObject(aps, bucketKey, objectKey(jobId, SAVE_FAMILIES_NAME), Buffer.from(canonicalJson({ version: 1, families: saveFamilies }), 'utf8'), 'application/json');
+      this.logger.info('probe_save_families_uploaded', { job_id: jobId, families: saveFamilies.length });
+    }
     // The family files, each as the model came: from flo2's link into the bucket, by size and sha256.
     for (const f of families) {
       await this.carry(aps, bucketKey, objectKey(jobId, f.object), f.handed, `the family file "${f.handed.family_file}"`, signal);
@@ -406,6 +515,7 @@ export class JobService {
       [INPUT_PARAMETER]: { url: objectUrn(bucketKey, objectKey(jobId, INPUT_NAME)), verb: 'get', headers },
     };
     if (changes) args[CHANGES_PARAMETER] = { url: objectUrn(bucketKey, objectKey(jobId, CHANGES_NAME)), verb: 'get', headers };
+    if (kind === 'probe') args[SAVE_FAMILIES_PARAMETER] = { url: objectUrn(bucketKey, objectKey(jobId, SAVE_FAMILIES_NAME)), verb: 'get', headers };
     for (const f of families) args[f.input] = { url: objectUrn(bucketKey, objectKey(jobId, f.object)), verb: 'get', headers };
     for (const out of JOBS[kind].outputs) {
       const arg: XrefArgument = { url: objectUrn(bucketKey, objectKey(jobId, out.name)), verb: 'put', headers };
@@ -422,7 +532,7 @@ export class JobService {
       }
       throw err;
     }
-    this.remember(jobId, { workitemId: workItem.id, clientHash: hashOf(ctx.aps.client_id), kind });
+    this.remember(jobId, { workitemId: workItem.id, clientHash: hashOf(ctx.aps.client_id), kind, saveFamilies: saveFamilies.length });
     this.logger.info(`${kind}_submitted`, { job_id: jobId, workitem_id: workItem.id, state: workItem.status });
 
     // The job record, so a status call after a restart can still find the WorkItem.
@@ -435,6 +545,7 @@ export class JobService {
       job: kind,
       ...(changes ? { change_list_sha256: changes.sha256 } : {}),
       ...(families.length ? { family_files: families.map((f) => ({ input: f.input, size: f.handed.size, sha256: f.handed.sha256.toLowerCase() })) } : {}),
+      ...(saveFamilies.length ? { save_families: saveFamilies.length } : {}),
     };
     try {
       await putSmallObject(aps, bucketKey, objectKey(jobId, RECORD_NAME), Buffer.from(JSON.stringify(record)), 'application/json');
@@ -509,7 +620,8 @@ export class JobService {
       throw new Refusal("The job's record in Autodesk's storage cannot be read.");
     }
     if (record.job !== undefined && record.job !== 'probe' && record.job !== 'edit') throw new Refusal("The job's record in Autodesk's storage names a job flo2-rvt does not run.");
-    const found: CachedJob = { workitemId: record.workitem_id, clientHash: hashOf(ctx.aps.client_id), kind: record.job ?? 'probe' };
+    const asked = typeof record.save_families === 'number' && Number.isInteger(record.save_families) && record.save_families >= 0 ? Math.min(record.save_families, MAX_SAVE_FAMILIES) : 0;
+    const found: CachedJob = { workitemId: record.workitem_id, clientHash: hashOf(ctx.aps.client_id), kind: record.job ?? 'probe', saveFamilies: asked };
     this.remember(jobId, found);
     return found;
   }
@@ -522,7 +634,7 @@ export class JobService {
   ): Promise<{ result: JobStatusResult; outputs?: OutputMeta[]; usage?: UsageMeta }> {
     if (!isJobId(jobId)) throw new Refusal('That is not a job id rvt_probe_start or rvt_edit_start returned.');
     const aps = this.aps(ctx, signal);
-    const { workitemId, kind } = await this.findJob(aps, ctx, jobId);
+    const { workitemId, kind, saveFamilies } = await this.findJob(aps, ctx, jobId);
     const wi = await getWorkItem(aps, workitemId);
     if (!wi) throw new Refusal('Autodesk no longer has this job. A finished job is kept for 3 days.');
 
@@ -535,12 +647,14 @@ export class JobService {
 
     if (wi.status !== 'success' && wi.status !== 'failedUploadOptional') return { result };
 
-    // The outputs that exist, each with a fresh signed URL for the gateway.
+    // The outputs that exist, each with a fresh signed URL for the gateway. A family a probe saved
+    // is asked for only once its report says it saved it (familyOutputs, below).
     const bucketKey = bucketKeyFor(ctx.aps.client_id);
     const minutes = this.opts.outputUrlMinutes ?? 15;
     const outputs: OutputMeta[] = [];
     let reportUrl: string | undefined;
     for (const out of JOBS[kind].outputs) {
+      if (isFamilyOutput(out.name)) continue;
       const signed = await signedDownload(aps, bucketKey, objectKey(jobId, out.name), minutes);
       if (!signed) continue;
       if (out.name === 'report.json') reportUrl = signed.url;
@@ -552,18 +666,58 @@ export class JobService {
         content_type: out.contentType,
       });
     }
-    result.outputs = outputs.map((o) => ({ name: o.name, size: o.size }));
 
+    let report: Record<string, unknown> | undefined;
     if (reportUrl) {
       try {
-        const report = JSON.parse((await readSmallObject(aps, reportUrl, MAX_REPORT_BYTES)).toString('utf8')) as Record<string, unknown>;
-        const count = (key: string) => (Array.isArray(report[key]) ? (report[key] as unknown[]).length : 0);
-        result.report_summary = kind === 'edit' ? editSummary(report) : { levels: count('levels'), sheets: count('sheets'), links: count('links') };
+        report = JSON.parse((await readSmallObject(aps, reportUrl, MAX_REPORT_BYTES)).toString('utf8')) as Record<string, unknown>;
+        const count = (key: string) => (Array.isArray(report?.[key]) ? (report[key] as unknown[]).length : 0);
+        result.report_summary = kind === 'edit' ? editSummary(report) : { levels: count('levels'), sheets: count('sheets'), links: count('links'), ...probeFamiliesSummary(report) };
       } catch (err) {
         this.logger.warn('report_summary_unread', { job_id: jobId, reason: err instanceof Error ? err.name : 'unknown' });
       }
     }
+    if (kind === 'probe' && saveFamilies > 0 && report) outputs.push(...(await this.familyOutputs(aps, bucketKey, jobId, report, saveFamilies, minutes)));
+    result.outputs = outputs.map((o) => ({ name: o.name, size: o.size, ...(o.family !== undefined ? { family: o.family } : {}) }));
 
     return { result, outputs, usage: { processing_seconds: seconds ?? 0, workitem_id: workitemId } };
+  }
+
+  /**
+   * Since 0.13.0: each family a probe's report names saved, as an output with a fresh signed URL,
+   * its family, the file name it loads under (the one the gateway keeps it by) and its sha256 as the
+   * add-in saved it. One whose entry is not in the shape the report promises, whose output is past
+   * the names asked, or whose bytes in the bucket are not the size the report gives, is withheld and
+   * logged (never served under a family it may not hold).
+   */
+  private async familyOutputs(aps: ApsContext, bucketKey: string, jobId: string, report: Record<string, unknown>, asked: number, minutes: number): Promise<OutputMeta[]> {
+    const out: OutputMeta[] = [];
+    const seen = new Set<string>();
+    for (const f of familiesSavedOf(report)) {
+      if (f.was !== 'saved') continue;
+      const n = typeof f.output === 'string' ? Number(/^family(\d)\.rfa$/.exec(f.output)?.[1] ?? 0) : 0;
+      if (!servable(f) || n < 1 || n > asked || seen.has(f.output as string)) {
+        this.logger.warn('family_output_withheld', { job_id: jobId, output: typeof f.output === 'string' ? f.output.slice(0, 40) : 'none', why: 'its report entry is not one the gateway may keep' });
+        continue;
+      }
+      seen.add(f.output as string);
+      const signed = await signedDownload(aps, bucketKey, objectKey(jobId, f.output as string), minutes);
+      if (!signed) continue;
+      if (signed.size !== undefined && signed.size !== f.bytes) {
+        this.logger.warn('family_output_withheld', { job_id: jobId, output: f.output, size: signed.size, report_bytes: f.bytes, why: 'its bytes are not the size the report gives' });
+        continue;
+      }
+      out.push({
+        name: f.output as string,
+        signed_url: signed.url,
+        expires_at: new Date(this.now() + minutes * 60_000).toISOString(),
+        size: signed.size ?? (f.bytes as number),
+        content_type: 'application/octet-stream',
+        family: f.family,
+        file: f.file as string,
+        sha256: f.sha256 as string,
+      });
+    }
+    return out;
   }
 }

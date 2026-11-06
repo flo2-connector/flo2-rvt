@@ -1,8 +1,10 @@
 // Which job the add-in runs. One AppBundle carries every job; each Activity hands it
 // different files, so the files say which job it is:
 //
-//   Flo2RvtProbe  inputs: input.rvt                 -> probe (reads, never saves)
-//   Flo2RvtEdit   inputs: input.rvt, changes.json   -> edit  (saves a NEW model)
+//   Flo2RvtProbe  inputs: input.rvt, save-families.json  -> probe (reads, never saves the model;
+//                                                            since add-in 0.12.0 saves the families
+//                                                            named out of it, as new .rfa files)
+//   Flo2RvtEdit   inputs: input.rvt, changes.json        -> edit  (saves a NEW model)
 //
 // The probe Activity has no parameter that could put a changes.json in the working folder,
 // and the edit Activity's changes parameter is required (Design Automation fails the
