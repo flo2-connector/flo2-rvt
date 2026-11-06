@@ -25,7 +25,7 @@ namespace Flo2Rvt.Addin.Probe
         [DataMember(Name = "exports", Order = 10)] public ExportsInfo Exports = new ExportsInfo();
         [DataMember(Name = "warnings", Order = 11)] public List<WarningInfo> Warnings = new List<WarningInfo>();
         [DataMember(Name = "warnings_total", Order = 12)] public int WarningsTotal;
-        /// <summary>Since add-in 0.10.0: every wall, floor and door type the model holds, by family and name, as an edit's add_wall, add_floor and add_door name them.</summary>
+        /// <summary>Since add-in 0.10.0: every wall, floor and door type the model holds, by family and name, as an edit's add_wall, add_floor and add_door name them; since add-in 0.11.0 every foundation type too, with its sizes.</summary>
         [DataMember(Name = "types", Order = 13, EmitDefaultValue = false)] public TypesInfo Types;
         /// <summary>Since add-in 0.10.0: the model's placed rooms, each with its number, name, level, area, point and boundary (Revit's IFC export of the model holds no rooms).</summary>
         [DataMember(Name = "rooms", Order = 14, EmitDefaultValue = false)] public List<RoomInfo> Rooms;
@@ -162,6 +162,50 @@ namespace Flo2Rvt.Addin.Probe
         [DataMember(Name = "doors", Order = 2)] public List<TypeInfo> Doors = new List<TypeInfo>();
         /// <summary>True when a list stopped at Cap.</summary>
         [DataMember(Name = "truncated", Order = 3, EmitDefaultValue = false)] public bool Truncated;
+        /// <summary>
+        /// Since add-in 0.11.0: every foundation type the model holds, as an edit's add_footing,
+        /// add_pile (Structural Foundations family types) and add_wall_footing (wall foundation
+        /// types) name them, each with its length parameters, which their sizes name. Absent from
+        /// a probe of an older add-in.
+        /// </summary>
+        [DataMember(Name = "foundations", Order = 4, EmitDefaultValue = false)] public List<FoundationTypeInfo> Foundations;
+        /// <summary>Since add-in 0.11.0: why the foundation types could not be read, when they could not (foundations is then absent).</summary>
+        [DataMember(Name = "foundations_unread", Order = 5, EmitDefaultValue = false)] public string FoundationsUnread;
+    }
+
+    /// <summary>Since add-in 0.11.0: a foundation type, as a foundation change names it and sizes it.</summary>
+    [DataContract]
+    public sealed class FoundationTypeInfo
+    {
+        public const string FamilyType = "family_type";
+        public const string WallFoundationType = "wall_foundation_type";
+        /// <summary>How many families' documents the probe opens to read their instance parameters.</summary>
+        public const int FamiliesOpenedCap = 100;
+
+        [DataMember(Name = "family", Order = 0)] public string Family;
+        [DataMember(Name = "type", Order = 1)] public string Type;
+        [DataMember(Name = "element_id", Order = 2)] public long ElementId;
+        /// <summary>family_type (a Structural Foundations family's type: add_footing, add_pile) or wall_foundation_type (add_wall_footing).</summary>
+        [DataMember(Name = "kind", Order = 3)] public string Kind;
+        /// <summary>Its length parameters: the type's, as the model holds them, and the instance's its family defines, with the family's value for this type.</summary>
+        [DataMember(Name = "sizes", Order = 4)] public List<SizeInfo> Sizes = new List<SizeInfo>();
+        /// <summary>When the instance parameters could not be read from the family (its document would not open), why.</summary>
+        [DataMember(Name = "instance_sizes_unread", Order = 5, EmitDefaultValue = false)] public string InstanceSizesUnread;
+    }
+
+    /// <summary>Since add-in 0.11.0: one length parameter of a foundation type, or of an element of it.</summary>
+    [DataContract]
+    public sealed class SizeInfo
+    {
+        [DataMember(Name = "name", Order = 0)] public string Name;
+        /// <summary>type or instance: a type size is set on a copy of the type (new_type), an instance size on the new element.</summary>
+        [DataMember(Name = "of", Order = 1)] public string Of;
+        [DataMember(Name = "value_ft", Order = 2, EmitDefaultValue = false)] public double? ValueFt;
+        [DataMember(Name = "value_mm", Order = 3, EmitDefaultValue = false)] public double? ValueMm;
+        /// <summary>Revit holds it read-only: no change sets it.</summary>
+        [DataMember(Name = "read_only", Order = 4, EmitDefaultValue = false)] public bool ReadOnly;
+        /// <summary>A formula in the family sets it: no change sets it.</summary>
+        [DataMember(Name = "formula", Order = 5, EmitDefaultValue = false)] public bool Formula;
     }
 
     [DataContract]

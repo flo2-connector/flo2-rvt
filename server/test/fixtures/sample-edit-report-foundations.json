@@ -1,0 +1,783 @@
+{
+  "_note": "A made-up report of add-in 0.11.0 (report version 2, fields added), shaped as flo2's own fixtures of a list and its report, for change_list, a version-4 list, on a made-up model: a wall, a wall footing under it sized on a copy of its type, two footings from a family file (one turned 30 degrees and sized on a copy of its type, one placed from that copy by name), both with their tops 600 mm below Level 1, two piles from a family file, 6 m long, their tops at the footings' undersides (1050 mm below the level), and a footing from a family file whose family is not a Structural Foundations one (not applied). Points are in mm in the list; the report gives each in feet in shared and internal coordinates, related by the additions fixture's made-up frame: shared = R(36.99 deg) internal + (-65.03, -61.7) ft; every elevation is internal feet. Read by server/test/edit.test.ts and addin/tests, and for flo2's check of footings and piles.",
+  "change_list": {
+    "version": 4,
+    "list_id": "foundation-1",
+    "description": "Made-up: a foundation for a small room on a public sample model: a wall footing, two footings and two piles.",
+    "changes": [
+      {
+        "kind": "add_wall",
+        "id": "w1",
+        "level": {
+          "level_name": "Level 1"
+        },
+        "start": {
+          "x": 0,
+          "y": 0,
+          "unit": "mm"
+        },
+        "end": {
+          "x": 6000,
+          "y": 0,
+          "unit": "mm"
+        },
+        "coordinates": "shared",
+        "wall_type": {
+          "family": "Basic Wall",
+          "type": "Exterior - 200mm"
+        },
+        "top": {
+          "height": {
+            "value": 2700,
+            "unit": "mm"
+          }
+        }
+      },
+      {
+        "kind": "add_wall_footing",
+        "id": "wf1",
+        "wall": {
+          "wall_change": "w1"
+        },
+        "wall_footing_type": {
+          "family": "Wall Foundation",
+          "type": "Bearing Footing - 900 x 300"
+        },
+        "sizes": {
+          "Width": {
+            "value": 600,
+            "unit": "mm"
+          },
+          "Foundation Thickness": {
+            "value": 300,
+            "unit": "mm"
+          }
+        },
+        "new_type": "Bearing Footing - 600 x 300"
+      },
+      {
+        "kind": "add_footing",
+        "id": "f1",
+        "level": {
+          "level_name": "Level 1"
+        },
+        "point": {
+          "x": 1500,
+          "y": 3000,
+          "unit": "mm"
+        },
+        "coordinates": "shared",
+        "footing_type": {
+          "family": "Footing-Rectangular",
+          "type": "1800 x 1200 x 450mm"
+        },
+        "family_file": "Footing-Rectangular.rfa",
+        "sizes": {
+          "Width": {
+            "value": 1.5,
+            "unit": "m"
+          },
+          "Length": {
+            "value": 1.5,
+            "unit": "m"
+          },
+          "Foundation Thickness": {
+            "value": 450,
+            "unit": "mm"
+          }
+        },
+        "new_type": "1500 x 1500 x 450mm",
+        "top_offset": {
+          "value": -600,
+          "unit": "mm"
+        },
+        "rotation_deg": 30
+      },
+      {
+        "kind": "add_footing",
+        "id": "f2",
+        "level": {
+          "level_name": "Level 1"
+        },
+        "point": {
+          "x": 4500,
+          "y": 3000,
+          "unit": "mm"
+        },
+        "coordinates": "shared",
+        "footing_type": {
+          "family": "Footing-Rectangular",
+          "type": "1500 x 1500 x 450mm"
+        },
+        "family_file": "Footing-Rectangular.rfa",
+        "top_offset": {
+          "value": -600,
+          "unit": "mm"
+        }
+      },
+      {
+        "kind": "add_pile",
+        "id": "p1",
+        "level": {
+          "level_name": "Level 1"
+        },
+        "point": {
+          "x": 1500,
+          "y": 3000,
+          "unit": "mm"
+        },
+        "coordinates": "shared",
+        "pile_type": {
+          "family": "Pile-Steel Pipe",
+          "type": "Standard"
+        },
+        "family_file": "Pile-Steel Pipe.rfa",
+        "sizes": {
+          "Pile Length": {
+            "value": 6,
+            "unit": "m"
+          }
+        },
+        "top_offset": {
+          "value": -1050,
+          "unit": "mm"
+        }
+      },
+      {
+        "kind": "add_pile",
+        "id": "p2",
+        "level": {
+          "level_name": "Level 1"
+        },
+        "point": {
+          "x": 4500,
+          "y": 3000,
+          "unit": "mm"
+        },
+        "coordinates": "shared",
+        "pile_type": {
+          "family": "Pile-Steel Pipe",
+          "type": "Standard"
+        },
+        "family_file": "Pile-Steel Pipe.rfa",
+        "sizes": {
+          "Pile Length": {
+            "value": 6,
+            "unit": "m"
+          }
+        },
+        "top_offset": {
+          "value": -1050,
+          "unit": "mm"
+        }
+      },
+      {
+        "kind": "add_footing",
+        "id": "f3",
+        "level": {
+          "level_name": "Level 1"
+        },
+        "point": {
+          "x": 3000,
+          "y": 6000,
+          "unit": "mm"
+        },
+        "coordinates": "shared",
+        "footing_type": {
+          "type": "450mm"
+        },
+        "family_file": "Column-Round.rfa"
+      }
+    ]
+  },
+  "report": {
+    "schema": "flo2-rvt/edit-report",
+    "version": 2,
+    "edit": {
+      "addin_version": "0.11.0",
+      "started_at": "2026-11-05T12:00:00.0000000Z",
+      "finished_at": "2026-11-05T12:02:10.0000000Z",
+      "transactions_committed": 8,
+      "transactions_rolled_back": 1,
+      "saved": true,
+      "on_failure": "rolls_back_alone"
+    },
+    "engine": {
+      "version_name": "Autodesk Revit 2024",
+      "version_number": "2024",
+      "sub_version_number": "2024.3",
+      "build": "24.3.0.0"
+    },
+    "file": {
+      "format": "2024",
+      "is_workshared": false,
+      "is_central": false,
+      "saved_in_current_version": true,
+      "saved_in_later_version": false,
+      "opened_detached": false
+    },
+    "change_list": {
+      "list_id": "foundation-1",
+      "description": "Made-up: a foundation for a small room on a public sample model: a wall footing, two footings and two piles.",
+      "sha256": "f6222323085026e92cddfa5278a00575b9c53fdc3a297f7bf0f488e8db41f0fe",
+      "bytes": 2284,
+      "changes": 7
+    },
+    "outcome": "partly_applied",
+    "totals": {
+      "changes": 7,
+      "applied": 6,
+      "applied_in_part": 0,
+      "rolled_back": 0,
+      "not_applied": 1,
+      "elements_deleted": 0,
+      "other_elements_deleted": 0,
+      "elements_deleted_by_revit": 0,
+      "other_elements_deleted_by_revit": 0,
+      "elements_deleted_with_host": 0,
+      "elements_modified_by_revit": 0,
+      "other_elements_modified_by_revit": 0,
+      "elements_could_not": 0,
+      "elements_left_on_level": 0,
+      "other_elements_left_on_level": 0,
+      "groups_ungrouped": 0,
+      "elements_reshaped_unexpected": 0,
+      "elements_added": 6
+    },
+    "changes": [
+      {
+        "index": 0,
+        "id": "w1",
+        "kind": "add_wall",
+        "status": "applied",
+        "level": {
+          "name": "Level 1",
+          "element_id": 311,
+          "matched_by": "level_name"
+        },
+        "added": [
+          {
+            "element_id": 990101,
+            "global_id": "0MadeUpWall00000000101",
+            "category": "Walls",
+            "revit_class": "Wall",
+            "model_element": true,
+            "family": "Basic Wall",
+            "type": "Exterior - 200mm",
+            "type_id": 4322,
+            "level": "Level 1",
+            "coordinates": "shared",
+            "wall": {
+              "start": {
+                "shared_ft": [
+                  0.0,
+                  0.0
+                ],
+                "internal_ft": [
+                  89.065483,
+                  10.155325
+                ]
+              },
+              "end": {
+                "shared_ft": [
+                  19.685039,
+                  0.0
+                ],
+                "internal_ft": [
+                  104.788722,
+                  -1.688683
+                ]
+              },
+              "length_ft": 19.685039,
+              "length_mm": 6000,
+              "height_ft": 8.858268,
+              "height_mm": 2700,
+              "width_mm": 200,
+              "location_line": "wall_centerline",
+              "joins": "join"
+            }
+          }
+        ],
+        "seconds": 0.4
+      },
+      {
+        "index": 1,
+        "id": "wf1",
+        "kind": "add_wall_footing",
+        "status": "applied",
+        "level": {
+          "name": "Level 1",
+          "element_id": 311,
+          "matched_by": "host_wall"
+        },
+        "added": [
+          {
+            "element_id": 990102,
+            "global_id": "0MadeUpWallFooting0102",
+            "category": "Structural Foundations",
+            "revit_class": "WallFoundation",
+            "model_element": true,
+            "family": "Wall Foundation",
+            "type": "Bearing Footing - 600 x 300",
+            "type_id": 990103,
+            "level": "Level 1",
+            "wall_footing": {
+              "host_element_id": 990101,
+              "host_global_id": "0MadeUpWall00000000101",
+              "host_change_id": "w1",
+              "width_ft": 1.968504,
+              "width_mm": 600,
+              "thickness_ft": 0.984252,
+              "thickness_mm": 300,
+              "length_ft": 19.685039,
+              "length_mm": 6000,
+              "top_elevation_ft": 0,
+              "bottom_elevation_ft": -0.984252,
+              "copied_from": "Bearing Footing - 900 x 300",
+              "new_type": "Bearing Footing - 600 x 300",
+              "new_type_was": "copied",
+              "sizes": [
+                {
+                  "name": "Default End Extension Length",
+                  "of": "type",
+                  "value_ft": 0.0,
+                  "value_mm": 0.0
+                },
+                {
+                  "name": "Foundation Thickness",
+                  "of": "type",
+                  "value_ft": 0.984252,
+                  "value_mm": 300.0,
+                  "asked_ft": 0.984252,
+                  "asked_mm": 300.0
+                },
+                {
+                  "name": "Width",
+                  "of": "type",
+                  "value_ft": 1.968504,
+                  "value_mm": 600.0,
+                  "asked_ft": 1.968504,
+                  "asked_mm": 600.0
+                },
+                {
+                  "name": "Eccentricity",
+                  "of": "instance",
+                  "value_ft": 0.0,
+                  "value_mm": 0.0
+                },
+                {
+                  "name": "Length",
+                  "of": "instance",
+                  "value_ft": 19.685039,
+                  "value_mm": 6000.0,
+                  "read_only": true
+                },
+                {
+                  "name": "Width",
+                  "of": "instance",
+                  "value_ft": 1.968504,
+                  "value_mm": 600.0,
+                  "read_only": true
+                }
+              ]
+            }
+          }
+        ],
+        "seconds": 0.3
+      },
+      {
+        "index": 2,
+        "id": "f1",
+        "kind": "add_footing",
+        "status": "applied",
+        "level": {
+          "name": "Level 1",
+          "element_id": 311,
+          "matched_by": "level_name"
+        },
+        "added": [
+          {
+            "element_id": 990104,
+            "global_id": "0MadeUpFooting00000104",
+            "category": "Structural Foundations",
+            "revit_class": "FamilyInstance",
+            "model_element": true,
+            "family": "Footing-Rectangular",
+            "type": "1500 x 1500 x 450mm",
+            "type_id": 990105,
+            "level": "Level 1",
+            "coordinates": "shared",
+            "footing": {
+              "location": {
+                "shared_ft": [
+                  4.92126,
+                  9.84252
+                ],
+                "internal_ft": [
+                  98.918297,
+                  15.055942
+                ]
+              },
+              "level_elevation_ft": 0,
+              "top_offset_ft": -1.968504,
+              "top_offset_mm": -600.0,
+              "insertion_elevation_ft": -1.968504,
+              "top_elevation_ft": -1.968504,
+              "bottom_elevation_ft": -3.444882,
+              "top_above_level_ft": -1.968504,
+              "top_above_level_mm": -600.0,
+              "rotation_deg": 30.0,
+              "rotation_internal_deg": -6.99,
+              "structural_type": "Footing",
+              "ifc_entity": "IfcFooting",
+              "copied_from": "1800 x 1200 x 450mm",
+              "new_type": "1500 x 1500 x 450mm",
+              "new_type_was": "copied",
+              "family_file": "Footing-Rectangular.rfa",
+              "family_was": "loaded",
+              "sizes": [
+                {
+                  "name": "Foundation Thickness",
+                  "of": "type",
+                  "value_ft": 1.476378,
+                  "value_mm": 450.0,
+                  "asked_ft": 1.476378,
+                  "asked_mm": 450.0
+                },
+                {
+                  "name": "Length",
+                  "of": "type",
+                  "value_ft": 4.92126,
+                  "value_mm": 1500.0,
+                  "asked_ft": 4.92126,
+                  "asked_mm": 1500.0
+                },
+                {
+                  "name": "Width",
+                  "of": "type",
+                  "value_ft": 4.92126,
+                  "value_mm": 1500.0,
+                  "asked_ft": 4.92126,
+                  "asked_mm": 1500.0
+                },
+                {
+                  "name": "Height Offset From Level",
+                  "of": "instance",
+                  "value_ft": -1.968504,
+                  "value_mm": -600.0
+                }
+              ]
+            }
+          }
+        ],
+        "seconds": 0.5
+      },
+      {
+        "index": 3,
+        "id": "f2",
+        "kind": "add_footing",
+        "status": "applied",
+        "level": {
+          "name": "Level 1",
+          "element_id": 311,
+          "matched_by": "level_name"
+        },
+        "added": [
+          {
+            "element_id": 990106,
+            "global_id": "0MadeUpFooting00000106",
+            "category": "Structural Foundations",
+            "revit_class": "FamilyInstance",
+            "model_element": true,
+            "family": "Footing-Rectangular",
+            "type": "1500 x 1500 x 450mm",
+            "type_id": 990105,
+            "level": "Level 1",
+            "coordinates": "shared",
+            "footing": {
+              "location": {
+                "shared_ft": [
+                  14.76378,
+                  9.84252
+                ],
+                "internal_ft": [
+                  106.779916,
+                  9.133938
+                ]
+              },
+              "level_elevation_ft": 0,
+              "top_offset_ft": -1.968504,
+              "top_offset_mm": -600.0,
+              "insertion_elevation_ft": -1.968504,
+              "top_elevation_ft": -1.968504,
+              "bottom_elevation_ft": -3.444882,
+              "top_above_level_ft": -1.968504,
+              "top_above_level_mm": -600.0,
+              "rotation_deg": 0.0,
+              "rotation_internal_deg": -36.99,
+              "structural_type": "Footing",
+              "ifc_entity": "IfcFooting",
+              "family_file": "Footing-Rectangular.rfa",
+              "family_was": "loaded",
+              "sizes": [
+                {
+                  "name": "Foundation Thickness",
+                  "of": "type",
+                  "value_ft": 1.476378,
+                  "value_mm": 450.0
+                },
+                {
+                  "name": "Length",
+                  "of": "type",
+                  "value_ft": 4.92126,
+                  "value_mm": 1500.0
+                },
+                {
+                  "name": "Width",
+                  "of": "type",
+                  "value_ft": 4.92126,
+                  "value_mm": 1500.0
+                },
+                {
+                  "name": "Height Offset From Level",
+                  "of": "instance",
+                  "value_ft": -1.968504,
+                  "value_mm": -600.0
+                }
+              ]
+            }
+          }
+        ],
+        "seconds": 0.3
+      },
+      {
+        "index": 4,
+        "id": "p1",
+        "kind": "add_pile",
+        "status": "applied",
+        "level": {
+          "name": "Level 1",
+          "element_id": 311,
+          "matched_by": "level_name"
+        },
+        "added": [
+          {
+            "element_id": 990107,
+            "global_id": "0MadeUpPile00000000107",
+            "category": "Structural Foundations",
+            "revit_class": "FamilyInstance",
+            "model_element": true,
+            "family": "Pile-Steel Pipe",
+            "type": "Standard",
+            "type_id": 990110,
+            "level": "Level 1",
+            "coordinates": "shared",
+            "pile": {
+              "location": {
+                "shared_ft": [
+                  4.92126,
+                  9.84252
+                ],
+                "internal_ft": [
+                  98.918297,
+                  15.055942
+                ]
+              },
+              "level_elevation_ft": 0,
+              "top_offset_ft": -3.444882,
+              "top_offset_mm": -1050.0,
+              "insertion_elevation_ft": -3.444882,
+              "top_elevation_ft": -3.444882,
+              "bottom_elevation_ft": -23.129921,
+              "top_above_level_ft": -3.444882,
+              "top_above_level_mm": -1050.0,
+              "rotation_deg": 36.99,
+              "rotation_internal_deg": 0.0,
+              "structural_type": "Footing",
+              "ifc_export_as": "IfcPile",
+              "ifc_entity": "IfcPile",
+              "family_file": "Pile-Steel Pipe.rfa",
+              "family_was": "loaded",
+              "sizes": [
+                {
+                  "name": "Pile Diameter",
+                  "of": "type",
+                  "value_ft": 0.984252,
+                  "value_mm": 300.0
+                },
+                {
+                  "name": "Pile Length",
+                  "of": "instance",
+                  "value_ft": 19.685039,
+                  "value_mm": 6000.0,
+                  "asked_ft": 19.685039,
+                  "asked_mm": 6000.0
+                }
+              ]
+            }
+          }
+        ],
+        "seconds": 0.4
+      },
+      {
+        "index": 5,
+        "id": "p2",
+        "kind": "add_pile",
+        "status": "applied",
+        "level": {
+          "name": "Level 1",
+          "element_id": 311,
+          "matched_by": "level_name"
+        },
+        "added": [
+          {
+            "element_id": 990108,
+            "global_id": "0MadeUpPile00000000108",
+            "category": "Structural Foundations",
+            "revit_class": "FamilyInstance",
+            "model_element": true,
+            "family": "Pile-Steel Pipe",
+            "type": "Standard",
+            "type_id": 990110,
+            "level": "Level 1",
+            "coordinates": "shared",
+            "pile": {
+              "location": {
+                "shared_ft": [
+                  14.76378,
+                  9.84252
+                ],
+                "internal_ft": [
+                  106.779916,
+                  9.133938
+                ]
+              },
+              "level_elevation_ft": 0,
+              "top_offset_ft": -3.444882,
+              "top_offset_mm": -1050.0,
+              "insertion_elevation_ft": -3.444882,
+              "top_elevation_ft": -3.444882,
+              "bottom_elevation_ft": -23.129921,
+              "top_above_level_ft": -3.444882,
+              "top_above_level_mm": -1050.0,
+              "rotation_deg": 36.99,
+              "rotation_internal_deg": 0.0,
+              "structural_type": "Footing",
+              "ifc_export_as": "IfcPile",
+              "ifc_entity": "IfcPile",
+              "family_file": "Pile-Steel Pipe.rfa",
+              "family_was": "loaded",
+              "sizes": [
+                {
+                  "name": "Pile Diameter",
+                  "of": "type",
+                  "value_ft": 0.984252,
+                  "value_mm": 300.0
+                },
+                {
+                  "name": "Pile Length",
+                  "of": "instance",
+                  "value_ft": 19.685039,
+                  "value_mm": 6000.0,
+                  "asked_ft": 19.685039,
+                  "asked_mm": 6000.0
+                }
+              ]
+            }
+          }
+        ],
+        "seconds": 0.4
+      },
+      {
+        "index": 6,
+        "id": "f3",
+        "kind": "add_footing",
+        "status": "not_applied",
+        "why": "family_file \"Column-Round.rfa\" was not loaded: its family \"Column-Round\" is in the category Structural Columns, not Structural Foundations, so it was not kept",
+        "level": {
+          "name": "Level 1",
+          "element_id": 311,
+          "matched_by": "level_name"
+        },
+        "seconds": 0
+      }
+    ],
+    "coordinates": {
+      "angle_deg": 36.99,
+      "offset_x_ft": -65.03,
+      "offset_y_ft": -61.7,
+      "how": "shared = R(angle) x internal + offset, from the project base point (BasePoint.Position, SharedPosition) and ProjectLocation.GetProjectPosition(...).Angle, as Revit's IFC exporter places its site for the shared coordinate base"
+    },
+    "families": [
+      {
+        "family_file": "Footing-Rectangular.rfa",
+        "input": "family1.rfa",
+        "bytes": 393216,
+        "sha256": "502160e455abc0b0c270d40f63018b0e6383cbf6d8e9c5ae34486a1c2ca47b04",
+        "family": "Footing-Rectangular",
+        "family_id": 990100,
+        "category": "Structural Foundations",
+        "was": "loaded",
+        "types": [
+          "1800 x 1200 x 450mm",
+          "2400 x 1800 x 900mm"
+        ],
+        "seconds": 0.6
+      },
+      {
+        "family_file": "Pile-Steel Pipe.rfa",
+        "input": "family2.rfa",
+        "bytes": 344064,
+        "sha256": "8ca40df164083b85d319f8ccd7335a73b19ec686ab71276999773fd90ced447e",
+        "family": "Pile-Steel Pipe",
+        "family_id": 990109,
+        "category": "Structural Foundations",
+        "was": "loaded",
+        "types": [
+          "Standard"
+        ],
+        "seconds": 0.6
+      },
+      {
+        "family_file": "Column-Round.rfa",
+        "input": "family3.rfa",
+        "bytes": 360448,
+        "sha256": "d992741bde2e4d1a34eaf6ad76e80da57a16f98d50017d9721be990c8b4dd5a4",
+        "was": "not_loaded",
+        "why": "its family \"Column-Round\" is in the category Structural Columns, not Structural Foundations, so it was not kept",
+        "seconds": 0.6
+      }
+    ],
+    "levels_after": [
+      {
+        "name": "Level 1",
+        "elevation_ft": 0,
+        "elevation_mm": 0,
+        "project_elevation_ft": 0,
+        "project_elevation_mm": 0,
+        "element_id": 311,
+        "unique_id": "made-up-level-1"
+      }
+    ],
+    "element_count_total_before": 5000,
+    "element_count_total_after": 5012,
+    "exports": {
+      "model_rvt": {
+        "written": true,
+        "saved_as": "file",
+        "bytes": 1300000
+      },
+      "sheets_pdf": {
+        "written": true,
+        "sheets": 2
+      },
+      "model_ifc": {
+        "written": true,
+        "ifc_version": "IFC4DTV",
+        "base_quantities": true
+      }
+    },
+    "warnings": [],
+    "warnings_total": 0
+  }
+}

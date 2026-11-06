@@ -23,6 +23,10 @@
 // ⭐ NEW CONTENT (since 0.10.0, change-list version 3): add_wall, add_floor, add_room and
 // add_door, in EditJob.Additions.cs, each in its own transaction like every other change, each
 // placing a type the model holds at points the change gives in shared or internal coordinates.
+//
+// ⭐ FOUNDATIONS (since 0.11.0, change-list version 4): the family files the list names are loaded
+// first, each in its own transaction, then add_footing, add_wall_footing and add_pile run in order
+// with every other change (EditJob.Foundations.cs).
 
 using System;
 using System.Collections.Generic;
@@ -95,6 +99,8 @@ namespace Flo2Rvt.Addin.Jobs
                     probeWarnings.Add("the model's shared coordinates could not be read (" + ex.GetType().Name + ": " + ex.Message + "): a change in shared coordinates is not applied");
                 }
             }
+            // Since add-in 0.11.0: the family files the list names, before any change runs.
+            LoadFamilyFiles(context, list, adding, report);
             for (int i = 0; i < list.List.Changes.Count; i++)
             {
                 Change change = list.List.Changes[i];
@@ -202,6 +208,9 @@ namespace Flo2Rvt.Addin.Jobs
                     case ChangeKinds.AddFloor: AddFloor(context, index, adding, change, r); break;
                     case ChangeKinds.AddRoom: AddRoom(context, index, adding, change, r); break;
                     case ChangeKinds.AddDoor: AddDoor(context, index, adding, change, r); break;
+                    case ChangeKinds.AddFooting: AddFooting(context, index, adding, change, r); break;
+                    case ChangeKinds.AddWallFooting: AddWallFooting(context, index, adding, change, r); break;
+                    case ChangeKinds.AddPile: AddPile(context, index, adding, change, r); break;
                     default:
                         r.Status = ChangeStatus.NotApplied;
                         r.Why = "the kind is not in this add-in's vocabulary";

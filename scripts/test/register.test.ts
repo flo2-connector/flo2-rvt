@@ -59,7 +59,7 @@ describe('flo2-rvt register', () => {
       assert.ok(daCalls.every((c) => c.auth === 'Bearer registration-token-for-tests-only'));
 
       const bundle = aps.calls.find((c) => c.path === '/da/us-east/v3/appbundles');
-      assert.deepEqual(bundle?.json, { id: 'Flo2RvtProbe', engine: 'Autodesk.Revit+2024', description: 'flo2-rvt probe and edit jobs for Revit 2024 (flo2-rvt add-in 0.10.0)' }, 'its description names the add-in version a check reads back');
+      assert.deepEqual(bundle?.json, { id: 'Flo2RvtProbe', engine: 'Autodesk.Revit+2024', description: 'flo2-rvt probe and edit jobs for Revit 2024 (flo2-rvt add-in 0.11.0)' }, 'its description names the add-in version a check reads back');
       const upload = aps.appBundleUploads[0];
       assert.equal(upload?.fields.at(-1), 'file', 'the file field comes last');
       assert.ok(upload?.fields.includes('policy') && upload.fields.includes('x-amz-signature'));
@@ -203,6 +203,15 @@ describe('flo2-rvt register', () => {
     assert.deepEqual(Object.fromEntries(Object.entries(body.parameters).map(([k, v]) => [k, [v.verb, v.localName, v.required]])), {
       rvtFile: ['get', 'input.rvt', true],
       changes: ['get', 'changes.json', true],
+      // Since add-in 0.11.0: up to eight family files, each optional, in the order the list first names them.
+      family1: ['get', 'family1.rfa', false],
+      family2: ['get', 'family2.rfa', false],
+      family3: ['get', 'family3.rfa', false],
+      family4: ['get', 'family4.rfa', false],
+      family5: ['get', 'family5.rfa', false],
+      family6: ['get', 'family6.rfa', false],
+      family7: ['get', 'family7.rfa', false],
+      family8: ['get', 'family8.rfa', false],
       report: ['put', 'report.json', true],
       result: ['put', 'model.rvt', false],
       sheets: ['put', 'sheets.pdf', false],

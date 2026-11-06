@@ -1,6 +1,7 @@
 // Shared test wiring: a flo2-rvt HTTP server on an ephemeral loopback port,
 // talking to the Autodesk stand-in, and the hidden context flo2.io would send.
 
+import { createHash } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import { createHttpServer, MCP_PATH } from '../src/http.ts';
@@ -66,6 +67,20 @@ export function jobMeta(aps: MockAps, overrides: { input?: boolean; expiresInSec
     };
   }
   return { 'flo2.io/job': job };
+}
+
+/**
+ * Since contract v4: a family file as flo2.io hands it over (contract.ts FamilyFileHandover), its
+ * made-up bytes served by the stand-in's download link. `said` overrides what the gateway says of it.
+ */
+export function familyHandover(aps: MockAps, name: string, bytes: Buffer, said: { size?: number; sha256?: string } = {}) {
+  aps.families.set(name, bytes);
+  return {
+    family_file: name,
+    download_url: `${aps.base}/flo2/download/family/${encodeURIComponent(name)}`,
+    size: said.size ?? bytes.length,
+    sha256: said.sha256 ?? createHash('sha256').update(bytes).digest('hex'),
+  };
 }
 
 /** A raw JSON-RPC POST, as a hand-written client such as flo2.io's gateway sends it. */

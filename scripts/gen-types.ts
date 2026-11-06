@@ -83,6 +83,18 @@ class CSharpWriter {
     return !!d && (d.type === 'string' || d.type === 'number' || d.type === 'integer');
   }
 
+  /** A map held in $defs (a foundation's sizes): an object with no properties of its own, each value of one type. Read with UseSimpleDictionaryFormat. */
+  private isMapDef(name: string): boolean {
+    const d = this.defs[name];
+    return !!d && d.type === 'object' && d.properties === undefined && !!d.additionalProperties && typeof d.additionalProperties === 'object';
+  }
+
+  /** A def that only names another ($ref with a description beside it, a foundation's top_offset): the type it names. */
+  private aliasOf(name: string): string | null {
+    const d = this.defs[name];
+    return d && typeof d.$ref === 'string' && d.type === undefined && d.oneOf === undefined && d.properties === undefined ? refName(d.$ref) : null;
+  }
+
   private scalarType(s: Json, required: boolean): string {
     if (s.type === 'string' || typeof s.const === 'string' || (Array.isArray(s.enum) && typeof s.enum[0] === 'string')) return 'string';
     if (s.type === 'integer' || (typeof s.const === 'number' && Number.isInteger(s.const))) return required ? 'long' : 'long?';
@@ -95,6 +107,9 @@ class CSharpWriter {
     if (typeof s.$ref === 'string') {
       const name = refName(s.$ref);
       if (this.isScalarDef(name)) return this.typeOf(this.defs[name] as Json, required);
+      if (this.isMapDef(name)) return `Dictionary<string, ${this.typeOf((this.defs[name] as Json).additionalProperties as Json, true)}>`;
+      const alias = this.aliasOf(name);
+      if (alias) return this.typeOf({ $ref: `#/$defs/${alias}` }, required);
       return pascal(name);
     }
     if (s.type === 'array') return `List<${this.typeOf(s.items as Json, true)}>`;
@@ -202,6 +217,8 @@ class CSharpWriter {
         if (Array.isArray(d.enum)) this.enumValues(pascal(name), '', d.enum as string[]);
         continue;
       }
+      // A map (a foundation's sizes) is a Dictionary where it is used, and an alias the type it names: no class of their own.
+      if (this.isMapDef(name) || this.aliasOf(name)) continue;
       if (Array.isArray(d.oneOf)) {
         this.klass(pascal(name), d.description as string, this.unionProps(d), 'One class holds every variant\'s fields; the schema says which may appear together.');
         continue;

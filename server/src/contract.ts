@@ -1,4 +1,4 @@
-// The gateway ↔ flo2-rvt contract, v3 (v2, and the setup of a person's app from flo2.io), as types and validators. Everything the
+// The gateway ↔ flo2-rvt contract, v4 (v3, and the family files an edit's list names), as types and validators. Everything the
 // agent sends is untrusted and bounded here; everything that decides what
 // flo2-rvt does with Autodesk (the token, the client id, the input file and the
 // time limit) comes only from the hidden context the gateway sets.
@@ -18,8 +18,14 @@ import { ENGINE } from './names.ts';
  * (`not_set_up`), and a start that reads its Activity before it uploads anything. Nothing of v2
  * changed: a v2 gateway still works, and an app flo2-rvt was never set up on is refused before
  * any upload, with plain words in place of Autodesk's.
+ * 4 (flo2-rvt 0.12.0, add-in 0.11.0) adds the family files a version 4 change list names
+ * (family_file): the hidden context's `families` on rvt_edit_start, which the gateway fills from
+ * the design as it fills `input` (FamilyFileHandover, below), and the start result's
+ * `family_files`, what flo2-rvt uploaded, by sha256. Nothing of v3 changed: a v3 gateway still
+ * works for every list that names no family file, and one that does is refused by name before
+ * anything is uploaded.
  */
-export const CONTRACT_VERSION = 3;
+export const CONTRACT_VERSION = 4;
 
 /** The `_meta` keys of the contract. */
 export const META_JOB = 'flo2.io/job';
@@ -38,6 +44,28 @@ export interface ErrorMeta {
 }
 
 const SHA256 = z.string().regex(/^[0-9a-f]{64}$/);
+
+/**
+ * Since contract v4: ONE family file an edit's change list names, handed over as the model is.
+ *
+ *   family_file   exactly the change list's family_file (case counts): the name of the .rfa the
+ *                 design keeps, which the gateway resolves in the design as it resolves `file`
+ *   download_url  a short-lived link the gateway mints for those bytes (as input.download_url)
+ *   size          its bytes (names.ts MAX_FAMILY_FILE_BYTES at most)
+ *   sha256        of its bytes, read when the person was asked: flo2-rvt uploads only these bytes
+ *
+ * flo2-rvt refuses an edit, naming the file, before anything is uploaded, unless `families` holds
+ * each family file the list names exactly once and nothing else, every one within its size, and
+ * all of them within MAX_FAMILY_FILES_BYTES; a probe is refused when it carries any. The bytes
+ * fetched must be `size` long with this sha256, or the start is refused with no job.
+ */
+export const FamilyFileHandover = z.object({
+  family_file: z.string().min(1).max(1024),
+  download_url: z.url({ protocol: /^https?$/ }).max(8192),
+  size: z.number().int().positive(),
+  sha256: z.string().regex(/^[0-9a-fA-F]{64}$/),
+});
+export type FamilyFileHandover = z.infer<typeof FamilyFileHandover>;
 
 /** Hidden context, set by the gateway on every tools/call as params._meta["flo2.io/job"]. */
 export const JobContextSchema = z.object({
@@ -58,6 +86,8 @@ export const JobContextSchema = z.object({
       sha256: z.string().regex(/^[0-9a-fA-F]{64}$/),
     })
     .optional(),
+  /** Since contract v4, on rvt_edit_start only: the family files the change list names (FamilyFileHandover). */
+  families: z.array(FamilyFileHandover).max(64).optional(),
   limits: z.object({
     max_processing_sec: z.number().int().positive(),
   }),
@@ -105,7 +135,7 @@ export type ProbeStartResult = z.infer<typeof ProbeStartResult>;
 export const EditStartArgs = z.object({
   file: z.string().min(1).max(1024).describe('The design file to edit: its name or id in the design, as flo2 lists it. It is never changed: the result is a new model.'),
   change_list: ChangeListShape.describe(
-    "The changes, in flo2-rvt's fixed vocabulary (schema/change-list.schema.json, version 1; a version 0 list still reads): delete_elements_on_level, delete_elements_by_global_id, set_level_elevation, and move_levels_together (version 1: several levels moved by one offset in one transaction). Applied in order, each in its own transaction. A level move's groups_in_the_way (version 1) is \"refuse\" unless the list says \"ungroup\", which only the person may agree to.",
+    "The changes, in flo2-rvt's fixed vocabulary (schema/change-list.schema.json, version 4; a list of an earlier version still reads): delete_elements_on_level, delete_elements_by_global_id, set_level_elevation, move_levels_together (version 1: several levels moved by one offset in one transaction), add_wall, add_floor, add_room and add_door (version 3), and add_footing, add_wall_footing and add_pile (version 4, each from a type the model holds or, for a footing or pile, a family file the design keeps, named by family_file). Applied in order, each in its own transaction. A level move's groups_in_the_way (version 1) is \"refuse\" unless the list says \"ungroup\", which only the person may agree to.",
   ),
   max_minutes: z
     .number()
@@ -122,6 +152,12 @@ export const EditStartResult = z.object({
   engine: z.literal(ENGINE),
   /** The SHA-256 of the change list as flo2-rvt uploaded it (canonical JSON): what will run. */
   change_list_sha256: z.string(),
+  /**
+   * Since contract v4, when the list names family files: each as flo2-rvt uploaded it, in the order
+   * the list first names them, with the work item input that carries it (family1 ...). The gateway
+   * holds each sha256 to the one the person was shown.
+   */
+  family_files: z.array(z.object({ family_file: z.string(), input: z.string(), size: z.number().int(), sha256: z.string() })).optional(),
 });
 export type EditStartResult = z.infer<typeof EditStartResult>;
 
@@ -159,7 +195,7 @@ export const EditSummary = z.object({
   left_on_level: z.number().int().optional(),
   /** Since add-in 0.7.0: elements a kept level move reshaped that nothing in the list asked for, each listed in report.json's reshaped_by_revit; absent from an older report, which never measured it. */
   reshaped_unexpected: z.number().int().optional(),
-  /** Since add-in 0.10.0: the elements the kept changes added (add_wall, add_floor, add_room, add_door), each named in report.json's `added`; absent from an older report. */
+  /** Since add-in 0.10.0: the elements the kept changes added (add_wall, add_floor, add_room, add_door, and since add-in 0.11.0 add_footing, add_wall_footing, add_pile), each named in report.json's `added`; absent from an older report. */
   elements_added: z.number().int().optional(),
   model_saved: z.boolean(),
 });

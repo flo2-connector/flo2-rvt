@@ -18,7 +18,11 @@
 //     reads no longer linked once ungrouped, and is in the way only of a change not kept;
 //   · (since 0.10.0) an element is listed as added only by a kept change, an applied change that
 //     adds names what it added, nothing is both added and deleted, a new wall's length is the
-//     distance between its ends, and an applied room has an area (it is enclosed).
+//     distance between its ends, and an applied room has an area (it is enclosed);
+//   · (since 0.11.0) a foundation change's element is the kind it asked for (a footing, a pile, a
+//     wall footing), and one read applied is all that was asked (Logic/Foundations.cs
+//     FoundationCheck): its top where top_offset put it, each size asked as Revit holds it, a pile
+//     written to IFC as an IfcPile and a footing as an IfcFooting, a wall footing under a wall.
 //
 // The lists are read as the report lists them: past ElementTally.Cap a set is truncated, and
 // only its listed elements are checked.
@@ -149,10 +153,22 @@ namespace Flo2Rvt.Addin.Edit.Logic
             }
         }
 
-        /// <summary>The kinds of change that add an element (change-list version 3).</summary>
+        /// <summary>The kinds of change that add an element (change-list version 3, and since add-in 0.11.0 version 4's foundations).</summary>
         public static bool Adds(string kind)
         {
-            return kind == ChangeKinds.AddWall || kind == ChangeKinds.AddFloor || kind == ChangeKinds.AddRoom || kind == ChangeKinds.AddDoor;
+            return kind == ChangeKinds.AddWall || kind == ChangeKinds.AddFloor || kind == ChangeKinds.AddRoom || kind == ChangeKinds.AddDoor || Founds(kind);
+        }
+
+        /// <summary>The kinds of change that add a foundation (change-list version 4).</summary>
+        public static bool Founds(string kind)
+        {
+            return kind == ChangeKinds.AddFooting || kind == ChangeKinds.AddWallFooting || kind == ChangeKinds.AddPile;
+        }
+
+        /// <summary>The kinds whose points a change names in its coordinates (a wall footing names none: it follows its wall).</summary>
+        public static bool Places(string kind)
+        {
+            return Adds(kind) && kind != ChangeKinds.AddWallFooting;
         }
 
         /// <summary>Since add-in 0.10.0: what a change added.</summary>
@@ -173,7 +189,37 @@ namespace Flo2Rvt.Addin.Edit.Logic
                     if (System.Math.Abs(apart - w.LengthFt) > Placement.ToleranceFt) found.Add(at + "reads a wall length of " + Ft(w.LengthFt) + " ft though its ends are " + Ft(apart) + " ft apart");
                 }
                 if (e.Room != null && r.Status == ChangeStatus.Applied && !(e.Room.AreaFt2 > 0)) found.Add(at + "reads applied though room " + (e.Room.Number ?? e.ElementId.ToString(CultureInfo.InvariantCulture)) + " has no area: it is not enclosed");
+                Founded(r, e, at, found);
             }
+        }
+
+        /// <summary>Since add-in 0.11.0: a foundation change's element, of its kind, and all that was asked when it reads applied.</summary>
+        private static void Founded(ChangeReport r, AddedElement e, string at, List<string> found)
+        {
+            if (!Founds(r.Kind)) return;
+            string id = e.ElementId.ToString(CultureInfo.InvariantCulture);
+            List<string> problems;
+            if (r.Kind == ChangeKinds.AddWallFooting)
+            {
+                if (e.WallFooting == null || e.Footing != null || e.Pile != null)
+                {
+                    found.Add(at + "element " + id + " of a wall footing change is not named as a wall footing");
+                    return;
+                }
+                problems = FoundationCheck.Problems(e.WallFooting);
+            }
+            else
+            {
+                bool pile = r.Kind == ChangeKinds.AddPile;
+                AddedFoundation f = pile ? e.Pile : e.Footing;
+                if (f == null || (pile ? e.Footing : e.Pile) != null || e.WallFooting != null)
+                {
+                    found.Add(at + "element " + id + " of a" + (pile ? " pile" : " footing") + " change is not named as a" + (pile ? " pile" : " footing"));
+                    return;
+                }
+                problems = FoundationCheck.Problems(f, r.Kind);
+            }
+            if (r.Status == ChangeStatus.Applied) foreach (string p in problems) found.Add(at + "reads applied though " + p);
         }
 
         private static string Ft(double v)
