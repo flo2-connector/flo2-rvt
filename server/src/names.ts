@@ -37,12 +37,13 @@ export const BUNDLE_FILE = 'Flo2RvtProbe.bundle.zip';
  * coordinates, 0.11.0 foundations: footings, wall footings and piles added, family files loaded,
  * and the probe's foundation types with their sizes, 0.12.0 the probe saves the families a person
  * names out of the model as .rfa files, 0.13.0 a new model made from Revit's own project or a template
- * file and filled in one job, and add_level), and it is what a person's app must carry
+ * file and filled in one job, and add_level, 0.13.1 a footing or pile placed by its top as Revit
+ * holds it, and the IFC class of every footing set as a pile's), and it is what a person's app must carry
  * for a job to run there: a setup writes it into the AppBundle's and each Activity's
  * description, and a job's check reads it back (server/src/setup.ts). It is not the bundle's
  * sha256, which changes with every CI build of the same add-in.
  */
-export const ADDIN_VERSION = '0.13.0';
+export const ADDIN_VERSION = '0.13.1';
 
 /** What a setup ends each description with, so a check can read which add-in an Activity runs. */
 export function setupMark(addinVersion = ADDIN_VERSION): string {

@@ -23,6 +23,11 @@
 //     wall footing), and one read applied is all that was asked (Logic/Foundations.cs
 //     FoundationCheck): its top where top_offset put it, each size asked as Revit holds it, a pile
 //     written to IFC as an IfcPile and a footing as an IfcFooting, a wall footing under a wall;
+//   · (since 0.13.1) a footing or pile placed by its top gives its top as its Elevation at Top
+//     taken from the project base point, its insertion point stands where top_offset put it moved
+//     by the correction it names, a correction says how it was made (and which parameter, when
+//     one was set), one placed by its insertion point was not corrected, and one that reads
+//     applied had its IFC class set by the add-in and read back;
 //   · (since 0.13.0) an add_level change's element is a new level, and one read applied is all that
 //     was asked (Logic/NewLevels.cs Problems): named as asked, where it was asked to stand, a
 //     building storey with its storey's GlobalId.
@@ -234,8 +239,29 @@ namespace Flo2Rvt.Addin.Edit.Logic
                     return;
                 }
                 problems = FoundationCheck.Problems(f, r.Kind);
+                Topped(f, at + "element " + id + " ", found);
             }
             if (r.Status == ChangeStatus.Applied) foreach (string p in problems) found.Add(at + "reads applied though " + p);
+        }
+
+        /// <summary>Since add-in 0.13.1: what a footing's or pile's report says of its top agrees with itself, whatever its status.</summary>
+        private static void Topped(AddedFoundation f, string at, List<string> found)
+        {
+            double tol = Placement.ToleranceFt;
+            if (f.PlacedBy == FoundationTop.ByTop)
+            {
+                double? top = FoundationTop.Internal(f.ElevationAtTopFt, f.ProjectBasePointZFt ?? double.NaN);
+                if (!top.HasValue || !f.TopElevationFt.HasValue || !(System.Math.Abs(top.Value - f.TopElevationFt.Value) <= tol)) found.Add(at + "is placed by its top, but its top_elevation_ft is not its Elevation at Top taken from the project base point");
+            }
+            if (f.PlacedBy == FoundationTop.ByInsertionPoint && ((f.TopCorrectionFt.HasValue && System.Math.Abs(f.TopCorrectionFt.Value) > tol) || f.TopCorrectedBy != null))
+                found.Add(at + "is placed by its insertion point, yet the add-in moved it for its top");
+            if (f.TopCorrectionFt.HasValue)
+            {
+                double off = f.InsertionElevationFt - FoundationTop.Asked(f.LevelElevationFt, f.TopOffsetFt);
+                if (System.Math.Abs(off - f.TopCorrectionFt.Value) > tol) found.Add(at + "says its insertion point stands " + Ft(off) + " ft from where top_offset put it, though the add-in moved it " + Ft(f.TopCorrectionFt.Value) + " ft");
+                if (System.Math.Abs(f.TopCorrectionFt.Value) > tol && f.TopCorrectedBy == null) found.Add(at + "says it was moved " + Ft(f.TopCorrectionFt.Value) + " ft for its top, but not how");
+            }
+            if (f.TopCorrectedBy == FoundationTop.ByOffsetFromLevel && string.IsNullOrEmpty(f.OffsetFromLevelParameter)) found.Add(at + "says its offset from its level was set for its top, but names no parameter it set");
         }
 
         private static string Ft(double v)

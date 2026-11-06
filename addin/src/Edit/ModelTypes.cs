@@ -91,6 +91,21 @@ namespace Flo2Rvt.Addin.Edit
             BuiltInParameter.INSTANCE_OFFSET_POS_PARAM,
         };
 
+        /// <summary>PlacedBy's names, each as its source names it (an enum value's ToString may name an alias).</summary>
+        private static readonly string[] PlacedByNames =
+        {
+            nameof(BuiltInParameter.INSTANCE_ELEVATION_PARAM),
+            nameof(BuiltInParameter.INSTANCE_FREE_HOST_OFFSET_PARAM),
+            nameof(BuiltInParameter.FLOOR_HEIGHTABOVELEVEL_PARAM),
+            nameof(BuiltInParameter.INSTANCE_SILL_HEIGHT_PARAM),
+            nameof(BuiltInParameter.INSTANCE_HEAD_HEIGHT_PARAM),
+            nameof(BuiltInParameter.FAMILY_BASE_LEVEL_OFFSET_PARAM),
+            nameof(BuiltInParameter.FAMILY_TOP_LEVEL_OFFSET_PARAM),
+            nameof(BuiltInParameter.SCHEDULE_BASE_LEVEL_OFFSET_PARAM),
+            nameof(BuiltInParameter.SCHEDULE_TOP_LEVEL_OFFSET_PARAM),
+            nameof(BuiltInParameter.INSTANCE_OFFSET_POS_PARAM),
+        };
+
         /// <summary>Whether a parameter holds a length (its spec is Length, stored as a double).</summary>
         public static bool IsLength(Parameter p)
         {
@@ -186,6 +201,42 @@ namespace Flo2Rvt.Addin.Edit
                 }
             }
             return null;
+        }
+
+        /// <summary>
+        /// Since add-in 0.13.1: the parameters Revit places an element by (PlacedBy) that it holds as
+        /// lengths, each by its BuiltInParameter's name, its name as Revit shows it, its value and
+        /// whether Revit holds it read-only: what Logic/Foundations.cs FoundationTop.OffsetFromLevel
+        /// picks the element's offset from its level out of.
+        /// </summary>
+        public static List<HeldOffset> PlacementParameters(Element e, out Dictionary<HeldOffset, Parameter> held)
+        {
+            var out1 = new List<HeldOffset>();
+            held = new Dictionary<HeldOffset, Parameter>();
+            if (e == null) return out1;
+            for (int i = 0; i < PlacedBy.Length; i++)
+            {
+                Parameter p = e.get_Parameter(PlacedBy[i]);
+                if (!IsLength(p)) continue;
+                var h = new HeldOffset { BuiltIn = PlacedByNames[i], Name = p.Definition.Name, ValueFt = p.HasValue ? p.AsDouble() : (double?)null, ReadOnly = p.IsReadOnly };
+                out1.Add(h);
+                held[h] = p;
+            }
+            return out1;
+        }
+
+        /// <summary>Since add-in 0.13.1: Revit's own read-only Elevation at Top of an element (STRUCTURAL_ELEVATION_AT_TOP), measured from the project base point; null when Revit holds none for it.</summary>
+        public static double? ElevationAtTop(Element e)
+        {
+            Parameter p = e != null ? e.get_Parameter(BuiltInParameter.STRUCTURAL_ELEVATION_AT_TOP) : null;
+            return p != null && p.HasValue && p.StorageType == StorageType.Double ? p.AsDouble() : (double?)null;
+        }
+
+        /// <summary>Since add-in 0.13.1: the project base point's height in internal feet (BasePoint.Position.Z), from which Revit measures an Elevation at Top; null when the model gives none.</summary>
+        public static double? ProjectBasePointZ(Document doc)
+        {
+            BasePoint pbp = BasePoint.GetProjectBasePoint(doc);
+            return pbp != null && pbp.Position != null ? pbp.Position.Z : (double?)null;
         }
 
         /// <summary>A string parameter's value, or null when it is not set.</summary>
