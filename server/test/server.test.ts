@@ -123,6 +123,18 @@ describe('the tools, as the contract names them', () => {
     assert.match(said('rvt_job_status'), /again as soon as each answer comes/);
   });
 
+  // Since flo2-rvt 0.14.1 (add-in 0.13.1): a chat is told what the add-in does to a footing or pile.
+  test("the edit and new-model texts say a footing or pile stands by its top as Revit holds it, and that the add-in sets a footing's IFC class as a pile's", async () => {
+    const r = await rpc(h.url, { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} });
+    const tools = (r.json as Rpc).result?.tools ?? [];
+    const said = (name: string) => String(tools.find((t) => t.name === name)?.description ?? '');
+    for (const name of ['rvt_edit_start', 'rvt_new_model_start']) {
+      assert.match(said(name), /its top, as Revit holds it \(its Elevation at Top\), at top_offset from the level/, name);
+      assert.match(said(name), /sets a footing's own Export to IFC As to IfcFooting and a pile's to IfcPile/, name);
+    }
+    assert.match(said('rvt_edit_start'), /the IFC class the add-in set/);
+  });
+
   test('both tools refuse a call without the hidden job context', async () => {
     assert.match(refusalText(await call(h, 'rvt_probe_start', { file: 'rac_basic_sample_project.rvt' })), /reached only through flo2\.io/);
     assert.match(refusalText(await call(h, 'rvt_job_status', { job_id: '6f1e2b3c-4d5e-4f60-8a7b-9c0d1e2f3a4b' })), /reached only through flo2\.io/);

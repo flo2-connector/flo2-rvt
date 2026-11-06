@@ -392,6 +392,26 @@ describe("an edit's report summary", () => {
     assert.ok(EditSummary.safeParse(s).success, 'in the contract');
   });
 
+  // Since add-in 0.13.1 the add-in places a footing or pile by its top as Revit holds it, and sets the
+  // IFC class of every footing as of every pile; the made-up report flo2 reads says both, per element.
+  test('from a report of add-in 0.13.1, each footing and pile says the class the add-in set and that its top, as Revit holds it, stands at top_offset', () => {
+    const report = fixture('sample-edit-report-foundations.json').report as { edit: { addin_version: string }; changes: Array<{ kind: string; status: string; added?: Array<Record<string, Record<string, unknown>>> }> };
+    assert.equal(report.edit.addin_version, '0.13.1');
+    const placed = report.changes.filter((c) => (c.kind === 'add_footing' || c.kind === 'add_pile') && c.status === 'applied');
+    assert.equal(placed.length, 4, 'two footings and two piles');
+    for (const c of placed) {
+      const f = c.added?.[0]?.[c.kind === 'add_pile' ? 'pile' : 'footing'] ?? {};
+      assert.equal(f.ifc_entity_basis, 'set_by_addin', c.kind);
+      assert.equal(f.ifc_export_as, f.ifc_entity, 'the class set is the one read back');
+      assert.equal(f.ifc_entity, c.kind === 'add_pile' ? 'IfcPile' : 'IfcFooting');
+      assert.equal(f.placed_by, 'elevation_at_top');
+      assert.ok(Math.abs(Number(f.top_above_level_ft) - Number(f.top_offset_ft)) < 1e-6, 'its top where top_offset put it');
+      assert.ok(Math.abs(Number(f.insertion_elevation_ft) - Number(f.level_elevation_ft) - Number(f.top_offset_ft) - Number(f.top_correction_ft)) < 1e-6, 'its insertion point moved by the correction');
+    }
+    const wall = report.changes.find((c) => c.kind === 'add_wall_footing')?.added?.[0]?.wall_footing ?? {};
+    assert.equal(wall.ifc_entity_basis, 'predicted', 'nothing set on a wall footing: its class is a prediction, said so');
+  });
+
   test('from a version-1 report (add-in 0.2.0), reads as before, without the counts it did not keep', () => {
     const s = editSummary(fixture('sample-edit-report-0.2.0.json'));
     assert.deepEqual(s, { outcome: 'partly_applied', changes: 3, applied: 1, applied_in_part: 1, rolled_back: 1, not_applied: 0, elements_deleted: 14, model_saved: true });
