@@ -35,7 +35,15 @@
 // `wall_footing` (where its top and bottom stand, its rotation, its host wall, every length
 // parameter of it and its type as Revit holds them beside each size asked, the type copied under
 // new_type, the family file it came from), and the report's `families` say what came of each
-// family file the list named: loaded, already held, or not loaded and why.
+// family file the list named: loaded, already held, or not loaded and why. Add-in 0.13.0 writes
+// version 2 still, with fields added and none changed: an add_level change (change-list version 5)
+// names the level it added under `added` as `new_level` (its name, the GlobalId of the storey Revit's
+// IFC export writes for it, its elevation both ways as Revit holds it beside the elevation asked, and
+// whether it is a building storey); and the new-model job's report (the same report, "flo2-rvt/edit-report")
+// says what the model was made from (`new_model`: no template in which units, or which template, its
+// bytes, sha256 and format; whether Revit made it and why not; the levels it started with) and lists
+// every wall, floor, door and foundation type the new model holds (`types`, the probe's own section),
+// for the next edit's changes to name.
 
 using System.Collections.Generic;
 using System.Linq;
@@ -73,6 +81,11 @@ namespace Flo2Rvt.Addin.Edit
         [DataMember(Name = "warnings_total", Order = 15)] public int WarningsTotal;
         /// <summary>Since add-in 0.11.0, when the list names family files: what came of each, in the order the list first names them.</summary>
         [DataMember(Name = "families", Order = 16, EmitDefaultValue = false)] public List<FamilyFileReport> Families;
+        /// <summary>Since add-in 0.13.0, the new-model job's: what the model was made from, and whether Revit made it.</summary>
+        [DataMember(Name = "new_model", Order = 17, EmitDefaultValue = false)] public NewModelInfo NewModel;
+        /// <summary>Since add-in 0.13.0, the new-model job's: every wall, floor, door and foundation type the new model holds after the list ran, as the probe lists a model's.</summary>
+        [DataMember(Name = "types", Order = 18, EmitDefaultValue = false)] public TypesInfo Types;
+        [DataMember(Name = "types_unread", Order = 19, EmitDefaultValue = false)] public string TypesUnread;
 
         private static DataContractJsonSerializer Serializer()
         {
@@ -309,6 +322,8 @@ namespace Flo2Rvt.Addin.Edit
         [DataMember(Name = "pile", Order = 15, EmitDefaultValue = false)] public AddedFoundation Pile;
         /// <summary>Since add-in 0.11.0: a wall foundation (add_wall_footing).</summary>
         [DataMember(Name = "wall_footing", Order = 16, EmitDefaultValue = false)] public AddedWallFooting WallFooting;
+        /// <summary>Since add-in 0.13.0: the level an add_level change made.</summary>
+        [DataMember(Name = "new_level", Order = 17, EmitDefaultValue = false)] public AddedLevel NewLevel;
     }
 
     /// <summary>A plan point in feet, in shared and in internal coordinates, each [x, y].</summary>
@@ -351,6 +366,63 @@ namespace Flo2Rvt.Addin.Edit
         [DataMember(Name = "location_line", Order = 8, EmitDefaultValue = false)] public string LocationLine;
         /// <summary>join, or do_not_join, as the change said.</summary>
         [DataMember(Name = "joins", Order = 9, EmitDefaultValue = false)] public string Joins;
+    }
+
+    /// <summary>
+    /// Since add-in 0.13.0: a new level, as Revit holds it after the change. Its GlobalId is that of
+    /// the IfcBuildingStorey Revit's IFC export writes for it, as a level's is everywhere in the report.
+    /// </summary>
+    [DataContract]
+    public sealed class AddedLevel
+    {
+        [DataMember(Name = "name", Order = 0)] public string Name;
+        [DataMember(Name = "storey_global_id", Order = 1, EmitDefaultValue = false)] public string StoreyGlobalId;
+        /// <summary>What the change measured its elevation from: project_origin or elevation_base.</summary>
+        [DataMember(Name = "relative_to", Order = 2)] public string RelativeTo;
+        [DataMember(Name = "requested_ft", Order = 3)] public double RequestedFt;
+        [DataMember(Name = "requested_mm", Order = 4)] public double RequestedMm;
+        /// <summary>Level.Elevation, measured from its Elevation Base.</summary>
+        [DataMember(Name = "elevation_ft", Order = 5)] public double ElevationFt;
+        [DataMember(Name = "elevation_mm", Order = 6)] public double ElevationMm;
+        /// <summary>Level.ProjectElevation, measured from the project origin.</summary>
+        [DataMember(Name = "project_elevation_ft", Order = 7)] public double ProjectElevationFt;
+        [DataMember(Name = "project_elevation_mm", Order = 8)] public double ProjectElevationMm;
+        /// <summary>Its Building Story setting, as Revit's IFC exporter reads it: on, so the export writes an IfcBuildingStorey for it.</summary>
+        [DataMember(Name = "building_story", Order = 9)] public bool BuildingStory;
+        /// <summary>Its level type's Elevation Base: project_base_point or survey_point.</summary>
+        [DataMember(Name = "elevation_base", Order = 10, EmitDefaultValue = false)] public string ElevationBase;
+    }
+
+    /// <summary>
+    /// Since add-in 0.13.0: what the new-model job made its model from (new-model.json), and whether
+    /// Revit made it (Application.NewProjectDocument), with the levels it started with.
+    /// </summary>
+    [DataContract]
+    public sealed class NewModelInfo
+    {
+        /// <summary>no_template (Revit's own project) or template.</summary>
+        [DataMember(Name = "from", Order = 0)] public string From;
+        /// <summary>imperial or metric, for a model from no template.</summary>
+        [DataMember(Name = "units", Order = 1, EmitDefaultValue = false)] public string Units;
+        [DataMember(Name = "template", Order = 2, EmitDefaultValue = false)] public TemplateInfo Template;
+        [DataMember(Name = "created", Order = 3)] public bool Created;
+        /// <summary>Why Revit made no model, when it made none.</summary>
+        [DataMember(Name = "error", Order = 4, EmitDefaultValue = false)] public string Error;
+        [DataMember(Name = "seconds", Order = 5)] public double Seconds;
+        /// <summary>The levels the new project held before the list ran: Revit's own, or the template's.</summary>
+        [DataMember(Name = "levels_at_start", Order = 6, EmitDefaultValue = false)] public List<LevelInfo> LevelsAtStart;
+    }
+
+    /// <summary>Since add-in 0.13.0: the template a new model was made from, as the add-in read it.</summary>
+    [DataContract]
+    public sealed class TemplateInfo
+    {
+        /// <summary>The design's name for it, as new-model.json gives it (the file in the working folder is template.rte).</summary>
+        [DataMember(Name = "file", Order = 0)] public string File;
+        [DataMember(Name = "bytes", Order = 1)] public long Bytes;
+        [DataMember(Name = "sha256", Order = 2)] public string Sha256;
+        /// <summary>The Revit release it was saved in (BasicFileInfo.Format), when Revit could read it.</summary>
+        [DataMember(Name = "format", Order = 3, EmitDefaultValue = false)] public string Format;
     }
 
     /// <summary>A new floor: its area as Revit computes it, beside the area of the outline the change gave.</summary>

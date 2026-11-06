@@ -10,7 +10,8 @@
 // in place of the MCP tool box, and flo2-rvt's two jobs, the probe and the edit.
 //
 // The class keeps the name of the add-in's first job: it runs every job. Which one is the
-// working folder's to say (Edit/Logic/JobSelection.cs): changes.json there means the edit.
+// working folder's to say (Edit/Logic/JobSelection.cs): changes.json there means the edit, and
+// since add-in 0.13.0 new-model.json means the new-model job.
 
 using System;
 using Autodesk.Revit.ApplicationServices;
@@ -41,10 +42,12 @@ namespace Flo2Rvt.Addin
         {
             try
             {
-                // The read-only probe and the edit job. A new change kind joins the edit job's vocabulary, not a new job.
+                // The read-only probe, the edit job and, since add-in 0.13.0, the new-model job (which the
+                // edit job fills). A new change kind joins the edit job's vocabulary, not a new job.
                 e.Succeeded = JobBox.CreateBuilder(e.DesignAutomationData)
                     .AddJob<ProbeJob>()
                     .AddJob<EditJob>()
+                    .AddJob<NewModelJob>()
                     .Build()
                     .ExecuteForWorkingFolder();
             }

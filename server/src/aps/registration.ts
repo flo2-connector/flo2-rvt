@@ -11,12 +11,13 @@
 //   POST  <uploadParameters.endpointURL>                 the zip, as a form: every formData field, then `file` last
 //   PATCH /da/us-east/v3/appbundles/{id}/aliases/prod    point prod at the new version (404 when there is no alias yet)
 //   POST  /da/us-east/v3/appbundles/{id}/aliases         create prod
-//   (the same four for /activities, once for each: Flo2RvtProbe, then Flo2RvtEdit)
+//   (the same four for /activities, once for each: Flo2RvtProbe, Flo2RvtEdit, and since add-in
+//   0.13.0 Flo2RvtNew, the new-model job's)
 //
-// ONE AppBundle, Flo2RvtProbe (the id it was first registered under), carries both jobs;
-// the add-in runs the edit when its Activity hands it changes.json (addin/src/Edit/Logic/
-// JobSelection.cs). A new version of it moves BOTH Activities onto the new add-in, since each
-// names it by its prod alias; the probe Activity's own body does not change.
+// ONE AppBundle, Flo2RvtProbe (the id it was first registered under), carries every job;
+// the add-in runs the edit when its Activity hands it changes.json, and the new-model job when its
+// Activity hands it new-model.json (addin/src/Edit/Logic/JobSelection.cs). A new version of it
+// moves EVERY Activity onto the new add-in, since each names it by its prod alias.
 //   PUT   /da/us-east/v3/servicelimits/me                set frontendLimits.limitMonthlyProcessingTimeInHours
 //   GET   /da/us-east/v3/servicelimits/me                read it back
 //   GET   /da/us-east/v3/engines, /engines/{id}          the engines, for `flo2-rvt engines`
@@ -63,6 +64,12 @@ import {
   EDIT_NAME,
   EDIT_OUTPUTS,
   ENGINE,
+  NEW_MODEL_NAME,
+  NEW_MODEL_OUTPUTS,
+  NEW_MODEL_PARAMETER,
+  NEW_MODEL_SPEC_NAME,
+  TEMPLATE_NAME,
+  TEMPLATE_PARAMETER,
   FAMILY_INPUTS,
   INPUT_NAME,
   INPUT_PARAMETER,
@@ -136,9 +143,42 @@ export function editActivityBody(nickname: string): Record<string, unknown> {
   };
 }
 
+/**
+ * Since add-in 0.13.0, the Activity the new-model job runs: NO model in. What the new model starts
+ * from (newModel, new-model.json, required), the template it starts from when it names one
+ * (template, template.rte, optional: a WorkItem names it only then), the change list (changes,
+ * required) and up to eight family files (optional, as an edit's), and an edit's outputs. The
+ * template is a plain input, read by the add-in itself (Application.NewProjectDocument(path)): the
+ * command line has no /i, so the engine never opens it. Autodesk's APS blog (Xiaodong Liang,
+ * 2019-03-20, "When working with NewProjectDocument by Automation API") found a template handed over
+ * as the /i input opened and locked by Design Automation, so that NewProjectDocument threw, and
+ * defined it as a common parameter instead, as here.
+ */
+export function newModelActivityBody(nickname: string): Record<string, unknown> {
+  const parameters: Record<string, unknown> = {
+    [NEW_MODEL_PARAMETER]: { verb: 'get', localName: NEW_MODEL_SPEC_NAME, required: true, description: "What the new model starts from: Revit's own project with no template in imperial or metric units, or the template beside it (JSON)." },
+    [TEMPLATE_PARAMETER]: { verb: 'get', localName: TEMPLATE_NAME, required: false, description: 'The Revit project template (.rte) the new model starts from, when new-model.json names one. Opened by the add-in, never by the engine.' },
+    [CHANGES_PARAMETER]: { verb: 'get', localName: CHANGES_NAME, required: true, description: "The new model's first change list, in flo2-rvt's fixed vocabulary (schema/change-list.schema.json)." },
+  };
+  for (let n = 1; n <= FAMILY_INPUTS; n++) {
+    const f = familyInput(n);
+    parameters[f.parameter] = { verb: 'get', localName: f.name, required: false, description: `Family file ${n} of those the change list names (.rfa), in the order it first names them, when it names so many; the add-in loads it before the changes run.` };
+  }
+  for (const out of NEW_MODEL_OUTPUTS) {
+    parameters[out.parameter] = { verb: 'put', localName: out.name, required: out.required, description: out.description };
+  }
+  return {
+    commandLine: [COMMAND_LINE],
+    parameters,
+    engine: ENGINE,
+    appbundles: [`${nickname}.${APPBUNDLE_NAME}+${ALIAS}`],
+    description: `flo2-rvt new model: a Revit 2024 model made from Revit's own project or a template, filled with a change list and saved as model.rvt, with report.json, sheets.pdf and model.ifc. ${setupMark()}`,
+  };
+}
+
 /** The AppBundle's body (its zip goes up apart, to the form Design Automation hands back). */
 export function appBundleBody(): Record<string, unknown> {
-  return { engine: ENGINE, description: `flo2-rvt probe and edit jobs for Revit 2024 ${setupMark()}` };
+  return { engine: ENGINE, description: `flo2-rvt probe, edit and new-model jobs for Revit 2024 ${setupMark()}` };
 }
 
 /** Every Activity flo2-rvt registers, in order, with its body. */
@@ -146,6 +186,7 @@ export function activities(nickname: string): Array<{ id: string; body: Record<s
   return [
     { id: PROBE_NAME, body: activityBody(nickname) },
     { id: EDIT_NAME, body: editActivityBody(nickname) },
+    { id: NEW_MODEL_NAME, body: newModelActivityBody(nickname) },
   ];
 }
 

@@ -1134,6 +1134,9 @@ namespace Flo2Rvt.Addin.Tests
             // Since add-in 0.12.0: the families a probe saves (FamilySavesTests.cs).
             FamilySavesCases(root);
 
+            // Since add-in 0.13.0: a new model made and filled in one job, and new levels (NewModelTests.cs).
+            NewModelCases(root);
+
             Console.WriteLine();
             Console.WriteLine(passed + " passed, " + failed.Count + " failed");
             return failed.Count == 0 ? 0 : 1;

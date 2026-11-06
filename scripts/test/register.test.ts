@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import { MockAps } from '../../server/test/mock-aps.ts';
 import { main } from '../flo2-rvt.ts';
-import { activityBody, editActivityBody } from '../lib/registration.ts';
+import { activityBody, editActivityBody, newModelActivityBody } from '../lib/registration.ts';
 
 const SECRET = 'made-up-secret-never-printed';
 const ENV = { APS_CLIENT_ID: 'MadeUpClientId0123456789abcdefAB', APS_CLIENT_SECRET: SECRET };
@@ -29,7 +29,7 @@ async function runCli(aps: MockAps, argv: string[], env: Record<string, string> 
 }
 
 describe('flo2-rvt register', () => {
-  test('on a new app it creates the AppBundle and both Activities, their prod aliases, and the monthly cap', async () => {
+  test('on a new app it creates the AppBundle and the three Activities, their prod aliases, and the monthly cap', async () => {
     const aps = new MockAps();
     await aps.start();
     try {
@@ -52,6 +52,10 @@ describe('flo2-rvt register', () => {
         'POST /da/us-east/v3/activities',
         'PATCH /da/us-east/v3/activities/Flo2RvtEdit/aliases/prod',
         'POST /da/us-east/v3/activities/Flo2RvtEdit/aliases',
+        // Since add-in 0.13.0: the new-model job's own Activity.
+        'POST /da/us-east/v3/activities',
+        'PATCH /da/us-east/v3/activities/Flo2RvtNew/aliases/prod',
+        'POST /da/us-east/v3/activities/Flo2RvtNew/aliases',
         'PUT /da/us-east/v3/servicelimits/me',
         'GET /da/us-east/v3/servicelimits/me',
       ]);
@@ -59,18 +63,20 @@ describe('flo2-rvt register', () => {
       assert.ok(daCalls.every((c) => c.auth === 'Bearer registration-token-for-tests-only'));
 
       const bundle = aps.calls.find((c) => c.path === '/da/us-east/v3/appbundles');
-      assert.deepEqual(bundle?.json, { id: 'Flo2RvtProbe', engine: 'Autodesk.Revit+2024', description: 'flo2-rvt probe and edit jobs for Revit 2024 (flo2-rvt add-in 0.12.0)' }, 'its description names the add-in version a check reads back');
+      assert.deepEqual(bundle?.json, { id: 'Flo2RvtProbe', engine: 'Autodesk.Revit+2024', description: 'flo2-rvt probe, edit and new-model jobs for Revit 2024 (flo2-rvt add-in 0.13.0)' }, 'its description names the add-in version a check reads back');
       const upload = aps.appBundleUploads[0];
       assert.equal(upload?.fields.at(-1), 'file', 'the file field comes last');
       assert.ok(upload?.fields.includes('policy') && upload.fields.includes('x-amz-signature'));
 
-      const [probe, edit] = aps.calls.filter((c) => c.method === 'POST' && c.path === '/da/us-east/v3/activities');
+      const [probe, edit, fresh] = aps.calls.filter((c) => c.method === 'POST' && c.path === '/da/us-east/v3/activities');
       assert.deepEqual(probe?.json, { id: 'Flo2RvtProbe', ...activityBody('SdkTester') });
       assert.deepEqual(edit?.json, { id: 'Flo2RvtEdit', ...editActivityBody('SdkTester') });
+      assert.deepEqual(fresh?.json, { id: 'Flo2RvtNew', ...newModelActivityBody('SdkTester') });
       assert.deepEqual(aps.calls.find((c) => c.method === 'PUT')?.json, { frontendLimits: { limitMonthlyProcessingTimeInHours: 3 } });
 
       assert.match(lines.join('\n'), /Activity SdkTester\.Flo2RvtProbe\+prod: created 1; alias prod created/);
       assert.match(lines.join('\n'), /Activity SdkTester\.Flo2RvtEdit\+prod: created 1; alias prod created/);
+      assert.match(lines.join('\n'), /Activity SdkTester\.Flo2RvtNew\+prod: created 1; alias prod created/);
       assert.match(lines.join('\n'), /asked for 3 h; Autodesk now reports 3 h/);
       assert.ok(!lines.join('\n').includes(SECRET));
       assert.ok(!lines.join('\n').includes('registration-token-for-tests-only'));
@@ -189,6 +195,8 @@ describe('flo2-rvt register', () => {
         assert.ok(aps.calls.some((c) => c.method === 'PATCH' && c.path === `/da/us-east/v3/activities/${id}/aliases/prod`), id);
       }
       assert.match(lines.join('\n'), /Activity SdkTester\.Flo2RvtEdit\+prod: new version 2; alias prod moved/);
+      // Since add-in 0.13.0: an app set up before it gains the new-model job's Activity.
+      assert.match(lines.join('\n'), /Activity SdkTester\.Flo2RvtNew\+prod: created 1; alias prod created/);
       assert.ok(!aps.calls.some((c) => c.method === 'DELETE'));
     } finally {
       await aps.stop();
@@ -218,6 +226,36 @@ describe('flo2-rvt register', () => {
       ifc: ['put', 'model.ifc', false],
     });
     assert.ok(!Object.values(body.parameters).some((p) => p.localName === 'input.rvt' && p.verb === 'put'), 'the input is never written back');
+  });
+
+  test("the new-model Activity takes no model: what the new model starts from, a template beside it as a plain input, the change list and its family files, and puts an edit's outputs", () => {
+    const body = newModelActivityBody('SdkTester') as { commandLine: string[]; engine: string; appbundles: string[]; description: string; parameters: Record<string, { verb: string; localName: string; required: boolean }> };
+    assert.equal(body.engine, 'Autodesk.Revit+2024');
+    assert.deepEqual(body.appbundles, ['SdkTester.Flo2RvtProbe+prod'], 'the same AppBundle as the probe and the edit');
+    assert.deepEqual(body.commandLine, (activityBody('SdkTester') as { commandLine: string[] }).commandLine);
+    // A template handed over as the engine's /i input is opened, and locked, by Design Automation, and
+    // NewProjectDocument then throws (Autodesk's APS blog, 2019-03-20, "When working with
+    // NewProjectDocument by Automation API"): no Activity of flo2-rvt's has /i, and the template is a plain input.
+    assert.ok(!body.commandLine[0]?.includes('/i '), 'the engine opens nothing; the add-in makes the model');
+    assert.deepEqual(Object.fromEntries(Object.entries(body.parameters).map(([k, v]) => [k, [v.verb, v.localName, v.required]])), {
+      newModel: ['get', 'new-model.json', true],
+      template: ['get', 'template.rte', false],
+      changes: ['get', 'changes.json', true],
+      family1: ['get', 'family1.rfa', false],
+      family2: ['get', 'family2.rfa', false],
+      family3: ['get', 'family3.rfa', false],
+      family4: ['get', 'family4.rfa', false],
+      family5: ['get', 'family5.rfa', false],
+      family6: ['get', 'family6.rfa', false],
+      family7: ['get', 'family7.rfa', false],
+      family8: ['get', 'family8.rfa', false],
+      report: ['put', 'report.json', true],
+      result: ['put', 'model.rvt', false],
+      sheets: ['put', 'sheets.pdf', false],
+      ifc: ['put', 'model.ifc', false],
+    });
+    assert.ok(!('rvtFile' in body.parameters), 'no model goes in');
+    assert.match(body.description, /\(flo2-rvt add-in 0\.13\.0\)$/);
   });
 
   test('the Activity runs revitcoreconsole with the AppBundle on the 2024 engine and names its files', () => {

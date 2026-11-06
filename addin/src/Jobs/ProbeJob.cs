@@ -28,7 +28,7 @@ namespace Flo2Rvt.Addin.Jobs
     public sealed class ProbeJob : IFlo2RvtJob
     {
         public const string Name = "probe";
-        public const string AddinVersion = "0.12.0";
+        public const string AddinVersion = "0.13.0";
         public const string ReportName = "report.json";
         /// <summary>1 ft = 304.8 mm exactly; Revit's internal length unit is the foot.</summary>
         private const double MmPerFoot = 304.8;
@@ -180,7 +180,9 @@ namespace Flo2Rvt.Addin.Jobs
             report.Engine.SubVersionNumber = app.SubVersionNumber;
             report.Engine.Build = app.VersionBuild;
 
+            // Since add-in 0.13.0 a new model's job opened no file: the new-model job reads the saved model's header instead.
             BasicFileInfo info = context.FileInfo;
+            if (info == null) return;
             report.File.Format = info.Format;
             report.File.IsWorkshared = info.IsWorkshared;
             report.File.IsCentral = info.IsCentral;
@@ -306,7 +308,8 @@ namespace Flo2Rvt.Addin.Jobs
         public static List<WarningInfo> Warnings(Document doc, List<string> jobWarnings, out int total, int maxKinds, string source)
         {
             var list = jobWarnings.Select(w => new WarningInfo { Source = source, Text = w, Count = 1 }).ToList();
-            IList<FailureMessage> stored = doc.GetWarnings();
+            // A new model Revit would not make has no document: then only the job's own warnings.
+            IList<FailureMessage> stored = doc != null ? doc.GetWarnings() : new List<FailureMessage>();
             total = stored.Count + jobWarnings.Count;
             list.AddRange(stored
                 .GroupBy(w => w.GetDescriptionText())

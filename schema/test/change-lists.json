@@ -220,7 +220,7 @@
       "schema": false,
       "accepted": false,
       "list": {
-        "version": 5,
+        "version": 6,
         "list_id": "sample-1",
         "description": "Made-up changes to a public sample model.",
         "changes": [
@@ -4512,6 +4512,504 @@
               "family": "Pile-Steel Pipe",
               "type": "Standard"
             }
+          }
+        ]
+      }
+    },
+    {
+      "why": "version 5: two new levels, then walls rising from one to the other, a floor and a room on the first, all by the new levels' names",
+      "schema": true,
+      "accepted": true,
+      "list": {
+        "version": 5,
+        "list_id": "new-levels-1",
+        "description": "Made-up levels and content for a model the job has just made.",
+        "changes": [
+          {
+            "kind": "add_level",
+            "id": "l1",
+            "name": "Ground Floor",
+            "elevation": {
+              "value": 0,
+              "unit": "ft"
+            },
+            "relative_to": "project_origin"
+          },
+          {
+            "kind": "add_level",
+            "id": "l2",
+            "name": "First Floor",
+            "elevation": {
+              "value": 10.5,
+              "unit": "ft"
+            },
+            "relative_to": "project_origin"
+          },
+          {
+            "kind": "add_wall",
+            "id": "w1",
+            "level": {
+              "level_name": "Ground Floor"
+            },
+            "coordinates": "internal",
+            "start": {
+              "x": 0,
+              "y": 0,
+              "unit": "ft"
+            },
+            "end": {
+              "x": 30,
+              "y": 0,
+              "unit": "ft"
+            },
+            "wall_type": {
+              "family": "Basic Wall",
+              "type": "Generic - 8\""
+            },
+            "top": {
+              "top_level": {
+                "level_name": "First Floor"
+              }
+            }
+          },
+          {
+            "kind": "add_wall",
+            "id": "w2",
+            "level": {
+              "level_name": "Ground Floor"
+            },
+            "coordinates": "internal",
+            "start": {
+              "x": 30,
+              "y": 0,
+              "unit": "ft"
+            },
+            "end": {
+              "x": 30,
+              "y": 20,
+              "unit": "ft"
+            },
+            "wall_type": {
+              "family": "Basic Wall",
+              "type": "Generic - 8\""
+            },
+            "top": {
+              "top_level": {
+                "level_name": "First Floor"
+              }
+            }
+          },
+          {
+            "kind": "add_wall",
+            "id": "w3",
+            "level": {
+              "level_name": "Ground Floor"
+            },
+            "coordinates": "internal",
+            "start": {
+              "x": 30,
+              "y": 20,
+              "unit": "ft"
+            },
+            "end": {
+              "x": 0,
+              "y": 20,
+              "unit": "ft"
+            },
+            "wall_type": {
+              "family": "Basic Wall",
+              "type": "Generic - 8\""
+            },
+            "top": {
+              "top_level": {
+                "level_name": "First Floor"
+              }
+            }
+          },
+          {
+            "kind": "add_wall",
+            "id": "w4",
+            "level": {
+              "level_name": "Ground Floor"
+            },
+            "coordinates": "internal",
+            "start": {
+              "x": 0,
+              "y": 20,
+              "unit": "ft"
+            },
+            "end": {
+              "x": 0,
+              "y": 0,
+              "unit": "ft"
+            },
+            "wall_type": {
+              "family": "Basic Wall",
+              "type": "Generic - 8\""
+            },
+            "top": {
+              "top_level": {
+                "level_name": "First Floor"
+              }
+            }
+          },
+          {
+            "kind": "add_floor",
+            "id": "f1",
+            "level": {
+              "level_name": "Ground Floor"
+            },
+            "coordinates": "internal",
+            "outline": [
+              {
+                "x": 0,
+                "y": 0,
+                "unit": "ft"
+              },
+              {
+                "x": 30,
+                "y": 0,
+                "unit": "ft"
+              },
+              {
+                "x": 30,
+                "y": 20,
+                "unit": "ft"
+              },
+              {
+                "x": 0,
+                "y": 20,
+                "unit": "ft"
+              }
+            ],
+            "floor_type": {
+              "family": "Floor",
+              "type": "Generic 12\""
+            }
+          },
+          {
+            "kind": "add_room",
+            "id": "r1",
+            "level": {
+              "level_name": "Ground Floor"
+            },
+            "coordinates": "internal",
+            "point": {
+              "x": 15,
+              "y": 10,
+              "unit": "ft"
+            },
+            "name": "Shop",
+            "number": "101"
+          }
+        ]
+      }
+    },
+    {
+      "why": "version 5: a level below the origin, one from its elevation base in millimetres, and one in metres",
+      "schema": true,
+      "accepted": true,
+      "list": {
+        "version": 5,
+        "changes": [
+          {
+            "kind": "add_level",
+            "name": "Basement",
+            "elevation": {
+              "value": -3.2,
+              "unit": "m"
+            },
+            "relative_to": "project_origin"
+          },
+          {
+            "kind": "add_level",
+            "name": "Roof",
+            "elevation": {
+              "value": 6400,
+              "unit": "mm"
+            },
+            "relative_to": "elevation_base"
+          },
+          {
+            "kind": "add_level",
+            "name": "Parapet",
+            "elevation": {
+              "value": 7.1,
+              "unit": "m"
+            },
+            "relative_to": "project_origin"
+          }
+        ]
+      }
+    },
+    {
+      "why": "version 5 reads a list of version 4's vocabulary as it did",
+      "schema": true,
+      "accepted": true,
+      "list": {
+        "version": 5,
+        "changes": [
+          {
+            "kind": "set_level_elevation",
+            "level": {
+              "level_name": "Roof"
+            },
+            "elevation": {
+              "value": 6096,
+              "unit": "mm"
+            },
+            "relative_to": "project_origin"
+          },
+          {
+            "kind": "add_footing",
+            "id": "f1",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "coordinates": "shared",
+            "point": {
+              "x": 1500,
+              "y": 3000,
+              "unit": "mm"
+            },
+            "footing_type": {
+              "family": "Footing-Rectangular",
+              "type": "1800 x 1200 x 450mm"
+            },
+            "family_file": "Footing-Rectangular.rfa"
+          }
+        ]
+      }
+    },
+    {
+      "why": "version 4 naming add_level, which needs version 5",
+      "schema": true,
+      "accepted": false,
+      "list": {
+        "version": 4,
+        "changes": [
+          {
+            "kind": "add_level",
+            "name": "Level 3",
+            "elevation": {
+              "value": 20,
+              "unit": "ft"
+            },
+            "relative_to": "project_origin"
+          }
+        ]
+      }
+    },
+    {
+      "why": "two add_level changes naming one new level",
+      "schema": true,
+      "accepted": false,
+      "list": {
+        "version": 5,
+        "changes": [
+          {
+            "kind": "add_level",
+            "name": "Level 3",
+            "elevation": {
+              "value": 20,
+              "unit": "ft"
+            },
+            "relative_to": "project_origin"
+          },
+          {
+            "kind": "add_level",
+            "name": "Level 3",
+            "elevation": {
+              "value": 30,
+              "unit": "ft"
+            },
+            "relative_to": "project_origin"
+          }
+        ]
+      }
+    },
+    {
+      "why": "a new level's elevation beyond Revit's model extent",
+      "schema": true,
+      "accepted": false,
+      "list": {
+        "version": 5,
+        "changes": [
+          {
+            "kind": "add_level",
+            "name": "Sky",
+            "elevation": {
+              "value": 105600,
+              "unit": "ft"
+            },
+            "relative_to": "project_origin"
+          }
+        ]
+      }
+    },
+    {
+      "why": "a new level's elevation beyond Revit's model extent, in metres",
+      "schema": true,
+      "accepted": false,
+      "list": {
+        "version": 5,
+        "changes": [
+          {
+            "kind": "add_level",
+            "name": "Pit",
+            "elevation": {
+              "value": -32187,
+              "unit": "m"
+            },
+            "relative_to": "project_origin"
+          }
+        ]
+      }
+    },
+    {
+      "why": "a new level with no name",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 5,
+        "changes": [
+          {
+            "kind": "add_level",
+            "elevation": {
+              "value": 10,
+              "unit": "ft"
+            },
+            "relative_to": "project_origin"
+          }
+        ]
+      }
+    },
+    {
+      "why": "a new level with an empty name",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 5,
+        "changes": [
+          {
+            "kind": "add_level",
+            "name": "",
+            "elevation": {
+              "value": 10,
+              "unit": "ft"
+            },
+            "relative_to": "project_origin"
+          }
+        ]
+      }
+    },
+    {
+      "why": "a new level with no elevation",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 5,
+        "changes": [
+          {
+            "kind": "add_level",
+            "name": "Level 3",
+            "relative_to": "project_origin"
+          }
+        ]
+      }
+    },
+    {
+      "why": "a new level that says nothing of what its elevation is measured from",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 5,
+        "changes": [
+          {
+            "kind": "add_level",
+            "name": "Level 3",
+            "elevation": {
+              "value": 10,
+              "unit": "ft"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "a new level measured from something outside the set",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 5,
+        "changes": [
+          {
+            "kind": "add_level",
+            "name": "Level 3",
+            "elevation": {
+              "value": 10,
+              "unit": "ft"
+            },
+            "relative_to": "survey_point"
+          }
+        ]
+      }
+    },
+    {
+      "why": "a new level with a level type, a key the schema does not name",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 5,
+        "changes": [
+          {
+            "kind": "add_level",
+            "name": "Level 3",
+            "elevation": {
+              "value": 10,
+              "unit": "ft"
+            },
+            "relative_to": "project_origin",
+            "level_type": {
+              "type": "8mm Head"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "a new level whose elevation is a number, not a length",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 5,
+        "changes": [
+          {
+            "kind": "add_level",
+            "name": "Level 3",
+            "elevation": 10,
+            "relative_to": "project_origin"
+          }
+        ]
+      }
+    },
+    {
+      "why": "a new level named by a level reference, not by its name",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 5,
+        "changes": [
+          {
+            "kind": "add_level",
+            "name": {
+              "level_name": "Level 3"
+            },
+            "elevation": {
+              "value": 10,
+              "unit": "ft"
+            },
+            "relative_to": "project_origin"
           }
         ]
       }

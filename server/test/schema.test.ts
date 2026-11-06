@@ -9,7 +9,7 @@ import { readFileSync } from 'node:fs';
 import { describe, test } from 'node:test';
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import { csharpFor, schemaSha256, typescriptFor } from '../../scripts/gen-types.ts';
-import { ChangeListShape, MAX_CHANGE_LIST_BYTES, MAX_FAMILY_FILES, MAX_REFERENCES, canonicalJson, checkChangeList, familyFilesOf, feetOf, outlineProblem, pointFeet, sha256Hex, signedArea } from '../src/change-list.ts';
+import { ADDING_KINDS, ChangeListShape, MAX_CHANGE_LIST_BYTES, MAX_FAMILY_FILES, MAX_REFERENCES, addsSomething, canonicalJson, checkChangeList, familyFilesOf, feetOf, outlineProblem, pointFeet, sha256Hex, signedArea } from '../src/change-list.ts';
 import type { ChangeList } from '../src/types/change-list.ts';
 
 const schemaBytes = readFileSync(new URL('../../schema/change-list.schema.json', import.meta.url));
@@ -88,7 +88,7 @@ test('the C# types and their schema hash are generated from the schema as it is 
   assert.equal(readFileSync(new URL('../../addin/Generated/change-list.schema.sha256', import.meta.url), 'utf8').trim(), sha);
   for (const kind of ['delete_elements_on_level', 'delete_elements_by_global_id', 'set_level_elevation', 'move_levels_together']) assert.ok(cs.includes(`"${kind}"`));
   assert.ok(cs.includes('public static class GroupsInTheWayValues'), 'groups_in_the_way\'s values, for the add-in');
-  assert.ok(cs.includes('public static readonly long[] VersionValues = { 0, 1, 2, 3, 4 };'), 'the versions this schema reads');
+  assert.ok(cs.includes('public static readonly long[] VersionValues = { 0, 1, 2, 3, 4, 5 };'), 'the versions this schema reads');
   for (const kind of ['add_footing', 'add_wall_footing', 'add_pile']) assert.ok(cs.includes(`"${kind}"`), `${kind}, for the add-in`);
   assert.ok(cs.includes('public Dictionary<string, Length> Sizes { get; set; }'), "a foundation's sizes, a map of names to lengths, for the add-in");
   assert.ok(cs.includes('public Length TopOffset { get; set; }') && cs.includes('public double? RotationDeg { get; set; }'), 'a top offset is a length, a turn a number');
@@ -197,4 +197,25 @@ test("the family files a list names are each named once, in the order the list f
   ] } as ChangeList;
   assert.deepEqual(familyFilesOf(list), ['B.rfa', 'A.rfa']);
   assert.deepEqual(familyFilesOf({ version: 3, changes: [{ kind: 'delete_elements_on_level', level: { level_name: 'L1' } }] }), []);
+});
+
+// Since flo2-rvt 0.14.0 (change-list version 5): add_level, a level by name at an elevation.
+test('version 5: a list that adds a level says version 5, a new level is named once in the list, and its elevation is within the model extent', () => {
+  const level = { kind: 'add_level', id: 'l1', name: 'Level 3', elevation: { value: 20, unit: 'ft' }, relative_to: 'project_origin' };
+  const why = (list: unknown) => {
+    const r = checkChangeList(list);
+    return r.ok ? '' : r.errors.join(' | ');
+  };
+  assert.match(why({ version: 4, changes: [level] }), /changes\.0\.kind: add_level needs version 5; say "version": 5/);
+  assert.match(why({ version: 5, changes: [level, { ...level, id: 'l2', elevation: { value: 30, unit: 'ft' } }] }), /changes\.1\.name: names the level "Level 3", which change 1 adds already; each new level is named once/);
+  assert.match(why({ version: 5, changes: [{ ...level, elevation: { value: 32_187, unit: 'm' } }] }), /changes\.0\.elevation: beyond Revit's model extent/);
+  const ok = checkChangeList({ version: 5, changes: [level, { ...level, id: 'l2', name: 'level 3' }, { kind: 'add_wall', level: { level_name: 'Level 3' }, start: { x: 0, y: 0, unit: 'ft' }, end: { x: 9, y: 0, unit: 'ft' }, coordinates: 'internal', wall_type: { type: 'Generic - 8"' }, top: { top_level: { level_name: 'level 3' } } }] });
+  assert.ok(ok.ok, ok.ok ? '' : ok.errors.join('; '));
+  assert.equal(ok.ok && ok.references, 0, 'a level named by its name is no GlobalId reference');
+});
+
+test('a list adds something when any of its changes adds an element or a level: what a new model needs of its first list', () => {
+  assert.deepEqual([...ADDING_KINDS], ['add_level', 'add_wall', 'add_floor', 'add_room', 'add_door', 'add_footing', 'add_wall_footing', 'add_pile']);
+  assert.equal(addsSomething({ version: 5, changes: [{ kind: 'add_level', name: 'L', elevation: { value: 0, unit: 'ft' }, relative_to: 'project_origin' }] } as ChangeList), true);
+  assert.equal(addsSomething({ version: 5, changes: [{ kind: 'set_level_elevation', level: { level_name: 'L' }, elevation: { value: 1, unit: 'ft' }, relative_to: 'project_origin' }, { kind: 'delete_elements_on_level', level: { level_name: 'L' } }] } as ChangeList), false);
 });

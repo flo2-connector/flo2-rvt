@@ -190,6 +190,8 @@ describe('rvt_setup_check', () => {
           ['appbundle', `${CLIENT_ID}.Flo2RvtProbe+prod`, 'missing'],
           ['activity', `${CLIENT_ID}.Flo2RvtProbe+prod`, 'missing'],
           ['activity', `${CLIENT_ID}.Flo2RvtEdit+prod`, 'missing'],
+          // Since add-in 0.13.0: the new-model job's own Activity.
+          ['activity', `${CLIENT_ID}.Flo2RvtNew+prod`, 'missing'],
         ],
       );
       const setup = out.setup as { available: boolean; addin_version: string; bundle_sha256: string; bundle_bytes: number; nickname: { now: string | null; will_set: string | null }; deletes_nothing: boolean };
@@ -218,6 +220,23 @@ describe('rvt_setup_check', () => {
         'GET /da/us-east/v3/forgeapps/me',
         'GET /da/us-east/v3/appbundles/SdkTester.Flo2RvtProbe+prod',
         'GET /da/us-east/v3/activities/SdkTester.Flo2RvtEdit+prod',
+      ]);
+    } finally {
+      await h.close();
+    }
+  });
+
+  test("for the new-model job, it reads only its own Activity and the AppBundle", async () => {
+    const h = await startHarness({}, undefined, { bundle });
+    try {
+      const out = ok(await call(h, 'rvt_setup_check', { job: 'new' }, setupMeta(h)));
+      assert.equal(out.ready, true);
+      assert.deepEqual((out.expected as { activities: string[] }).activities, ['SdkTester.Flo2RvtNew+prod']);
+      const paths = h.aps.calls.map((c) => `${c.method} ${decodeURIComponent(c.path)}`);
+      assert.deepEqual(paths, [
+        'GET /da/us-east/v3/forgeapps/me',
+        'GET /da/us-east/v3/appbundles/SdkTester.Flo2RvtProbe+prod',
+        'GET /da/us-east/v3/activities/SdkTester.Flo2RvtNew+prod',
       ]);
     } finally {
       await h.close();
@@ -325,7 +344,7 @@ describe('rvt_setup_run', () => {
         assert.equal(out.bundle_sha256, BUNDLE_SHA);
         assert.deepEqual(out.monthly_hours, { requested: 3, reported: 3 });
         assert.equal((out.appbundle as { id: string }).id, `${CLIENT_ID}.Flo2RvtProbe+prod`);
-        assert.deepEqual((out.activities as Array<{ id: string }>).map((a) => a.id), [`${CLIENT_ID}.Flo2RvtProbe+prod`, `${CLIENT_ID}.Flo2RvtEdit+prod`]);
+        assert.deepEqual((out.activities as Array<{ id: string }>).map((a) => a.id), [`${CLIENT_ID}.Flo2RvtProbe+prod`, `${CLIENT_ID}.Flo2RvtEdit+prod`, `${CLIENT_ID}.Flo2RvtNew+prod`]);
         assert.equal((out.check as { ready: boolean }).ready, true, 'read back: set up');
 
         assert.deepEqual(nicknamePatches(h), [], 'no PATCH forgeapps/me, ever');

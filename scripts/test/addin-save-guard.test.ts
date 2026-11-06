@@ -1,11 +1,14 @@
 // The guard CI runs on the add-in's sources: the repository's own add-in passes it, and
 // each way of breaking a rule is caught (made-up C# snippets). Since add-in 0.12.0 the probe
 // saves a family a person names out of the model (Probe/FamilySave.cs): one SaveAs, on the
-// family document Document.EditFamily opened, closed after without saving, never the model.
+// family document Document.EditFamily opened, closed after without saving, never the model. Since
+// add-in 0.13.0 the new-model job makes a new project document (Application.NewProjectDocument),
+// in the job box alone (Jobs/JobBox.cs), which also closes it without saving; the model the job
+// keeps is saved, as an edit's is, by the one save path.
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { COMMIT_FILE, FAMILY_SAVE_FILE, SAVE_FILE, addinSources, checkSources, stripComments } from '../addin-save-guard.ts';
+import { COMMIT_FILE, FAMILY_SAVE_FILE, NEW_MODEL_FILE, SAVE_FILE, addinSources, checkSources, stripComments } from '../addin-save-guard.ts';
 
 const SAVE = 'class SaveResult { void Write(Document doc) { doc.SaveAs(path, options); WorksharingUtils.RelinquishOwnership(doc, a, b); } }';
 const COMMIT = 'class ChangeRunner { void Run() { tx.Commit(); } }';
@@ -56,6 +59,16 @@ test("the probe saves only a family document EditFamily opened, once, in its one
   assert.match(rules({ ...base(), 'addin/src/Probe/Exports.cs': 'fd = doc.EditFamily(f); fd.SaveAs(p, o); fd.Close(false);' }).join('\n'), /Exports\.cs: a model is saved only in addin\/src\/Edit\/SaveResult\.cs, and a family document only in addin\/src\/Probe\/FamilySave\.cs/);
   const { [FAMILY_SAVE_FILE]: _gone, ...without } = base();
   assert.deepEqual(rules(without), [], 'an add-in that saves no family needs no family save');
+});
+
+test('a new project document is made only in the job box, never by the probe, and the job box saves nothing', () => {
+  assert.equal(NEW_MODEL_FILE, 'addin/src/Jobs/JobBox.cs');
+  const box = 'class JobBox { bool New() { Document doc = app.NewProjectDocument(UnitSystem.Imperial); try { return job.Execute(doc); } finally { doc.Close(false); } } }';
+  assert.deepEqual(rules({ ...base(), [NEW_MODEL_FILE]: box }), [], 'the job box may make one');
+  assert.match(rules({ ...base(), [NEW_MODEL_FILE]: box, 'addin/src/Jobs/EditJob.cs': 'Document d = app.NewProjectDocument(path);' }).join('\n'), /EditJob\.cs: a new project document is made only in addin\/src\/Jobs\/JobBox\.cs/);
+  assert.match(rules({ ...base(), [NEW_MODEL_FILE]: box, 'addin/src/Jobs/ProbeJob.cs': 'var d = context.Data.RevitApp.NewProjectDocument(UnitSystem.Metric);' }).join('\n'), /ProbeJob\.cs: a new project document is made only in/);
+  assert.match(rules({ ...base(), [NEW_MODEL_FILE]: box.replace('doc.Close(false);', 'doc.Close(true);') }).join('\n'), /JobBox\.cs: the job box closes every model it opens or makes without saving it/);
+  assert.match(rules({ ...base(), [NEW_MODEL_FILE]: `${box} void X() { doc.SaveAs(p, o); }` }).join('\n'), /JobBox\.cs: a model is saved only in/);
 });
 
 test('comments are read past, strings are not', () => {
