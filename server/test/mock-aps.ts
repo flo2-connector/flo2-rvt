@@ -6,7 +6,8 @@
 // probe's three, or an edit's four. Since add-in 0.12.0 a probe asked to save families (the
 // save-families.json it was handed) also writes each one the made-up report names saved, as
 // family<n>.rfa, made-up bytes whose size and sha256 the report gives
-// (fixtures/sample-probe-families-saved.json).
+// (fixtures/sample-probe-families-saved.json). Since add-in 0.13.0 the new-model job (Flo2RvtNew)
+// writes an edit's four outputs, its report the made-up new model's (fixtures/sample-new-model-report.json).
 
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -23,6 +24,8 @@ export function recorded(name: string): { status: number; body: unknown } {
 
 export const SAMPLE_REPORT = readFileSync(new URL('sample-report.json', FIXTURES));
 export const SAMPLE_EDIT_REPORT = readFileSync(new URL('sample-edit-report.json', FIXTURES));
+/** Since add-in 0.13.0: what the new-model job reports (the fixture's `report`; its `change_list` is the list that made it). */
+export const SAMPLE_NEW_MODEL = JSON.parse(readFileSync(new URL('sample-new-model-report.json', FIXTURES), 'utf8')) as { change_list: Record<string, unknown>; report: Record<string, unknown> };
 /** Since add-in 0.12.0: what a probe asked to save families reports of each (an excerpt: `asked` and `families_saved`). */
 export const SAMPLE_PROBE_FAMILIES = JSON.parse(readFileSync(new URL('sample-probe-families-saved.json', FIXTURES), 'utf8')) as {
   asked: string[];
@@ -91,6 +94,8 @@ export class MockAps {
   readonly workItems: unknown[] = [];
   /** Since contract v4: the family files flo2.io's links serve, by name (/flo2/download/family/<name>). */
   readonly families = new Map<string, Buffer>();
+  /** Since contract v6: the template files flo2.io's links serve, by name (/flo2/download/template/<name>). */
+  readonly templates = new Map<string, Buffer>();
   readonly appBundleUploads: Array<{ fields: string[]; fileBytes: number }> = [];
   private readonly uploads = new Map<string, Upload>();
   private readonly buckets = new Map<string, 'me' | 'other'>();
@@ -183,6 +188,14 @@ export class MockAps {
     if ((g = m(/^\/flo2\/download\/family\/(.+)$/))) {
       const bytes = this.families.get(decodeURIComponent(g[1] as string));
       if (!bytes) return this.send(res, 404, { reason: 'no such family file' });
+      res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Length': String(bytes.length) });
+      res.end(bytes);
+      return;
+    }
+    // ... and, since contract v6, for the template a new model starts from.
+    if ((g = m(/^\/flo2\/download\/template\/(.+)$/))) {
+      const bytes = this.templates.get(decodeURIComponent(g[1] as string));
+      if (!bytes) return this.send(res, 404, { reason: 'no such template file' });
       res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Length': String(bytes.length) });
       res.end(bytes);
       return;
@@ -425,12 +438,13 @@ export class MockAps {
   private runAddin(): void {
     const wi = this.workItems.at(-1) as { activityId: string; arguments: Record<string, { url: string }> } | undefined;
     if (!wi) return;
-    const edit = wi.activityId.includes('.Flo2RvtEdit+');
+    const fresh = wi.activityId.includes('.Flo2RvtNew+');
+    const edit = wi.activityId.includes('.Flo2RvtEdit+') || fresh;
     const writes = this.opts.writes ?? (edit ? ['report.json', 'model.rvt', 'sheets.pdf', 'model.ifc'] : ['report.json', 'sheets.pdf', 'model.ifc']);
     const families = edit ? [] : this.familiesSaved(wi.arguments.saveFamilies?.url);
     const probeReport = families.length ? Buffer.from(JSON.stringify({ ...(JSON.parse(SAMPLE_REPORT.toString('utf8')) as Record<string, unknown>), families_saved: families })) : SAMPLE_REPORT;
     const content: Record<string, [string, Buffer, string]> = {
-      report: ['report.json', edit ? SAMPLE_EDIT_REPORT : probeReport, 'application/json'],
+      report: ['report.json', fresh ? Buffer.from(JSON.stringify(SAMPLE_NEW_MODEL.report)) : edit ? SAMPLE_EDIT_REPORT : probeReport, 'application/json'],
       sheets: ['sheets.pdf', Buffer.from('%PDF-1.7 made-up\n'), 'application/pdf'],
       ifc: ['model.ifc', Buffer.from('ISO-10303-21; made-up\n'), 'application/x-step'],
       ...(edit ? { result: ['model.rvt', Buffer.alloc(40_000, 'edited model stand-in bytes '), 'application/octet-stream'] as [string, Buffer, string] } : {}),

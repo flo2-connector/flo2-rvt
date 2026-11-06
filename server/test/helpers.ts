@@ -83,6 +83,20 @@ export function familyHandover(aps: MockAps, name: string, bytes: Buffer, said: 
   };
 }
 
+/**
+ * Since contract v6: the template a new model starts from, as flo2.io hands it over (contract.ts
+ * TemplateHandover), its made-up bytes served by the stand-in's download link.
+ */
+export function templateHandover(aps: MockAps, name: string, bytes: Buffer, said: { size?: number; sha256?: string } = {}) {
+  aps.templates.set(name, bytes);
+  return {
+    template_file: name,
+    download_url: `${aps.base}/flo2/download/template/${encodeURIComponent(name)}`,
+    size: said.size ?? bytes.length,
+    sha256: said.sha256 ?? createHash('sha256').update(bytes).digest('hex'),
+  };
+}
+
 /** A raw JSON-RPC POST, as a hand-written client such as flo2.io's gateway sends it. */
 export async function rpc(url: string, body: unknown, headers: Record<string, string> = {}): Promise<{ status: number; json: unknown; text: string; type: string }> {
   const res = await fetch(url, {
