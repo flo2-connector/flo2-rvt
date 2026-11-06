@@ -19,6 +19,12 @@
 // ChangeListCheck.cs; that no level of the model holds the name is the add-in's to judge, with the
 // model before it, Logic/NewLevels.cs). A new model's first list must add something (addsSomething):
 // the new-model job refuses one that does not (jobs.ts startNewModel; the add-in, Logic/NewModel.cs).
+// Since flo2-rvt 0.15.0, version 6: add_door, as add_footing and add_pile, may name a door family file
+// (family_file) and size a new type (sizes, new_type), and a door that does says version 6; its sizes
+// within the model extent and its new_type only beside sizes, as a foundation's; and a family file's
+// family must be in the category the change naming it needs (FAMILY_FILE_CATEGORIES: Doors for a
+// door's, Structural Foundations for a footing's or pile's), so a list that names one file from both
+// is refused, as the add-in refuses it (ChangeListCheck.cs; Logic/Foundations.cs FamilyFiles.CategoryFor).
 //
 // ⭐ ITS CANONICAL FORM: the JSON with every object's keys sorted, no whitespace. That is the
 // exact byte string flo2-rvt uploads as changes.json, and its SHA-256 is the change list's
@@ -29,7 +35,7 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import * as z from 'zod/v4';
-import type { Change, ChangeList, Length, LevelReference, PlanPoint } from './types/change-list.ts';
+import type { Change, ChangeList, FoundationSizes, Length, LevelReference, PlanPoint } from './types/change-list.ts';
 
 export const SCHEMA_URL = new URL('../../schema/change-list.schema.json', import.meta.url);
 export const CHANGE_LIST_SCHEMA = JSON.parse(readFileSync(SCHEMA_URL, 'utf8')) as Record<string, unknown>;
@@ -54,6 +60,8 @@ export const ADD_ELEMENTS_VERSION = 3;
 export const FOUNDATIONS_VERSION = 4;
 /** The first change-list version that reads add_level (flo2-rvt 0.14.0). */
 export const LEVELS_VERSION = 5;
+/** The first change-list version that reads add_door's family_file, sizes and new_type (flo2-rvt 0.15.0). */
+export const DOOR_FAMILIES_VERSION = 6;
 /** The most family files (family_file, counted once each) one list may name (the add-in's FamilyFiles.Max). */
 export const MAX_FAMILY_FILES = 8;
 /** How close two points must be to be one, in feet (the add-in's Placement.ToleranceFt, LevelMoves.ToleranceFt). */
@@ -149,9 +157,17 @@ export function addsSomething(list: ChangeList): boolean {
 }
 
 /**
- * The family files a list names, each once, in the order the list first names them: the n-th
- * (from 1) travels to the work item as the edit Activity's input `family<n>` (names.ts familyInput),
- * and the add-in reads it from the same order (Logic/Foundations.cs FamilyFiles.Of).
+ * Since flo2-rvt 0.15.0: the change kinds that may name a family file, each with the Revit category
+ * the family in it must be in (as Revit names it): a door's, since change-list version 6, and a
+ * footing's or pile's, since version 4. The add-in's Logic/Foundations.cs FamilyFiles.CategoryFor.
+ */
+export const FAMILY_FILE_CATEGORIES = { add_door: 'Doors', add_footing: 'Structural Foundations', add_pile: 'Structural Foundations' } as const;
+
+/**
+ * The family files a list names, each once, in the order the list first names them, whichever kind
+ * names them (a door, a footing or a pile): the n-th (from 1) travels to the work item as the edit
+ * or new-model Activity's input `family<n>` (names.ts familyInput), and the add-in reads it from the
+ * same order (Logic/Foundations.cs FamilyFiles.Of, which also says the category each needs).
  */
 export function familyFilesOf(list: ChangeList): string[] {
   const out: string[] = [];
@@ -199,11 +215,26 @@ export function checkChangeList(value: unknown): CheckedChangeList {
       errors.push(`${at}: ${holders.length} changes carry the id "${id}"; give each wall its own id`);
     }
   };
+  // A door's or foundation's sizes and new_type: the sizes within the model extent, new_type only beside them.
+  const sized = (c: { sizes?: FoundationSizes; new_type?: string }, i: number) => {
+    if (c.new_type !== undefined && c.sizes === undefined) errors.push(`changes.${i}.new_type: names a copy of the type with sizes set on it; give sizes, or leave new_type out`);
+    for (const [name, size] of Object.entries(c.sizes ?? {})) if (size) lengthWithin(`changes.${i}.sizes[${JSON.stringify(name)}]`, size);
+  };
+  // Since 0.15.0: each family file with the change that names it first, its kind and the category its family must be in.
+  const fileFirst = new Map<string, { index: number; kind: keyof typeof FAMILY_FILE_CATEGORIES; category: string }>();
+  const familyFile = (c: Change, i: number) => {
+    if ((c.kind !== 'add_door' && c.kind !== 'add_footing' && c.kind !== 'add_pile') || c.family_file === undefined) return;
+    const category = FAMILY_FILE_CATEGORIES[c.kind];
+    const first = fileFirst.get(c.family_file);
+    if (first === undefined) fileFirst.set(c.family_file, { index: i, kind: c.kind, category });
+    else if (first.category !== category) {
+      errors.push(`changes.${i}.family_file: names ${JSON.stringify(c.family_file)}, which change ${first.index + 1} (${first.kind}) names for a ${first.category} family; an ${c.kind}'s family is in the ${category} category, so one family file cannot serve both`);
+    }
+  };
   const foundation = (c: Change, i: number) => {
     if (c.kind !== 'add_footing' && c.kind !== 'add_wall_footing' && c.kind !== 'add_pile') return;
     if (list.version < FOUNDATIONS_VERSION) errors.push(`changes.${i}.kind: ${c.kind} needs version ${FOUNDATIONS_VERSION}; say "version": ${FOUNDATIONS_VERSION}`);
-    if (c.new_type !== undefined && c.sizes === undefined) errors.push(`changes.${i}.new_type: names a copy of the type with sizes set on it; give sizes, or leave new_type out`);
-    for (const [name, size] of Object.entries(c.sizes ?? {})) if (size) lengthWithin(`changes.${i}.sizes[${JSON.stringify(name)}]`, size);
+    sized(c, i);
     if (c.kind === 'add_wall_footing') {
       if ('global_id' in c.wall) references += 1;
       else wallChange(`changes.${i}.wall.wall_change`, i, c.wall.wall_change);
@@ -255,8 +286,14 @@ export function checkChangeList(value: unknown): CheckedChangeList {
       extent(`changes.${i}.point`, pointFeet(c.point));
       if ('global_id' in c.host) references += 1;
       else wallChange(`changes.${i}.host.wall_change`, i, c.host.wall_change);
+      // Since 0.15.0 (version 6): a door's family file, sizes and new type, as a foundation's.
+      if (list.version < DOOR_FAMILIES_VERSION) {
+        for (const key of ['family_file', 'sizes', 'new_type'] as const) if (c[key] !== undefined) errors.push(`changes.${i}.${key} needs version ${DOOR_FAMILIES_VERSION}; say "version": ${DOOR_FAMILIES_VERSION}`);
+      }
+      sized(c, i);
     }
     foundation(c, i);
+    familyFile(c, i);
     if (c.kind === 'set_level_elevation' && Math.abs(feetOf(c.elevation)) >= MODEL_EXTENT_FEET) {
       errors.push(`changes.${i}.elevation: beyond Revit's model extent (20 miles from the internal origin)`);
     }

@@ -1,4 +1,4 @@
-// GENERATED from schema/change-list.schema.json (sha256 20bcfcc4547cad69aa2e15c8dc4b1791022b49f6e027f931a5b7cd3031ab9474) by scripts/gen-types.ts.
+// GENERATED from schema/change-list.schema.json (sha256 f5e95a29f02465abbd550f58c35e717ed4743ff5b582155e9e0ae5e4a17106ac) by scripts/gen-types.ts.
 // Do not edit: change the schema and run `npm run gen`.
 
 /**
@@ -91,14 +91,14 @@ export type WallJoins = 'join' | 'do_not_join';
  */
 export type DoorHost = GlobalIdReference | WallChangeReference;
 /**
- * A Revit family file (.rfa, saved by Revit 2024 or older) the design keeps, by its file name in the design: flo2.io hands it over with the job, and the add-in loads it (Document.LoadFamily) before the list's changes run, unless the model already holds a family of that name (the file name without .rfa, the name Revit gives a family it loads from a file): then that family is used as the model holds it, never reloaded or overwritten. Its family must be in the Structural Foundations category, or the changes naming it are not applied. A list names at most 8 family files, each at most 32 MiB and 64 MiB in all.
+ * A Revit family file (.rfa, saved by Revit 2024 or older) the design keeps, by its file name in the design: flo2.io hands it over with the job, and the add-in loads it (Document.LoadFamily) before the list's changes run, unless the model already holds a family of that name (the file name without .rfa, the name Revit gives a family it loads from a file): then that family is used as the model holds it, never reloaded or overwritten. Its family must be in the category the change naming it needs: Doors for add_door, Structural Foundations for add_footing and add_pile; a file whose family is in another is not loaded, and the changes naming it are not applied. So one family file serves changes of one category: a list that names one from a door and from a foundation is refused. A list names at most 8 family files, each at most 32 MiB and 64 MiB in all.
  *
  * This interface was referenced by `ChangeList`'s JSON-Schema
  * via the `definition` "FamilyFile".
  */
 export type FamilyFile = string;
 /**
- * The name of the type a foundation is placed from: a copy of the named type (ElementType.Duplicate) in the same family, with the change's type sizes set on it. It needs sizes, and must be given when a size is a type parameter. A type of this name the family already holds (one an earlier change of the list made, say) is placed again only when its sizes are those given; otherwise the change is not applied.
+ * The name of the type a door or foundation is placed from: a copy of the named type (ElementType.Duplicate) in the same family, with the change's type sizes set on it. It needs sizes, and must be given when a size is a type parameter. A type of this name the family already holds (one an earlier change of the list made, say) is placed again only when its sizes are those given; otherwise the change is not applied. A door's since change-list version 6.
  *
  * This interface was referenced by `ChangeList`'s JSON-Schema
  * via the `definition` "NewTypeName".
@@ -113,7 +113,7 @@ export type NewTypeName = string;
 export type WallReference = GlobalIdReference | WallChangeReference;
 
 /**
- * A list of changes for one Revit model, in flo2-rvt's fixed vocabulary. The agent writes only this data; one reviewed add-in maps each change kind to the Revit API. Version 0 defined the envelope, the element reference and three change kinds; version 1 adds move_levels_together and set_level_elevation's groups_in_the_way; version 2 adds a level move's constraints_in_the_way; version 3 adds new content, add_wall, add_floor, add_room and add_door, each placed from the model's own loaded types; version 4 adds foundations, add_footing, add_wall_footing and add_pile, each from a type the model holds or, for a footing or pile, a family file the design keeps; version 5 adds add_level, a level by name at an elevation. flo2-rvt's edit job runs the changes in order, each in its own transaction, saving the result as a NEW .rvt and never changing the input; its new-model job (flo2-rvt 0.14.0) runs a list the same way on a model it has just made, from Revit's own no-template project or a template file.
+ * A list of changes for one Revit model, in flo2-rvt's fixed vocabulary. The agent writes only this data; one reviewed add-in maps each change kind to the Revit API. Version 0 defined the envelope, the element reference and three change kinds; version 1 adds move_levels_together and set_level_elevation's groups_in_the_way; version 2 adds a level move's constraints_in_the_way; version 3 adds new content, add_wall, add_floor, add_room and add_door, each placed from the model's own loaded types; version 4 adds foundations, add_footing, add_wall_footing and add_pile, each from a type the model holds or, for a footing or pile, a family file the design keeps; version 5 adds add_level, a level by name at an elevation; version 6 lets add_door, as add_footing and add_pile, name a door family file the design keeps (family_file) and be sized as a new type copied from the named one (sizes, new_type). flo2-rvt's edit job runs the changes in order, each in its own transaction, saving the result as a NEW .rvt and never changing the input; its new-model job (flo2-rvt 0.14.0) runs a list the same way on a model it has just made, from Revit's own no-template project or a template file.
  */
 export interface ChangeList {
   /**
@@ -121,9 +121,9 @@ export interface ChangeList {
    */
   $schema?: string;
   /**
-   * The change-list format version. A new change kind or field that an older add-in could not read bumps it. Version 1 (flo2-rvt 0.6.0, add-in 0.5.0) adds move_levels_together and set_level_elevation's groups_in_the_way, and a list that uses either says 1; a list of version 0's vocabulary reads as it always did, as version 0 or 1. Version 2 (flo2-rvt 0.7.0, add-in 0.6.0) adds a level move's constraints_in_the_way, and a list that uses it says 2; every list of version 1 reads as it did, as version 1 or 2. Version 3 (flo2-rvt 0.11.0, add-in 0.10.0) adds add_wall, add_floor, add_room and add_door, and a list that uses any of them says 3; every list of version 2 reads as it did, as version 2 or 3. Version 4 (flo2-rvt 0.12.0, add-in 0.11.0) adds add_footing, add_wall_footing and add_pile, and a list that uses any of them says 4; every list of version 3 reads as it did, as version 3 or 4. Version 5 (flo2-rvt 0.14.0, add-in 0.13.0) adds add_level, and a list that uses it says 5; every list of version 4 reads as it did, as version 4 or 5.
+   * The change-list format version. A new change kind or field that an older add-in could not read bumps it. Version 1 (flo2-rvt 0.6.0, add-in 0.5.0) adds move_levels_together and set_level_elevation's groups_in_the_way, and a list that uses either says 1; a list of version 0's vocabulary reads as it always did, as version 0 or 1. Version 2 (flo2-rvt 0.7.0, add-in 0.6.0) adds a level move's constraints_in_the_way, and a list that uses it says 2; every list of version 1 reads as it did, as version 1 or 2. Version 3 (flo2-rvt 0.11.0, add-in 0.10.0) adds add_wall, add_floor, add_room and add_door, and a list that uses any of them says 3; every list of version 2 reads as it did, as version 2 or 3. Version 4 (flo2-rvt 0.12.0, add-in 0.11.0) adds add_footing, add_wall_footing and add_pile, and a list that uses any of them says 4; every list of version 3 reads as it did, as version 3 or 4. Version 5 (flo2-rvt 0.14.0, add-in 0.13.0) adds add_level, and a list that uses it says 5; every list of version 4 reads as it did, as version 4 or 5. Version 6 (flo2-rvt 0.15.0, add-in 0.14.0) adds add_door's family_file, sizes and new_type, and a list that uses any of them says 6; every list of version 5 reads as it did, as version 5 or 6.
    */
-  version: 0 | 1 | 2 | 3 | 4 | 5;
+  version: 0 | 1 | 2 | 3 | 4 | 5 | 6;
   /**
    * An optional id the author gives the list, echoed in the job's report.
    */
@@ -268,7 +268,7 @@ export interface PlanPoint {
   unit: LengthUnit;
 }
 /**
- * A type the model already holds, by its name as Revit names it, matched exactly (case and spaces count): type is the type's own name ("Interior - Partition", "800 x 2100"), family is its family's ("Basic Wall", "Floor", "Single-Flush"). Revit's IFC export names each element "<family>:<type>:<element id>", and the probe's report lists every wall, floor, door and foundation type the model holds (types). Give family whenever two families hold a type of that name. A type the model does not hold is refused by name, with the types it does hold. For walls, floors and doors nothing is loaded or made, only the model's own types are placed; a footing's or pile's type may come from a family file the change names (family_file), and a foundation's type sizes are set on a copy of the type made under the change's new_type, never on the type the model holds.
+ * A type the model already holds, by its name as Revit names it, matched exactly (case and spaces count): type is the type's own name ("Interior - Partition", "800 x 2100"), family is its family's ("Basic Wall", "Floor", "Single-Flush"). Revit's IFC export names each element "<family>:<type>:<element id>", and the probe's report lists every wall, floor, door and foundation type the model holds (types). Give family whenever two families hold a type of that name. A type the model does not hold is refused by name, with the types it does hold. For walls and floors nothing is loaded or made, only the model's own types are placed; a door's (since change-list version 6), footing's or pile's type may come from a family file the change names (family_file), and a door's or foundation's type sizes are set on a copy of the type made under the change's new_type, never on the type the model holds.
  *
  * This interface was referenced by `ChangeList`'s JSON-Schema
  * via the `definition` "TypeName".
@@ -331,7 +331,7 @@ export interface AddRoom {
   number: string;
 }
 /**
- * Add a door of a door type the model holds into a straight wall (one the model has, or one an earlier add_wall of the list adds) at a point along it: the point in plan is taken to the nearest point of the wall's location line, and must lie within the wall's thickness of that line and between its ends. The door stands on the wall's level. The report names the new door with its host wall and where it stands, in both coordinate systems. Needs change-list version 3.
+ * Add a door into a straight wall (one the model has, or one an earlier add_wall of the list adds) at a point along it, of a door type the model holds or, since change-list version 6, one family_file brings (a door family file the design keeps, loaded before the list's changes run), sized by sizes on the door or on a copy of its type (new_type): a type the model holds is never changed. The point in plan is taken to the nearest point of the wall's location line, and must lie within the wall's thickness of that line and between its ends. The door stands on the wall's level. The report names the new door with its host wall and where it stands, in both coordinate systems, its width and height as its type holds them, and, since version 6, the type it was copied from, the family file it came from, and every length parameter of it and its type as Revit holds them, beside each size asked. Needs change-list version 3; family_file, sizes and new_type need version 6.
  *
  * This interface was referenced by `ChangeList`'s JSON-Schema
  * via the `definition` "AddDoor".
@@ -343,6 +343,9 @@ export interface AddDoor {
   point: PlanPoint;
   coordinates: Coordinates;
   door_type: TypeName;
+  family_file?: FamilyFile;
+  sizes?: FoundationSizes;
+  new_type?: NewTypeName;
 }
 /**
  * A wall the same list adds: the id of an add_wall change earlier in the list. That wall must have been kept, or the change naming it is not applied.
@@ -352,6 +355,15 @@ export interface AddDoor {
  */
 export interface WallChangeReference {
   wall_change: ChangeId;
+}
+/**
+ * The sizes a door or foundation change sets, each a length, by its parameter's name exactly as Revit holds it on the type or the element (case and spaces count): a foundation's as the probe's report lists it for the type (types.foundations[].sizes[].name), a door's as its family names it (Width and Height on Autodesk's Single-Flush), 1 to 16 of them. A parameter of the element (instance) is set on the new element; a parameter of its type is set on a copy of the type made under the change's new_type, never on the type the model holds. A name that is not a length parameter of the element or its type, one Revit holds read-only or by a formula, or one Revit places the element by (a footing's or pile's offset from its level, which top_offset sets; a door's sill or head height), makes the change not applied, naming the length parameters the type does have. flo2.io requires each foundation size to be a result of the calc record the edit names (numbers_from); a door's sizes may be one, and need not. A door's sizes since change-list version 6.
+ *
+ * This interface was referenced by `ChangeList`'s JSON-Schema
+ * via the `definition` "FoundationSizes".
+ */
+export interface FoundationSizes {
+  [k: string]: Length | undefined;
 }
 /**
  * Add an isolated footing: a Structural Foundations family instance (placed as Revit's StructuralType.Footing) at a point in plan on a level, its top (as Revit holds it) top_offset from the level, turned in plan by rotation_deg, of a type the model holds or one family_file brings, sized by sizes on the element or on a copy of its type (new_type). Since add-in 0.13.1 the add-in sets the new footing's own Export to IFC As (IFC_EXPORT_ELEMENT_AS) to IfcFooting, which Revit's IFC export takes before anything else, so it writes an IfcFooting (with nothing set, Revit's export table decides, and has written a pile cap as an IfcSlab); its type and every other element are left as they are. The report names the new footing (element id, GlobalId, family, type, level), its point in both coordinate systems, where its insertion point, top and bottom stand and the correction applied for its top, its rotation, the IFC class the add-in set, and every length parameter of it and its type as Revit holds them, beside each size asked. Needs change-list version 4.
@@ -374,15 +386,6 @@ export interface AddFooting {
    * How far the footing is turned in plan, counterclockwise, in degrees, in the change's coordinates: 0, what a change that says nothing does, lines the family's own x axis up with the coordinates' x axis. -360 to 360.
    */
   rotation_deg?: number;
-}
-/**
- * The sizes a foundation change sets, each a length, by its parameter's name exactly as the probe's report lists it for the type (types.foundations[].sizes[].name; case and spaces count), 1 to 16 of them. A parameter of the element (instance) is set on the new element; a parameter of its type is set on a copy of the type made under the change's new_type, never on the type the model holds. A name that is not a length parameter of the element or its type, one Revit holds read-only or by a formula, or one Revit places the element by (its offset from its level, which top_offset sets), makes the change not applied, naming the length parameters the type does have. flo2.io requires each to be a result of the calc record the edit names (numbers_from).
- *
- * This interface was referenced by `ChangeList`'s JSON-Schema
- * via the `definition` "FoundationSizes".
- */
-export interface FoundationSizes {
-  [k: string]: Length | undefined;
 }
 /**
  * Where a footing's or pile's top stands above its level, below when negative; 0 when left out. A family puts its insertion point where its author chose (a pile cap's is its top, a steel pipe pile's its embedment line, below its top), so since add-in 0.13.1 the add-in places the element, reads its top as Revit holds it (its read-only Elevation at Top) and moves it by the difference in the same change, on its offset from its level where Revit holds one, so its top stands here whatever its family's insertion point; one Revit holds no Elevation at Top for stands by its insertion point here, and its change says so. The report gives where its insertion point, top and bottom stand and the correction applied. flo2.io requires it, unless it is 0, to be a result of the calc record the edit names (numbers_from).

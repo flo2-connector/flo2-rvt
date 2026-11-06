@@ -1,4 +1,4 @@
-// The gateway ↔ flo2-rvt contract, v6 (v5, and a new model made and filled in one job), as types and validators. Everything the
+// The gateway ↔ flo2-rvt contract, v7 (v6, and a door's family file and sizes, change-list version 6), as types and validators. Everything the
 // agent sends is untrusted and bounded here; everything that decides what
 // flo2-rvt does with Autodesk (the token, the client id, the input file and the
 // time limit) comes only from the hidden context the gateway sets.
@@ -41,8 +41,18 @@ import { ENGINE, MAX_SAVE_FAMILIES, NEW_MODEL_UNITS } from './names.ts';
  * edit's with `new_model` and `types_held`. Change-list version 5 (add_level) is read by every job
  * that takes a list. Nothing of v5 changed: a v5 gateway offers no new-model job, and its edits run
  * as before.
+ * 7 (flo2-rvt 0.15.0, add-in 0.14.0) reads change-list version 6: add_door, as add_footing and add_pile,
+ * may name a door family file the design keeps (family_file) and size a new type copied from the
+ * named one (sizes, new_type). The hidden context's `families` and the start result's `family_files`
+ * now carry a door's family file as they carry a foundation's, on rvt_edit_start and
+ * rvt_new_model_start alike; its family must be in the Doors category, and a list that names one file
+ * for a door and for a foundation is refused before anyone is asked. An edit's report names, per door,
+ * the type it was copied from, its family file and every size it holds beside each asked (what flo2's
+ * check measures; a door's sizes need no calc record), and per family file the category it needed.
+ * Nothing of v6 changed: a v6 gateway, whose copy of the schema reads versions 0 to 5, refuses a
+ * version 6 list before the person is asked, and every list it hands over runs as before.
  */
-export const CONTRACT_VERSION = 6;
+export const CONTRACT_VERSION = 7;
 
 /** The `_meta` keys of the contract. */
 export const META_JOB = 'flo2.io/job';
@@ -63,7 +73,8 @@ export interface ErrorMeta {
 const SHA256 = z.string().regex(/^[0-9a-f]{64}$/);
 
 /**
- * Since contract v4: ONE family file an edit's change list names, handed over as the model is.
+ * Since contract v4: ONE family file an edit's change list names, handed over as the model is: a
+ * footing's or pile's, and since contract v7 (change-list version 6) a door's, the same way.
  *
  *   family_file   exactly the change list's family_file (case counts): the name of the .rfa the
  *                 design keeps, which the gateway resolves in the design as it resolves `file`
@@ -125,7 +136,7 @@ export const JobContextSchema = z.object({
       sha256: z.string().regex(/^[0-9a-fA-F]{64}$/),
     })
     .optional(),
-  /** Since contract v4, on rvt_edit_start (and since v6 rvt_new_model_start) only: the family files the change list names (FamilyFileHandover). */
+  /** Since contract v4, on rvt_edit_start (and since v6 rvt_new_model_start) only: the family files the change list names (FamilyFileHandover), since v7 a door's as a footing's or pile's. */
   families: z.array(FamilyFileHandover).max(64).optional(),
   /** Since contract v6, on rvt_new_model_start only, when it names a template_file: the template (TemplateHandover). */
   template: TemplateHandover.optional(),
@@ -155,7 +166,7 @@ export function expiresAtMs(value: string | number): number {
 
 /** What the change list is, in the words both tools that take one show the agent. */
 const CHANGE_LIST_WORDS =
-  "The changes, in flo2-rvt's fixed vocabulary (schema/change-list.schema.json, version 5; a list of an earlier version still reads): delete_elements_on_level, delete_elements_by_global_id, set_level_elevation, move_levels_together (version 1: several levels moved by one offset in one transaction), add_wall, add_floor, add_room and add_door (version 3), add_footing, add_wall_footing and add_pile (version 4, each from a type the model holds or, for a footing or pile, a family file the design keeps, named by family_file), and add_level (version 5: a level by name at an elevation; later changes place on it by its name). Applied in order, each in its own transaction. A level move's groups_in_the_way (version 1) is \"refuse\" unless the list says \"ungroup\", which only the person may agree to.";
+  "The changes, in flo2-rvt's fixed vocabulary (schema/change-list.schema.json, version 6; a list of an earlier version still reads): delete_elements_on_level, delete_elements_by_global_id, set_level_elevation, move_levels_together (version 1: several levels moved by one offset in one transaction), add_wall, add_floor, add_room and add_door (version 3), add_footing, add_wall_footing and add_pile (version 4, each from a type the model holds or, for a footing or pile, a family file the design keeps, named by family_file), add_level (version 5: a level by name at an elevation; later changes place on it by its name), and a door's family_file, sizes and new_type (version 6: a door from a door family file the design keeps, sized on a copy of its type, as a footing's or pile's may be). Applied in order, each in its own transaction. A level move's groups_in_the_way (version 1) is \"refuse\" unless the list says \"ungroup\", which only the person may agree to.";
 
 /** The agent's arguments to rvt_probe_start. */
 export const ProbeStartArgs = z.object({

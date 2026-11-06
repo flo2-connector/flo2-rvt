@@ -6,7 +6,9 @@
 // family type and wall foundation type with its length parameters (a type's as the model holds
 // them; an instance's as its family defines them, read from the family's own document, which is
 // opened and closed unsaved), and the length parameters of any element, as a foundation change's
-// sizes name them. Reads only: nothing here changes the model, and the probe may call it.
+// sizes name them. Since add-in 0.14.0 a door family's category is read as a foundation family's is,
+// and its types within one family, for add_door's family_file (change-list version 6). Reads only:
+// nothing here changes the model, and the probe may call it.
 
 using System;
 using System.Collections.Generic;
@@ -30,9 +32,13 @@ namespace Flo2Rvt.Addin.Edit
             return new FilteredElementCollector(doc).OfClass(typeof(FloorType)).Cast<FloorType>().Select(t => new HeldType { Family = t.FamilyName, Type = t.Name, Id = t.Id.Value }).ToList();
         }
 
-        public static List<HeldType> Doors(Document doc)
+        /// <summary>The door types the model holds; since add-in 0.14.0, with a family id, that family's alone (a door's family_file).</summary>
+        public static List<HeldType> Doors(Document doc, long familyId = 0)
         {
-            return DoorSymbols(doc).Select(t => new HeldType { Family = t.FamilyName, Type = t.Name, Id = t.Id.Value }).ToList();
+            return DoorSymbols(doc)
+                .Where(s => familyId == 0 || (s.Family != null && s.Family.Id.Value == familyId))
+                .Select(s => new HeldType { Family = s.FamilyName, Type = s.Name, Id = s.Id.Value, FamilyId = s.Family != null ? s.Family.Id.Value : 0 })
+                .ToList();
         }
 
         private static IEnumerable<FamilySymbol> DoorSymbols(Document doc)
@@ -71,9 +77,33 @@ namespace Flo2Rvt.Addin.Edit
         /// <summary>A family's category as Revit names it, and whether it is Structural Foundations.</summary>
         public static bool IsFoundationFamily(Family f, out string category)
         {
+            return IsOf(f, BuiltInCategory.OST_StructuralFoundation, out category);
+        }
+
+        /// <summary>Since add-in 0.14.0: a family's category as Revit names it, and whether it is Doors.</summary>
+        public static bool IsDoorFamily(Family f, out string category)
+        {
+            return IsOf(f, BuiltInCategory.OST_Doors, out category);
+        }
+
+        /// <summary>
+        /// Since add-in 0.14.0: whether a family is in the category a family file's changes need
+        /// (Logic/Foundations.cs FamilyFiles.CategoryFor: Doors or Structural Foundations), judged by
+        /// its built-in category, never by its name, which Revit gives in the model's language.
+        /// </summary>
+        public static bool IsFamilyOf(Family f, string needed, out string category)
+        {
+            if (needed == FamilyFiles.Doors) return IsDoorFamily(f, out category);
+            if (needed == FamilyFiles.StructuralFoundations) return IsFoundationFamily(f, out category);
+            IsOf(f, BuiltInCategory.INVALID, out category);
+            return false;
+        }
+
+        private static bool IsOf(Family f, BuiltInCategory wanted, out string category)
+        {
             Category c = f != null ? f.FamilyCategory : null;
             category = c != null ? c.Name : null;
-            return c != null && c.Id.Value == (long)BuiltInCategory.OST_StructuralFoundation;
+            return c != null && c.Id.Value == (long)wanted;
         }
 
         /// <summary>The parameters Revit places an element by: its offset from its level and the like, which top_offset sets and sizes never do.</summary>

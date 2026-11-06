@@ -30,7 +30,9 @@
 //     applied had its IFC class set by the add-in and read back;
 //   · (since 0.13.0) an add_level change's element is a new level, and one read applied is all that
 //     was asked (Logic/NewLevels.cs Problems): named as asked, where it was asked to stand, a
-//     building storey with its storey's GlobalId.
+//     building storey with its storey's GlobalId;
+//   · (since 0.14.0) an add_door change's element is a door, and one read applied holds each size
+//     asked, its type's or its own, as Revit holds it (Logic/Foundations.cs DoorCheck).
 //
 // The lists are read as the report lists them: past ElementTally.Cap a set is truncated, and
 // only its listed elements are checked.
@@ -199,7 +201,20 @@ namespace Flo2Rvt.Addin.Edit.Logic
                 if (e.Room != null && r.Status == ChangeStatus.Applied && !(e.Room.AreaFt2 > 0)) found.Add(at + "reads applied though room " + (e.Room.Number ?? e.ElementId.ToString(CultureInfo.InvariantCulture)) + " has no area: it is not enclosed");
                 Founded(r, e, at, found);
                 Leveled(r, e, at, found);
+                Doored(r, e, at, found);
             }
+        }
+
+        /// <summary>Since add-in 0.14.0: an add_door change's element is a door, and all that was asked of its sizes when it reads applied.</summary>
+        private static void Doored(ChangeReport r, AddedElement e, string at, List<string> found)
+        {
+            if (r.Kind != ChangeKinds.AddDoor) return;
+            if (e.Door == null)
+            {
+                found.Add(at + "element " + e.ElementId.ToString(CultureInfo.InvariantCulture) + " of a door change is not named as a door");
+                return;
+            }
+            if (r.Status == ChangeStatus.Applied) foreach (string p in DoorCheck.Problems(e.Door)) found.Add(at + "reads applied though " + p);
         }
 
         /// <summary>Since add-in 0.13.0: an add_level change's element is a new level, and all that was asked when it reads applied.</summary>
