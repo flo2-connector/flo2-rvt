@@ -1131,6 +1131,9 @@ namespace Flo2Rvt.Addin.Tests
             // Since add-in 0.11.0: foundations (FoundationsTests.cs).
             Foundations(root);
 
+            // Since add-in 0.12.0: the families a probe saves (FamilySavesTests.cs).
+            FamilySavesCases(root);
+
             Console.WriteLine();
             Console.WriteLine(passed + " passed, " + failed.Count + " failed");
             return failed.Count == 0 ? 0 : 1;

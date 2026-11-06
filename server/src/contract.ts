@@ -1,11 +1,11 @@
-// The gateway ↔ flo2-rvt contract, v4 (v3, and the family files an edit's list names), as types and validators. Everything the
+// The gateway ↔ flo2-rvt contract, v5 (v4, and the families a probe saves out of the model), as types and validators. Everything the
 // agent sends is untrusted and bounded here; everything that decides what
 // flo2-rvt does with Autodesk (the token, the client id, the input file and the
 // time limit) comes only from the hidden context the gateway sets.
 
 import * as z from 'zod/v4';
 import { ChangeListShape } from './change-list.ts';
-import { ENGINE } from './names.ts';
+import { ENGINE, MAX_SAVE_FAMILIES } from './names.ts';
 
 /**
  * The contract's version: 1 added rvt_edit_start beside v0's two tools; 2 adds to an edit's
@@ -24,8 +24,16 @@ import { ENGINE } from './names.ts';
  * `family_files`, what flo2-rvt uploaded, by sha256. Nothing of v3 changed: a v3 gateway still
  * works for every list that names no family file, and one that does is refused by name before
  * anything is uploaded.
+ * 5 (flo2-rvt 0.13.0, add-in 0.12.0) adds the families a probe saves out of the model:
+ * rvt_probe_start's `save_families` (at most 8 family names, each one a family file's name may be,
+ * so it loads in an edit under the same name), said back in the start result; on success, each
+ * family saved is an output `family<n>.rfa` whose `_meta["flo2.io/outputs"]` entry carries its
+ * `family`, the `file` it loads under (`<family>.rfa`, the name the gateway keeps it by) and its
+ * `sha256` as the add-in saved it, and the probe's report_summary names `families_saved` and
+ * `families_not_saved` (with why). Nothing of v4 changed: a v4 gateway, which sends no
+ * save_families, still works, and keeps no family output, since it is not one it knows.
  */
-export const CONTRACT_VERSION = 4;
+export const CONTRACT_VERSION = 5;
 
 /** The `_meta` keys of the contract. */
 export const META_JOB = 'flo2.io/job';
@@ -122,12 +130,22 @@ export const ProbeStartArgs = z.object({
     .max(30)
     .default(15)
     .describe('The most processing minutes the job may use, 1 to 30. Default 15. flo2.io may set a lower limit.'),
+  save_families: z
+    .array(z.string().min(1).max(1024))
+    .min(1)
+    .max(MAX_SAVE_FAMILIES)
+    .optional()
+    .describe(
+      "Since flo2-rvt 0.13.0: the families to save out of the model as family files (.rfa), each by its family name exactly as the probe's report lists it (types.*[].family; case and spaces count), at most 8, each once. Each the model holds as a loadable family (one loaded from a .rfa, such as a footing's or a pile's) is saved as <name>.rfa in Revit 2024's format, and flo2.io keeps it as a new file in the design, where an edit can name it as a family_file; the model itself is never changed. A name the model does not hold, a system family (a wall foundation type, a basic wall) or an in-place one, or one Revit will not save, is reported with why and not saved, and the probe still succeeds. A name a family file's name may not hold (< > : \" / \\ | ? * or a control character, or past 200 characters) is refused before the job, since an edit would load it under another name. Leave it out to save none.",
+    ),
 });
 
 export const ProbeStartResult = z.object({
   job_id: z.string(),
   state: z.literal('submitted'),
   engine: z.literal(ENGINE),
+  /** Since contract v5: the families the probe will save, as flo2-rvt handed them to the add-in, in order (absent when none). */
+  save_families: z.array(z.string()).optional(),
 });
 export type ProbeStartResult = z.infer<typeof ProbeStartResult>;
 
@@ -171,7 +189,12 @@ export const ProbeSummary = z.object({
   levels: z.number().int(),
   sheets: z.number().int(),
   links: z.number().int(),
+  /** Since contract v5, when the probe was asked to save families: each saved, by its family, the file it loads under, its output and its bytes. */
+  families_saved: z.array(z.object({ family: z.string(), file: z.string(), output: z.string(), bytes: z.number().int() })).optional(),
+  /** And each not saved, with why (not held, a system or in-place family, past a limit, or Revit would not save it). */
+  families_not_saved: z.array(z.object({ family: z.string(), why: z.string() })).optional(),
 });
+export type ProbeSummary = z.infer<typeof ProbeSummary>;
 
 /**
  * An edit's report, counted: what came of the list, and whether a new model was saved. From a
@@ -208,7 +231,8 @@ export const JobStatusResult = z.object({
   // Design Automation's own status, passed through: pending, inprogress, success, failed*, cancelled, and any it adds.
   state: z.string(),
   processing_seconds: z.number().optional(),
-  outputs: z.array(z.object({ name: z.string(), size: z.number() })).optional(),
+  /** Since contract v5, a family a probe saved names its family beside its output's name (family1.rfa ...). */
+  outputs: z.array(z.object({ name: z.string(), size: z.number(), family: z.string().optional() })).optional(),
   report_summary: ReportSummary.optional(),
   error: z.string().optional(),
 });
@@ -285,6 +309,15 @@ export interface OutputMeta {
   expires_at: string;
   size: number;
   content_type: string;
+  /**
+   * Since contract v5, on a family a probe saved (family<n>.rfa): the family, exactly as the model
+   * holds it; the file name it loads under in an edit (`<family>.rfa`, since Revit names a family it
+   * loads by its file), which is the name the gateway keeps it by; and the sha256 of its bytes as the
+   * add-in saved them, which the gateway holds what it downloads to.
+   */
+  family?: string;
+  file?: string;
+  sha256?: string;
 }
 
 /** _meta["flo2.io/usage"]. */

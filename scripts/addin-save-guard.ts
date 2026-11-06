@@ -7,8 +7,12 @@
 //     addin/src/Edit/ChangeRunner.cs, where each change runs alone;
 //   · a model is saved (.Save(, .SaveAs(, SynchronizeWithCentral, RelinquishOwnership) only in
 //     addin/src/Edit/SaveResult.cs, which holds exactly one SaveAs call and commits nothing;
+//   · since add-in 0.12.0, a FAMILY document is saved only in addin/src/Probe/FamilySave.cs, the
+//     families a probe is asked to save out of the model: exactly one SaveAs call, on a document
+//     Document.EditFamily returned (never the model), which it closes without saving
+//     (.Close(false)); it commits nothing and calls no other save;
 //   · the probe's own files (addin/src/Jobs/ProbeJob.cs, addin/src/Probe/) never name
-//     ChangeRunner, SaveResult or EditJob, so nothing the probe runs can commit or save.
+//     ChangeRunner, SaveResult or EditJob, so nothing the probe runs can commit or save the model.
 //
 // Comments are read past (a comment may name the calls it explains); everything else counts.
 //
@@ -21,11 +25,15 @@ import { fileURLToPath } from 'node:url';
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 export const COMMIT_FILE = 'addin/src/Edit/ChangeRunner.cs';
 export const SAVE_FILE = 'addin/src/Edit/SaveResult.cs';
+export const FAMILY_SAVE_FILE = 'addin/src/Probe/FamilySave.cs';
 const COMMIT = /\.Commit\(|\.Assimilate\(/;
 const SAVE = /\.Save\(|\.SaveAs\(|SynchronizeWithCentral|RelinquishOwnership/;
 const SAVE_AS = /\.SaveAs\(/g;
 const PROBE_FILES = /^addin\/src\/(Jobs\/ProbeJob\.cs|Probe\/)/;
 const EDIT_PATHS = /\b(ChangeRunner|SaveResult|EditJob)\b/;
+/** `x = doc.EditFamily(` or `Document x = doc.EditFamily(`: x is a family document. */
+const EDIT_FAMILY = /\b([A-Za-z_]\w*)\s*=\s*[A-Za-z_][\w.]*\.EditFamily\(/g;
+const SAVE_AS_ON = /\b([A-Za-z_]\w*)\.SaveAs\(/g;
 
 export interface Finding {
   file: string;
@@ -85,12 +93,23 @@ export function stripComments(src: string): string {
 export function checkSources(files: Record<string, string>): Finding[] {
   const findings: Finding[] = [];
   let saveAsCalls = 0;
+  let familySaveAsCalls = 0;
   for (const [file, src] of Object.entries(files)) {
-    const lines = stripComments(src).split('\n');
+    const stripped = stripComments(src);
+    const lines = stripped.split('\n');
+    const familyDocs = new Set([...stripped.matchAll(EDIT_FAMILY)].map((m) => m[1] as string));
     lines.forEach((text, n) => {
       const line = n + 1;
       if (COMMIT.test(text) && file !== COMMIT_FILE) findings.push({ file, line, rule: `a transaction is committed only in ${COMMIT_FILE}` });
-      if (SAVE.test(text) && file !== SAVE_FILE) findings.push({ file, line, rule: `a model is saved only in ${SAVE_FILE}` });
+      if (SAVE.test(text) && file !== SAVE_FILE && file !== FAMILY_SAVE_FILE) findings.push({ file, line, rule: `a model is saved only in ${SAVE_FILE}, and a family document only in ${FAMILY_SAVE_FILE}` });
+      if (file === FAMILY_SAVE_FILE) {
+        if (/\.Save\(/.test(text) || /SynchronizeWithCentral|RelinquishOwnership/.test(text)) findings.push({ file, line, rule: 'the family save saves with SaveAs alone, as a new file' });
+        for (const m of text.matchAll(SAVE_AS_ON)) {
+          familySaveAsCalls++;
+          const on = m[1] as string;
+          if (!familyDocs.has(on)) findings.push({ file, line, rule: `the family save saves only the family document Document.EditFamily opened (${on} is not one)` });
+        }
+      }
       if (file === SAVE_FILE && COMMIT.test(text)) findings.push({ file, line, rule: 'the save path commits no transaction' });
       if (file === SAVE_FILE && (/\.Save\(/.test(text) || /SynchronizeWithCentral/.test(text))) findings.push({ file, line, rule: 'the save path saves once, with SaveAs, as a new file' });
       if (file === SAVE_FILE) saveAsCalls += (text.match(SAVE_AS) ?? []).length;
@@ -98,6 +117,13 @@ export function checkSources(files: Record<string, string>): Finding[] {
     });
   }
   if (SAVE_FILE in files && saveAsCalls !== 1) findings.push({ file: SAVE_FILE, line: 0, rule: `the save path holds exactly one SaveAs call (it holds ${saveAsCalls})` });
+  if (FAMILY_SAVE_FILE in files) {
+    const stripped = stripComments(files[FAMILY_SAVE_FILE] as string);
+    if (familySaveAsCalls !== 1) findings.push({ file: FAMILY_SAVE_FILE, line: 0, rule: `the family save holds exactly one SaveAs call (it holds ${familySaveAsCalls})` });
+    for (const doc of new Set([...stripped.matchAll(EDIT_FAMILY)].map((m) => m[1] as string))) {
+      if (!new RegExp(`\\b${doc}\\.Close\\(false\\)`).test(stripped)) findings.push({ file: FAMILY_SAVE_FILE, line: 0, rule: `the family save closes the family document without saving it (${doc}.Close(false))` });
+    }
+  }
   if (!(SAVE_FILE in files) && Object.values(files).some((s) => SAVE.test(stripComments(s)))) findings.push({ file: SAVE_FILE, line: 0, rule: 'the save path is missing' });
   return findings;
 }
@@ -126,5 +152,5 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     console.error('The add-in commits and saves only on the edit job\'s one path, and the probe never reaches it.');
     process.exit(1);
   }
-  console.log(`${Object.keys(files).length} add-in files: commits only in ${COMMIT_FILE}, one save in ${SAVE_FILE}, and the probe reaches neither`);
+  console.log(`${Object.keys(files).length} add-in files: commits only in ${COMMIT_FILE}, one save of the model in ${SAVE_FILE}, which the probe never reaches, and one save of a family document in ${FAMILY_SAVE_FILE}`);
 }

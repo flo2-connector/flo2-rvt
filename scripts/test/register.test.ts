@@ -59,7 +59,7 @@ describe('flo2-rvt register', () => {
       assert.ok(daCalls.every((c) => c.auth === 'Bearer registration-token-for-tests-only'));
 
       const bundle = aps.calls.find((c) => c.path === '/da/us-east/v3/appbundles');
-      assert.deepEqual(bundle?.json, { id: 'Flo2RvtProbe', engine: 'Autodesk.Revit+2024', description: 'flo2-rvt probe and edit jobs for Revit 2024 (flo2-rvt add-in 0.11.0)' }, 'its description names the add-in version a check reads back');
+      assert.deepEqual(bundle?.json, { id: 'Flo2RvtProbe', engine: 'Autodesk.Revit+2024', description: 'flo2-rvt probe and edit jobs for Revit 2024 (flo2-rvt add-in 0.12.0)' }, 'its description names the add-in version a check reads back');
       const upload = aps.appBundleUploads[0];
       assert.equal(upload?.fields.at(-1), 'file', 'the file field comes last');
       assert.ok(upload?.fields.includes('policy') && upload.fields.includes('x-amz-signature'));
@@ -220,17 +220,30 @@ describe('flo2-rvt register', () => {
     assert.ok(!Object.values(body.parameters).some((p) => p.localName === 'input.rvt' && p.verb === 'put'), 'the input is never written back');
   });
 
-  test('the Activity runs revitcoreconsole with the AppBundle on the 2024 engine and names the four files', () => {
+  test('the Activity runs revitcoreconsole with the AppBundle on the 2024 engine and names its files', () => {
     const body = activityBody('SdkTester') as { commandLine: string[]; engine: string; appbundles: string[]; parameters: Record<string, { verb: string; localName: string; required: boolean }> };
     assert.equal(body.engine, 'Autodesk.Revit+2024');
     assert.deepEqual(body.appbundles, ['SdkTester.Flo2RvtProbe+prod']);
     assert.ok(!body.commandLine[0]?.includes('/i '), 'the add-in opens the model itself');
     assert.deepEqual(Object.fromEntries(Object.entries(body.parameters).map(([k, v]) => [k, [v.verb, v.localName, v.required]])), {
       rvtFile: ['get', 'input.rvt', true],
+      // Since add-in 0.12.0: the families the probe saves, a list every probe hands over (empty when none),
+      // so no WorkItem ever leaves an input out; and each saved family, an optional output in the
+      // list's order, which a probe that saves fewer leaves unwritten (as it leaves sheets.pdf).
+      saveFamilies: ['get', 'save-families.json', true],
       report: ['put', 'report.json', true],
       sheets: ['put', 'sheets.pdf', false],
       ifc: ['put', 'model.ifc', false],
+      family1: ['put', 'family1.rfa', false],
+      family2: ['put', 'family2.rfa', false],
+      family3: ['put', 'family3.rfa', false],
+      family4: ['put', 'family4.rfa', false],
+      family5: ['put', 'family5.rfa', false],
+      family6: ['put', 'family6.rfa', false],
+      family7: ['put', 'family7.rfa', false],
+      family8: ['put', 'family8.rfa', false],
     });
+    assert.match((body as unknown as { description: string }).description, /and up to 8 families it is asked to save, each as \.rfa/);
   });
 });
 

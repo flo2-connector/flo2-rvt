@@ -1,18 +1,21 @@
 // The guard CI runs on the add-in's sources: the repository's own add-in passes it, and
-// each way of breaking a rule is caught (made-up C# snippets).
+// each way of breaking a rule is caught (made-up C# snippets). Since add-in 0.12.0 the probe
+// saves a family a person names out of the model (Probe/FamilySave.cs): one SaveAs, on the
+// family document Document.EditFamily opened, closed after without saving, never the model.
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { COMMIT_FILE, SAVE_FILE, addinSources, checkSources, stripComments } from '../addin-save-guard.ts';
+import { COMMIT_FILE, FAMILY_SAVE_FILE, SAVE_FILE, addinSources, checkSources, stripComments } from '../addin-save-guard.ts';
 
 const SAVE = 'class SaveResult { void Write(Document doc) { doc.SaveAs(path, options); WorksharingUtils.RelinquishOwnership(doc, a, b); } }';
 const COMMIT = 'class ChangeRunner { void Run() { tx.Commit(); } }';
-const base = () => ({ [SAVE_FILE]: SAVE, [COMMIT_FILE]: COMMIT, 'addin/src/Jobs/ProbeJob.cs': 'class ProbeJob { void Execute() { tx.RollBack(); } }' });
+const FAMILY_SAVE = 'class FamilySave { void One(Document doc, Family f, string path) { Document fd = null; try { fd = doc.EditFamily(f); fd.SaveAs(path, new SaveAsOptions()); } finally { if (fd != null) fd.Close(false); } } }';
+const base = () => ({ [SAVE_FILE]: SAVE, [COMMIT_FILE]: COMMIT, [FAMILY_SAVE_FILE]: FAMILY_SAVE, 'addin/src/Jobs/ProbeJob.cs': 'class ProbeJob { void Execute() { tx.RollBack(); } }' });
 const rules = (files: Record<string, string>) => checkSources(files).map((f) => `${f.file}: ${f.rule}`);
 
 test("the repository's own add-in passes", () => {
   const files = addinSources();
-  assert.ok(Object.keys(files).includes(SAVE_FILE) && Object.keys(files).includes(COMMIT_FILE), Object.keys(files).join(', '));
+  assert.ok(Object.keys(files).includes(SAVE_FILE) && Object.keys(files).includes(COMMIT_FILE) && Object.keys(files).includes(FAMILY_SAVE_FILE), Object.keys(files).join(', '));
   assert.deepEqual(rules(files), []);
 });
 
@@ -39,6 +42,20 @@ test('the save path saves once, with SaveAs, and commits nothing', () => {
   assert.match(rules({ ...base(), [SAVE_FILE]: `${SAVE} void X() { tx.Commit(); }` }).join('\n'), /the save path commits no transaction/);
   assert.match(rules({ ...base(), [SAVE_FILE]: `${SAVE} void X() { doc.SynchronizeWithCentral(a, b); }` }).join('\n'), /saves once, with SaveAs/);
   assert.match(rules({ ...base(), [COMMIT_FILE]: `${COMMIT} void X() { doc.SaveAs(p, o); }` }).join('\n'), /ChangeRunner\.cs: a model is saved only in/);
+});
+
+test("the probe saves only a family document EditFamily opened, once, in its one file, and closes it unsaved; never the model", () => {
+  const family = (src: string) => rules({ ...base(), [FAMILY_SAVE_FILE]: src }).join('\n');
+  assert.match(family(FAMILY_SAVE.replace('fd.SaveAs(path, new SaveAsOptions());', 'fd.SaveAs(path, new SaveAsOptions()); fd.SaveAs(other, new SaveAsOptions());')), /FamilySave\.cs: the family save holds exactly one SaveAs call \(it holds 2\)/);
+  assert.match(family(FAMILY_SAVE.replace('fd.SaveAs(', 'doc.SaveAs(')), /FamilySave\.cs: the family save saves only the family document Document\.EditFamily opened \(doc is not one\)/);
+  assert.match(family(FAMILY_SAVE.replace('fd = doc.EditFamily(f);', 'fd = doc;')), /saves only the family document Document\.EditFamily opened \(fd is not one\)/);
+  assert.match(family(FAMILY_SAVE.replace('fd.Close(false);', 'fd.Close(true);')), /the family save closes the family document without saving it \(fd\.Close\(false\)\)/);
+  assert.match(family(`${FAMILY_SAVE} void X(Document fd) { fd.Save(); }`), /the family save saves with SaveAs alone, as a new file/);
+  assert.match(family(`${FAMILY_SAVE} void X() { tx.Commit(); }`), /FamilySave\.cs: a transaction is committed only in/);
+  assert.match(family(`${FAMILY_SAVE} void X() { EditJob.Run(); }`), /the probe never reaches the edit job/);
+  assert.match(rules({ ...base(), 'addin/src/Probe/Exports.cs': 'fd = doc.EditFamily(f); fd.SaveAs(p, o); fd.Close(false);' }).join('\n'), /Exports\.cs: a model is saved only in addin\/src\/Edit\/SaveResult\.cs, and a family document only in addin\/src\/Probe\/FamilySave\.cs/);
+  const { [FAMILY_SAVE_FILE]: _gone, ...without } = base();
+  assert.deepEqual(rules(without), [], 'an add-in that saves no family needs no family save');
 });
 
 test('comments are read past, strings are not', () => {

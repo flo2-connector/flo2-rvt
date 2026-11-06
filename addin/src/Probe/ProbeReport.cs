@@ -32,6 +32,12 @@ namespace Flo2Rvt.Addin.Probe
         [DataMember(Name = "rooms_total", Order = 15, EmitDefaultValue = false)] public int RoomsTotal;
         /// <summary>Since add-in 0.10.0: how shared coordinates (the IFC's) sit on internal ones.</summary>
         [DataMember(Name = "coordinates", Order = 16, EmitDefaultValue = false)] public CoordinatesInfo Coordinates;
+        /// <summary>
+        /// Since add-in 0.12.0, when the probe was asked to save families (save-families.json): one entry
+        /// for each name asked, in that order, saying whether it was saved as a family file and, when it
+        /// was not, why (Logic/FamilySaves.cs). Absent when none was asked.
+        /// </summary>
+        [DataMember(Name = "families_saved", Order = 17, EmitDefaultValue = false)] public List<SavedFamilyInfo> FamiliesSaved;
 
         public void WriteTo(string path)
         {
@@ -54,7 +60,7 @@ namespace Flo2Rvt.Addin.Probe
         [DataMember(Name = "finished_at", Order = 2)] public string FinishedAt;
         /// <summary>The add-in has no call that commits a transaction; this is always 0.</summary>
         [DataMember(Name = "transactions_committed", Order = 3)] public int TransactionsCommitted;
-        /// <summary>The add-in has no call that saves; this is always false.</summary>
+        /// <summary>The model is never saved; this is always false. (A family the probe is asked to save is a family document's own file, named in families_saved.)</summary>
         [DataMember(Name = "saved", Order = 4)] public bool Saved;
     }
 
@@ -257,6 +263,37 @@ namespace Flo2Rvt.Addin.Probe
         [DataMember(Name = "offset_x_ft", Order = 1)] public double OffsetXFt;
         [DataMember(Name = "offset_y_ft", Order = 2)] public double OffsetYFt;
         [DataMember(Name = "how", Order = 3, EmitDefaultValue = false)] public string How;
+    }
+
+    /// <summary>
+    /// Since add-in 0.12.0: what came of one family the probe was asked to save. Saved: its family
+    /// document (Document.EditFamily) saved as `file`, the family's own name and .rfa, in the engine's
+    /// format, and handed back as `output` (family&lt;n&gt;.rfa, n the name's place in the list asked),
+    /// with its bytes and their sha256. Not saved: why.
+    /// </summary>
+    [DataContract]
+    public sealed class SavedFamilyInfo
+    {
+        public const int TypesCap = 200;
+        /// <summary>The name asked, exactly.</summary>
+        [DataMember(Name = "family", Order = 0)] public string Family;
+        /// <summary>saved or not_saved.</summary>
+        [DataMember(Name = "was", Order = 1)] public string Was;
+        /// <summary>The file it was saved as, and the name an edit's family_file gives it so it loads under the same name: the family's name and .rfa.</summary>
+        [DataMember(Name = "file", Order = 2, EmitDefaultValue = false)] public string File;
+        /// <summary>The output it goes back as: family1.rfa ... family8.rfa.</summary>
+        [DataMember(Name = "output", Order = 3, EmitDefaultValue = false)] public string Output;
+        /// <summary>The family's category (Family.FamilyCategory), as Revit names it.</summary>
+        [DataMember(Name = "category", Order = 4, EmitDefaultValue = false)] public string Category;
+        /// <summary>Its types, by name, the first TypesCap.</summary>
+        [DataMember(Name = "types", Order = 5, EmitDefaultValue = false)] public List<string> Types;
+        /// <summary>The Revit release the saved file is in (BasicFileInfo.Format of the saved file): the engine's, 2024.</summary>
+        [DataMember(Name = "format", Order = 6, EmitDefaultValue = false)] public string Format;
+        [DataMember(Name = "bytes", Order = 7, EmitDefaultValue = false)] public long Bytes;
+        /// <summary>Of the saved file's bytes, lowercase hex.</summary>
+        [DataMember(Name = "sha256", Order = 8, EmitDefaultValue = false)] public string Sha256;
+        /// <summary>Why it was not saved: not held, a system or in-place family, past a limit, or Revit would not save it.</summary>
+        [DataMember(Name = "why", Order = 9, EmitDefaultValue = false)] public string Why;
     }
 
     /// <summary>An element a stored warning flags (FailureMessage.GetFailingElements, GetAdditionalElements). Since add-in 0.7.0.</summary>

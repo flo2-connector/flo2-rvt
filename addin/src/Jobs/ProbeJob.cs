@@ -6,6 +6,10 @@
 // Since add-in 0.10.0 it also lists what an edit places new content from and against
 // (Edit/ModelTypes.cs, reads only): the wall, floor and door types the model holds, its placed
 // rooms with their boundaries, and how shared coordinates (the IFC's) sit on internal ones.
+//
+// Since add-in 0.12.0 it also saves the families it is asked to (save-families.json) out of the
+// model as family files, each its own family document's SaveAs (Probe/FamilySave.cs), handed back
+// as family1.rfa ...; the model itself is still never changed or saved.
 
 using System;
 using System.Collections.Generic;
@@ -24,7 +28,7 @@ namespace Flo2Rvt.Addin.Jobs
     public sealed class ProbeJob : IFlo2RvtJob
     {
         public const string Name = "probe";
-        public const string AddinVersion = "0.11.0";
+        public const string AddinVersion = "0.12.0";
         public const string ReportName = "report.json";
         /// <summary>1 ft = 304.8 mm exactly; Revit's internal length unit is the foot.</summary>
         private const double MmPerFoot = 304.8;
@@ -58,6 +62,8 @@ namespace Flo2Rvt.Addin.Jobs
 
             ReadPlacing(doc, report, probeWarnings);
 
+            SaveFamilies(context, report, probeWarnings);
+
             context.Heartbeat.Step("printing sheets to sheets.pdf");
             report.Exports.SheetsPdf = Guard("sheets.pdf", () => Exports.Pdf(doc, context.WorkingFolder, printable, Name), probeWarnings);
 
@@ -75,6 +81,41 @@ namespace Flo2Rvt.Addin.Jobs
             report.WriteTo(Path.Combine(context.WorkingFolder, ReportName));
             Console.WriteLine("[flo2-rvt] wrote report.json: " + report.Levels.Count + " levels, " + report.Sheets.Count + " sheets, " + report.Links.Count + " links");
             return true;
+        }
+
+        /// <summary>
+        /// Since add-in 0.12.0: the families save-families.json names, each saved out of the model as a
+        /// family file or reported with why (Probe/FamilySave.cs). A list the add-in cannot read saves
+        /// none and is a probe warning; the probe goes on either way.
+        /// </summary>
+        private static void SaveFamilies(JobContext context, ProbeReport report, List<string> probeWarnings)
+        {
+            string path = Path.Combine(context.WorkingFolder, FamilySaves.FileName);
+            if (!File.Exists(path)) return;
+            string error;
+            List<string> names = FamilySaves.Read(File.ReadAllText(path), out error);
+            if (names == null)
+            {
+                probeWarnings.Add(error);
+                return;
+            }
+            if (names.Count == 0) return;
+            context.Heartbeat.Step("saving " + names.Count + " famil" + (names.Count == 1 ? "y" : "ies"));
+            try
+            {
+                report.FamiliesSaved = FamilySave.SaveAll(context.Document, context.WorkingFolder, names, context.Heartbeat.Step);
+            }
+            catch (Exception ex)
+            {
+                probeWarnings.Add("the families could not be saved: " + ex.GetType().Name + ": " + ex.Message);
+                report.FamiliesSaved = names.Select(n => new SavedFamilyInfo { Family = n, Was = FamilySaves.NotSaved, Why = "the add-in failed before it saved it: " + ex.GetType().Name }).ToList();
+                for (int i = 0; i < names.Count; i++)
+                {
+                    string output = Path.Combine(context.WorkingFolder, FamilySaves.OutputName(i));
+                    if (File.Exists(output)) File.Delete(output);
+                }
+            }
+            foreach (string v in FamilySaves.Violations(names, report.FamiliesSaved)) probeWarnings.Add("families_saved breaks what the report promises: " + v);
         }
 
         /// <summary>The types, rooms and coordinates an edit's new content is placed by; each read alone, a failure named as a probe warning.</summary>

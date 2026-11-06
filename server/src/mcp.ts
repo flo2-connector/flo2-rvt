@@ -1,4 +1,4 @@
-// The tools, as the contract (v3) names them: the three an agent sees through flo2.io
+// The tools, as the contract (v5) names them: the three an agent sees through flo2.io
 // (rvt_probe_start, rvt_edit_start, rvt_job_status), and the two flo2.io's gateway calls
 // itself and never offers an agent (rvt_setup_check before it asks the person for a job,
 // rvt_setup_run once the person has approved the setup). Each refuses a call that does not
@@ -31,7 +31,7 @@ import { JobService, NotSetUp, Refusal } from './jobs.ts';
 import type { Logger } from './log.ts';
 
 export const SERVER_NAME = 'flo2-rvt';
-export const SERVER_VERSION = '0.12.0';
+export const SERVER_VERSION = '0.13.0';
 
 function text(message: string): CallToolResult {
   return { content: [{ type: 'text', text: message }], isError: true };
@@ -80,7 +80,7 @@ export function buildServer(jobs: JobService, logger: Logger): McpServer {
     {
       title: "Probe a Revit model in Autodesk's cloud (read-only, paid)",
       description:
-        "Start a READ-ONLY probe of a Revit model (.rvt) in the design. Real Revit 2024, in Autodesk's cloud (Design Automation), opens the model and changes nothing: it lists the levels with their elevations, the sheets, the linked files and the element counts by category (since add-in 0.10.0 also every wall, floor and door type it holds, its placed rooms with their boundaries, and how its shared coordinates sit on its internal ones, for an edit that adds; since add-in 0.11.0 every foundation type, each Structural Foundations family type and wall foundation type with its length parameters, type or instance, their values and whether Revit holds them read-only or by a formula, which an edit's sizes name), prints every sheet to one PDF, and exports Autodesk's own IFC. This starts a PAID job on the person's own Autodesk account, billed by processing time, which flo2.io confirms and caps. It returns a job_id at once; call rvt_job_status with it, and again as soon as each answer comes, until the state is success or a failure (flo2.io holds each status call until the job moves, so add no wait of your own).",
+        "Start a READ-ONLY probe of a Revit model (.rvt) in the design. Real Revit 2024, in Autodesk's cloud (Design Automation), opens the model and changes nothing: it lists the levels with their elevations, the sheets, the linked files and the element counts by category (since add-in 0.10.0 also every wall, floor and door type it holds, its placed rooms with their boundaries, and how its shared coordinates sit on its internal ones, for an edit that adds; since add-in 0.11.0 every foundation type, each Structural Foundations family type and wall foundation type with its length parameters, type or instance, their values and whether Revit holds them read-only or by a formula, which an edit's sizes name), prints every sheet to one PDF, and exports Autodesk's own IFC. Since add-in 0.12.0 it also SAVES the families named in save_families (at most 8, each by its family name exactly as the report lists it) out of the model as family files (.rfa, Revit 2024): each loadable family the model holds under that name is saved as <name>.rfa and kept by flo2.io as a new file in the design, where an edit can name it as a family_file (a footing's or pile's family for another model); a name the model does not hold, a system or in-place family, or one Revit will not save, is reported with why and not saved, and the model itself is never changed. This starts a PAID job on the person's own Autodesk account, billed by processing time, which flo2.io confirms and caps. It returns a job_id at once; call rvt_job_status with it, and again as soon as each answer comes, until the state is success or a failure (flo2.io holds each status call until the job moves, so add no wait of your own).",
       inputSchema: ProbeStartArgs,
       outputSchema: ProbeStartResult,
       annotations: {
@@ -95,7 +95,7 @@ export function buildServer(jobs: JobService, logger: Logger): McpServer {
       const job = readJobContext(ctx.mcpReq._meta);
       if (!job.ok) return text(job.why);
       try {
-        const started = await jobs.startProbe(job.ctx, args.max_minutes, ctx.mcpReq.signal);
+        const started = await jobs.startProbe(job.ctx, args.max_minutes, args.save_families, ctx.mcpReq.signal);
         return { content: [{ type: 'text', text: JSON.stringify(started) }], structuredContent: started };
       } catch (err) {
         return failure(err, logger, 'rvt_probe_start');
@@ -136,7 +136,7 @@ export function buildServer(jobs: JobService, logger: Logger): McpServer {
     {
       title: "Read a cloud-Revit job's status",
       description:
-        "Read where a cloud-Revit job stands, from the job_id rvt_probe_start or rvt_edit_start returned. The state is Autodesk's own: pending, inprogress, success, or a failure such as failedInstructions or failedLimitProcessingTime. On success it lists the results (a probe's report.json, sheets.pdf and model.ifc; an edit's report.json, model.rvt, sheets.pdf and model.ifc), which flo2.io saves into the design as new files, and a summary of the report (an edit's: its outcome, how many changes were applied, applied in part, rolled back or not applied, the model elements deleted and the other elements apart, what was deleted with its host, the model elements left on a level, how many elements a level move reshaped that nothing in the list asked for (reshaped_unexpected, since add-in 0.7.0), how many elements the changes added (elements_added, since add-in 0.10.0), and whether a new model was saved). Call it again as soon as each answer comes, until the state is final: flo2.io holds each call until the job moves, so add no wait of your own.",
+        "Read where a cloud-Revit job stands, from the job_id rvt_probe_start or rvt_edit_start returned. The state is Autodesk's own: pending, inprogress, success, or a failure such as failedInstructions or failedLimitProcessingTime. On success it lists the results (a probe's report.json, sheets.pdf and model.ifc, and since add-in 0.12.0 each family it saved, family1.rfa ..., named by its family; an edit's report.json, model.rvt, sheets.pdf and model.ifc), which flo2.io saves into the design as new files, and a summary of the report (a probe's: its levels, sheets and links counted, and the families it saved and those it did not, with why; an edit's: its outcome, how many changes were applied, applied in part, rolled back or not applied, the model elements deleted and the other elements apart, what was deleted with its host, the model elements left on a level, how many elements a level move reshaped that nothing in the list asked for (reshaped_unexpected, since add-in 0.7.0), how many elements the changes added (elements_added, since add-in 0.10.0), and whether a new model was saved). Call it again as soon as each answer comes, until the state is final: flo2.io holds each call until the job moves, so add no wait of your own.",
       inputSchema: JobStatusArgs,
       outputSchema: JobStatusResult,
       annotations: {

@@ -1,0 +1,43 @@
+{
+  "_note": "A made-up excerpt of a probe report of add-in 0.12.0: its `families_saved`, one entry for each family name the probe was asked to save (rvt_probe_start's save_families, in that order). A loadable family the model holds under exactly that name is saved as <name>.rfa (Revit 2024 format) and handed back as the output family<n>.rfa, n its place in the list asked; a system family, an in-place family, or a name the model does not hold is reported and not saved. The family names are Revit's own defaults; the bytes and sha256 are those of the made-up stand-in bytes server/test/mock-aps.ts writes. Read by addin/tests through the probe report's contract, by the server's tests through the Autodesk stand-in, and by flo2's own reading of a probe's saved families.",
+  "asked": ["Footing-Rectangular", "Wall Foundation", "Pile-Steel Pipe", "Footing-Round", "Pile Cap"],
+  "families_saved": [
+    {
+      "family": "Footing-Rectangular",
+      "was": "saved",
+      "file": "Footing-Rectangular.rfa",
+      "output": "family1.rfa",
+      "category": "Structural Foundations",
+      "types": ["1800 x 1200 x 450mm", "2400 x 1800 x 600mm"],
+      "format": "2024",
+      "bytes": 360448,
+      "sha256": "e41873327c62d190e70650a11b21ba4304522eb9d79767f640f8d1c308d53f81"
+    },
+    {
+      "family": "Wall Foundation",
+      "was": "not_saved",
+      "why": "a system family (Structural Foundations): Revit holds its types in the model itself, and a system family is never saved as a family file (.rfa); an edit's add_wall_footing places a wall footing of a type the model holds"
+    },
+    {
+      "family": "Pile-Steel Pipe",
+      "was": "saved",
+      "file": "Pile-Steel Pipe.rfa",
+      "output": "family3.rfa",
+      "category": "Structural Foundations",
+      "types": ["Standard"],
+      "format": "2024",
+      "bytes": 401408,
+      "sha256": "e013193419a9735102c0fe3afcd9e6823de96141e89f74da6248cfd3eae64a0b"
+    },
+    {
+      "family": "Footing-Round",
+      "was": "not_saved",
+      "why": "the model holds no family named exactly \"Footing-Round\" (case and spaces count); it holds one named \"Footing-round\""
+    },
+    {
+      "family": "Pile Cap",
+      "was": "not_saved",
+      "why": "an in-place family: it is modelled in this model alone, so Revit opens no family document for it and it cannot be saved as a family file (.rfa)"
+    }
+  ]
+}
