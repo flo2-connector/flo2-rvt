@@ -459,7 +459,12 @@ namespace Flo2Rvt.Addin.Edit
         [DataMember(Name = "phase", Order = 6, EmitDefaultValue = false)] public string Phase;
     }
 
-    /// <summary>A new door: the wall it is in, and where it stands along it.</summary>
+    /// <summary>
+    /// A new door: the wall it is in, and where it stands along it. Since add-in 0.14.0 (change-list
+    /// version 6), as a footing's or pile's report does: the type it was copied from and its new type,
+    /// the family file it came from, and every length parameter of its type and itself as Revit holds
+    /// them, each size asked beside it (what flo2's check measures).
+    /// </summary>
     [DataContract]
     public sealed class AddedDoor
     {
@@ -474,8 +479,19 @@ namespace Flo2Rvt.Addin.Edit
         [DataMember(Name = "along_mm", Order = 5)] public double AlongMm;
         /// <summary>How far the point the change named was from the wall's line.</summary>
         [DataMember(Name = "off_line_mm", Order = 6)] public double OffLineMm;
+        /// <summary>Its width and height as the type it is placed from holds them (since add-in 0.14.0, the copy's when the change sized one; the door's own where its family holds them on the door).</summary>
         [DataMember(Name = "width_mm", Order = 7, EmitDefaultValue = false)] public double? WidthMm;
         [DataMember(Name = "height_mm", Order = 8, EmitDefaultValue = false)] public double? HeightMm;
+        /// <summary>Since add-in 0.14.0: the type the change named, when the door is placed from a copy of it.</summary>
+        [DataMember(Name = "copied_from", Order = 9, EmitDefaultValue = false)] public string CopiedFrom;
+        /// <summary>Since add-in 0.14.0: the change's new_type, and whether the job made it (copied) or placed one the family already held of that name and sizes (held).</summary>
+        [DataMember(Name = "new_type", Order = 10, EmitDefaultValue = false)] public string NewType;
+        [DataMember(Name = "new_type_was", Order = 11, EmitDefaultValue = false)] public string NewTypeWas;
+        /// <summary>Since add-in 0.14.0: the change's family_file, and whether its family was loaded from it or already held.</summary>
+        [DataMember(Name = "family_file", Order = 12, EmitDefaultValue = false)] public string FamilyFile;
+        [DataMember(Name = "family_was", Order = 13, EmitDefaultValue = false)] public string FamilyWas;
+        /// <summary>Since add-in 0.14.0: every length parameter of its type and itself, as Revit holds them, each size the change set beside it (SizeReport.Cap at most). Absent from a door of an earlier add-in.</summary>
+        [DataMember(Name = "sizes", Order = 14, EmitDefaultValue = false)] public List<SizeReport> Sizes;
     }
 
     /// <summary>
@@ -568,7 +584,7 @@ namespace Flo2Rvt.Addin.Edit
         [DataMember(Name = "sizes", Order = 16)] public List<SizeReport> Sizes = new List<SizeReport>();
     }
 
-    /// <summary>Since add-in 0.11.0: one length parameter of a new foundation or its type, as Revit holds it.</summary>
+    /// <summary>Since add-in 0.11.0: one length parameter of a new foundation or its type, as Revit holds it; since add-in 0.14.0, of a new door or its type too.</summary>
     [DataContract]
     public sealed class SizeReport
     {
@@ -584,7 +600,7 @@ namespace Flo2Rvt.Addin.Edit
         [DataMember(Name = "asked_mm", Order = 6, EmitDefaultValue = false)] public double? AskedMm;
     }
 
-    /// <summary>Since add-in 0.11.0: what came of one family file the list named, before any change ran.</summary>
+    /// <summary>Since add-in 0.11.0: what came of one family file the list named, before any change ran (since add-in 0.14.0, a door's as a footing's or pile's).</summary>
     [DataContract]
     public sealed class FamilyFileReport
     {
@@ -610,6 +626,8 @@ namespace Flo2Rvt.Addin.Edit
         [DataMember(Name = "types", Order = 9, EmitDefaultValue = false)] public List<string> Types;
         [DataMember(Name = "seconds", Order = 10, EmitDefaultValue = false)] public double Seconds;
         [DataMember(Name = "revit_messages", Order = 11, EmitDefaultValue = false)] public List<RevitMessage> RevitMessages;
+        /// <summary>Since add-in 0.14.0: the category its family had to be in for the changes that name it (Logic/Foundations.cs FamilyFiles.CategoryFor): Doors, or Structural Foundations.</summary>
+        [DataMember(Name = "category_needed", Order = 12, EmitDefaultValue = false)] public string CategoryNeeded;
     }
 
     /// <summary>A kept level move's reshaped_by_revit (Logic/Reshapes.cs).</summary>

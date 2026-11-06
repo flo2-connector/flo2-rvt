@@ -9,8 +9,12 @@
 // family the model already holds under that name is used as it is and never reloaded
 // (NeverOverwrite answers Revit's own question the same way, should it ask). Each load is a
 // transaction of its own, before the first change: a file Revit cannot open, or whose family is not
-// a Structural Foundations family, is rolled back, and every change naming it is not applied, with
-// why. The report's `families` say what came of each.
+// in the category its changes need, is rolled back, and every change naming it is not applied, with
+// why. Since add-in 0.14.0 that category is the one FamilyFiles.Of names for it, Doors for a door's
+// (add_door, change-list version 6, EditJob.Additions.cs), Structural Foundations for a footing's or
+// pile's, and a family the model holds under its name is used only when it is in that category. The
+// new-model job loads them the same way, here, before its first change. The report's `families` say
+// what came of each, and the category it needed.
 //
 // ⭐ A TYPE THE MODEL HOLDS IS NEVER CHANGED. A size that is a parameter of the type is set only on
 // a copy of the type, made under the change's new_type in the change's own transaction
@@ -70,12 +74,12 @@ namespace Flo2Rvt.Addin.Jobs
             }
         }
 
-        private const string Footings = "Structural Foundations";
+        private const string Footings = FamilyFiles.StructuralFoundations;
 
-        /// <summary>The family files the list names, each loaded, or found held, before any change runs.</summary>
+        /// <summary>The family files the list names, each loaded, or found held, before any change runs; each held to the category its changes need (since add-in 0.14.0).</summary>
         private static void LoadFamilyFiles(JobContext context, CheckedList list, Adding adding, EditReport report)
         {
-            List<string> files = FamilyFiles.Of(list.List);
+            List<FamilyFileNeed> files = FamilyFiles.Of(list.List);
             if (files.Count == 0) return;
             report.Families = new List<FamilyFileReport>();
             for (int i = 0; i < files.Count; i++)
@@ -89,9 +93,9 @@ namespace Flo2Rvt.Addin.Jobs
                 catch (Exception ex)
                 {
                     // Outside its transaction (reading, copying): nothing was changed.
-                    f = new FamilyFileReport { FamilyFile = files[i], Input = FamilyFiles.InputName(i), Was = FamilyFileReport.NotLoaded, Why = "the add-in failed while reading it: " + ex.GetType().Name + ": " + ex.Message };
+                    f = new FamilyFileReport { FamilyFile = files[i].File, Input = FamilyFiles.InputName(i), Was = FamilyFileReport.NotLoaded, CategoryNeeded = files[i].Category, Why = "the add-in failed while reading it: " + ex.GetType().Name + ": " + ex.Message };
                 }
-                adding.Families[files[i]] = f;
+                adding.Families[files[i].File] = f;
                 report.Families.Add(f);
                 Console.WriteLine("[flo2-rvt] family file " + (i + 1) + ": " + f.Was + (f.Why != null ? " (" + f.Why + ")" : ""));
             }
@@ -103,10 +107,12 @@ namespace Flo2Rvt.Addin.Jobs
             return family.GetFamilySymbolIds().Select(id => doc.GetElement(id)).Where(e => e != null).Select(e => e.Name).OrderBy(n => n, StringComparer.Ordinal).Take(FamilyFileReport.TypesCap).ToList();
         }
 
-        private static FamilyFileReport LoadFamilyFile(JobContext context, string file, int index, EditReport report)
+        private static FamilyFileReport LoadFamilyFile(JobContext context, FamilyFileNeed need, int index, EditReport report)
         {
             Document doc = context.Document;
-            var f = new FamilyFileReport { FamilyFile = file, Input = FamilyFiles.InputName(index), Was = FamilyFileReport.NotLoaded };
+            string file = need.File;
+            string needed = need.Category;
+            var f = new FamilyFileReport { FamilyFile = file, Input = FamilyFiles.InputName(index), Was = FamilyFileReport.NotLoaded, CategoryNeeded = needed };
             string path = Path.Combine(context.WorkingFolder, f.Input);
             if (!File.Exists(path))
             {
@@ -123,11 +129,11 @@ namespace Flo2Rvt.Addin.Jobs
             {
                 f.Family = held.Name;
                 f.FamilyId = held.Id.Value;
-                bool foundation = ModelTypes.IsFoundationFamily(held, out category);
+                bool ofItsCategory = ModelTypes.IsFamilyOf(held, needed, out category);
                 f.Category = category;
-                if (!foundation)
+                if (!ofItsCategory)
                 {
-                    f.Why = "the model already holds a family named \"" + name + "\", in the category " + (category ?? "none") + ", not " + Footings + "; a family the model holds is never reloaded or overwritten";
+                    f.Why = "the model already holds a family named \"" + name + "\", in the category " + (category ?? "none") + ", not " + needed + "; a family the model holds is never reloaded or overwritten";
                     return f;
                 }
                 f.Was = FamilyFileReport.Held;
@@ -154,7 +160,7 @@ namespace Flo2Rvt.Addin.Jobs
                 Family loaded;
                 if (!d.LoadFamily(copy, new NeverOverwrite(), out loaded) || loaded == null) throw new ChangeRefused("Revit did not load it (Document.LoadFamily loaded no family from it)");
                 string c;
-                if (!ModelTypes.IsFoundationFamily(loaded, out c)) throw new ChangeRefused("its family \"" + loaded.Name + "\" is in the category " + (c ?? "none") + ", not " + Footings + ", so it was not kept");
+                if (!ModelTypes.IsFamilyOf(loaded, needed, out c)) throw new ChangeRefused("its family \"" + loaded.Name + "\" is in the category " + (c ?? "none") + ", not " + needed + ", so it was not kept");
                 loadedId = loaded.Id.Value;
                 loadedCategory = c;
             });
@@ -192,7 +198,7 @@ namespace Flo2Rvt.Addin.Jobs
             return false;
         }
 
-        /// <summary>A foundation change's sizes, in feet; false (and not applied) when one cannot be read.</summary>
+        /// <summary>A foundation's or (since add-in 0.14.0) a door's sizes, in feet; false (and not applied) when one cannot be read.</summary>
         private static bool SizesOf(Change change, ChangeReport r, out List<SizeAsked> sizes)
         {
             string why;

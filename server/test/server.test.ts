@@ -135,6 +135,24 @@ describe('the tools, as the contract names them', () => {
     assert.match(said('rvt_edit_start'), /the IFC class the add-in set/);
   });
 
+  // Since flo2-rvt 0.15.0 (add-in 0.14.0, change-list version 6): a chat is told a door, as a footing or
+  // pile, may come from a family file the design keeps and be sized as a new type, and that its sizes,
+  // unlike a foundation's, need not come from a calc record.
+  test("the edit and new-model texts say a door may come from a door family file and be sized on a copy of its type", async () => {
+    const r = await rpc(h.url, { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} });
+    const tools = (r.json as Rpc).result?.tools ?? [];
+    const said = (name: string) => String(tools.find((t) => t.name === name)?.description ?? '');
+    for (const name of ['rvt_edit_start', 'rvt_new_model_start']) {
+      assert.match(said(name), /change-list version 6/, name);
+      assert.match(said(name), /a door's type may come from a door family file \(\.rfa\) the design keeps, named by family_file, as a footing's or pile's may/, name);
+    }
+    assert.match(said('rvt_edit_start'), /A door, footing or pile is of a type the model holds, or of one in a family file/);
+    assert.match(said('rvt_edit_start'), /Doors for a door's, Structural Foundations for a footing's or pile's/);
+    assert.match(said('rvt_edit_start'), /flo2\.io requires every foundation size and top offset to come from the calc record the edit names \(numbers_from\); a door's sizes may, and need not/);
+    const editSchema = JSON.stringify((tools.find((t) => t.name === 'rvt_edit_start') as { inputSchema: Record<string, unknown> }).inputSchema);
+    assert.ok(editSchema.includes('schema/change-list.schema.json, version 6'), 'the change list the agent sees says version 6');
+  });
+
   test('both tools refuse a call without the hidden job context', async () => {
     assert.match(refusalText(await call(h, 'rvt_probe_start', { file: 'rac_basic_sample_project.rvt' })), /reached only through flo2\.io/);
     assert.match(refusalText(await call(h, 'rvt_job_status', { job_id: '6f1e2b3c-4d5e-4f60-8a7b-9c0d1e2f3a4b' })), /reached only through flo2\.io/);

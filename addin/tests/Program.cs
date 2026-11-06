@@ -1140,6 +1140,9 @@ namespace Flo2Rvt.Addin.Tests
             // Since add-in 0.13.1: a footing or pile placed by its top, and every footing's IFC class set (PlaceByTopTests.cs).
             PlaceByTopCases(root);
 
+            // Since add-in 0.14.0: a door from a door family file, sized as a new type copied from the named one (DoorsTests.cs).
+            DoorCases(root);
+
             Console.WriteLine();
             Console.WriteLine(passed + " passed, " + failed.Count + " failed");
             return failed.Count == 0 ? 0 : 1;

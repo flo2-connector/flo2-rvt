@@ -17,7 +17,9 @@
 // checked against the list before anything is asked of Autodesk (each it names handed over once,
 // nothing else, each and all within their sizes), fetched from flo2.io's link into the bucket,
 // checked by size and sha256, and handed to the WorkItem as family1, family2 ... in the order the
-// list first names them (names.ts familyInput).
+// list first names them (names.ts familyInput). Since 0.15.0 (contract v7, change-list version 6) a
+// door's family file (add_door's family_file) goes exactly so, with an edit and with a new model; the
+// list's check refuses one file named for a door and for a foundation (change-list.ts).
 //
 // Since 0.13.0 (contract v5) a probe also saves the families a person names out of the model
 // (save_families): checked before anything is asked of Autodesk (checkSaveFamilies: at most 8, each

@@ -1,0 +1,607 @@
+{
+  "_note": "A made-up report of add-in 0.14.0 (report version 2, fields added), shaped as flo2's own fixtures of a list and its report, for change_list, a version-6 list, on a made-up model in internal coordinates (the made-up frame is the identity, so shared and internal points are the same): a wall, then three swing doors in it from a door family file the design keeps (Single-Flush.rfa, loaded first, family1), the first two sized as new types copied from its 36\" x 84\" type (Width 36 in and 32 in, Height 80 in, each a type parameter set on the copy alone), the third placing the first copy again because its sizes are the ones asked (new_type_was held); and a door naming a footing's family file (Footing-Rectangular.rfa, family2), whose family is not in the Doors category, so it was rolled back unloaded and the door not applied. Each door gives every length parameter of its type and itself as Revit holds them, beside each size asked: what flo2's check measures. Read by server/test/edit.test.ts and addin/tests, and for flo2's check of doors.",
+  "change_list": {
+    "version": 6,
+    "list_id": "doors-1",
+    "description": "Made-up: three swing doors from a door family file in a new wall, sized as two new types copied from the family's own, and one door naming a footing's family file.",
+    "changes": [
+      {
+        "kind": "add_wall",
+        "id": "w1",
+        "level": {
+          "level_name": "Level 1"
+        },
+        "start": {
+          "x": 0,
+          "y": 0,
+          "unit": "mm"
+        },
+        "end": {
+          "x": 6000,
+          "y": 0,
+          "unit": "mm"
+        },
+        "coordinates": "internal",
+        "wall_type": {
+          "family": "Basic Wall",
+          "type": "Generic - 200mm"
+        },
+        "top": {
+          "height": {
+            "value": 3000,
+            "unit": "mm"
+          }
+        }
+      },
+      {
+        "kind": "add_door",
+        "id": "d1",
+        "host": {
+          "wall_change": "w1"
+        },
+        "point": {
+          "x": 1500,
+          "y": 0,
+          "unit": "mm"
+        },
+        "coordinates": "internal",
+        "door_type": {
+          "family": "Single-Flush",
+          "type": "36\" x 84\""
+        },
+        "family_file": "Single-Flush.rfa",
+        "sizes": {
+          "Width": {
+            "value": 36,
+            "unit": "in"
+          },
+          "Height": {
+            "value": 80,
+            "unit": "in"
+          }
+        },
+        "new_type": "36\" x 80\""
+      },
+      {
+        "kind": "add_door",
+        "id": "d2",
+        "host": {
+          "wall_change": "w1"
+        },
+        "point": {
+          "x": 4000,
+          "y": 0,
+          "unit": "mm"
+        },
+        "coordinates": "internal",
+        "door_type": {
+          "family": "Single-Flush",
+          "type": "36\" x 84\""
+        },
+        "family_file": "Single-Flush.rfa",
+        "sizes": {
+          "Width": {
+            "value": 32,
+            "unit": "in"
+          },
+          "Height": {
+            "value": 80,
+            "unit": "in"
+          }
+        },
+        "new_type": "32\" x 80\""
+      },
+      {
+        "kind": "add_door",
+        "id": "d3",
+        "host": {
+          "wall_change": "w1"
+        },
+        "point": {
+          "x": 5200,
+          "y": 0,
+          "unit": "mm"
+        },
+        "coordinates": "internal",
+        "door_type": {
+          "family": "Single-Flush",
+          "type": "36\" x 84\""
+        },
+        "family_file": "Single-Flush.rfa",
+        "sizes": {
+          "Width": {
+            "value": 36,
+            "unit": "in"
+          },
+          "Height": {
+            "value": 80,
+            "unit": "in"
+          }
+        },
+        "new_type": "36\" x 80\""
+      },
+      {
+        "kind": "add_door",
+        "id": "d4",
+        "host": {
+          "wall_change": "w1"
+        },
+        "point": {
+          "x": 2800,
+          "y": 0,
+          "unit": "mm"
+        },
+        "coordinates": "internal",
+        "door_type": {
+          "family": "Single-Flush",
+          "type": "36\" x 84\""
+        },
+        "family_file": "Footing-Rectangular.rfa"
+      }
+    ]
+  },
+  "report": {
+    "schema": "flo2-rvt/edit-report",
+    "version": 2,
+    "edit": {
+      "addin_version": "0.14.0",
+      "started_at": "2026-11-06T12:00:00.0000000Z",
+      "finished_at": "2026-11-06T12:01:30.0000000Z",
+      "transactions_committed": 5,
+      "transactions_rolled_back": 1,
+      "saved": true,
+      "on_failure": "rolls_back_alone"
+    },
+    "engine": {
+      "version_name": "Autodesk Revit 2024",
+      "version_number": "2024",
+      "sub_version_number": "2024.3",
+      "build": "24.3.0.0"
+    },
+    "file": {
+      "format": "2024",
+      "is_workshared": false,
+      "is_central": false,
+      "saved_in_current_version": true,
+      "saved_in_later_version": false,
+      "opened_detached": false
+    },
+    "change_list": {
+      "list_id": "doors-1",
+      "description": "Made-up: three swing doors from a door family file in a new wall, sized as two new types copied from the family's own, and one door naming a footing's family file.",
+      "sha256": "50cea3690c06680396e9cb0b79bf37087f8d7e72f13b12389b02f439c65a112b",
+      "bytes": 1648,
+      "changes": 5
+    },
+    "outcome": "partly_applied",
+    "totals": {
+      "changes": 5,
+      "applied": 4,
+      "applied_in_part": 0,
+      "rolled_back": 0,
+      "not_applied": 1,
+      "elements_deleted": 0,
+      "other_elements_deleted": 0,
+      "elements_deleted_by_revit": 0,
+      "other_elements_deleted_by_revit": 0,
+      "elements_deleted_with_host": 0,
+      "elements_modified_by_revit": 0,
+      "other_elements_modified_by_revit": 0,
+      "elements_could_not": 0,
+      "elements_left_on_level": 0,
+      "other_elements_left_on_level": 0,
+      "groups_ungrouped": 0,
+      "elements_reshaped_unexpected": 0,
+      "elements_added": 4
+    },
+    "changes": [
+      {
+        "index": 0,
+        "id": "w1",
+        "kind": "add_wall",
+        "status": "applied",
+        "level": {
+          "name": "Level 1",
+          "element_id": 311,
+          "matched_by": "level_name"
+        },
+        "added": [
+          {
+            "element_id": 990201,
+            "global_id": "0MadeUpWall00000000201",
+            "category": "Walls",
+            "revit_class": "Wall",
+            "model_element": true,
+            "family": "Basic Wall",
+            "type": "Generic - 200mm",
+            "type_id": 4321,
+            "level": "Level 1",
+            "coordinates": "internal",
+            "wall": {
+              "start": {
+                "shared_ft": [
+                  0.0,
+                  0.0
+                ],
+                "internal_ft": [
+                  0.0,
+                  0.0
+                ]
+              },
+              "end": {
+                "shared_ft": [
+                  19.685039,
+                  0.0
+                ],
+                "internal_ft": [
+                  19.685039,
+                  0.0
+                ]
+              },
+              "length_ft": 19.685039,
+              "length_mm": 6000,
+              "height_ft": 9.84252,
+              "height_mm": 3000,
+              "width_mm": 200,
+              "location_line": "wall_centerline",
+              "joins": "join"
+            }
+          }
+        ],
+        "seconds": 0.4
+      },
+      {
+        "index": 1,
+        "id": "d1",
+        "kind": "add_door",
+        "status": "applied",
+        "level": {
+          "name": "Level 1",
+          "element_id": 311,
+          "matched_by": "host_wall"
+        },
+        "added": [
+          {
+            "element_id": 990202,
+            "global_id": "0MadeUpDoor00000000202",
+            "category": "Doors",
+            "revit_class": "FamilyInstance",
+            "model_element": true,
+            "family": "Single-Flush",
+            "type": "36\" x 80\"",
+            "type_id": 990211,
+            "level": "Level 1",
+            "coordinates": "internal",
+            "door": {
+              "host_element_id": 990201,
+              "host_global_id": "0MadeUpWall00000000201",
+              "host_change_id": "w1",
+              "location": {
+                "shared_ft": [
+                  4.92126,
+                  0.0
+                ],
+                "internal_ft": [
+                  4.92126,
+                  0.0
+                ]
+              },
+              "along_ft": 4.92126,
+              "along_mm": 1500,
+              "off_line_mm": 0,
+              "width_mm": 914.4,
+              "height_mm": 2032.0,
+              "copied_from": "36\" x 84\"",
+              "new_type": "36\" x 80\"",
+              "new_type_was": "copied",
+              "family_file": "Single-Flush.rfa",
+              "family_was": "loaded",
+              "sizes": [
+                {
+                  "name": "Height",
+                  "of": "type",
+                  "value_ft": 6.666667,
+                  "value_mm": 2032.0,
+                  "asked_ft": 6.666667,
+                  "asked_mm": 2032.0
+                },
+                {
+                  "name": "Thickness",
+                  "of": "type",
+                  "value_ft": 0.145833,
+                  "value_mm": 44.45
+                },
+                {
+                  "name": "Trim Width",
+                  "of": "type",
+                  "value_ft": 0.25,
+                  "value_mm": 76.2
+                },
+                {
+                  "name": "Width",
+                  "of": "type",
+                  "value_ft": 3.0,
+                  "value_mm": 914.4,
+                  "asked_ft": 3.0,
+                  "asked_mm": 914.4
+                },
+                {
+                  "name": "Head Height",
+                  "of": "instance",
+                  "value_ft": 6.666667,
+                  "value_mm": 2032.0
+                },
+                {
+                  "name": "Sill Height",
+                  "of": "instance",
+                  "value_ft": 0.0,
+                  "value_mm": 0.0
+                }
+              ]
+            }
+          }
+        ],
+        "seconds": 0.5
+      },
+      {
+        "index": 2,
+        "id": "d2",
+        "kind": "add_door",
+        "status": "applied",
+        "level": {
+          "name": "Level 1",
+          "element_id": 311,
+          "matched_by": "host_wall"
+        },
+        "added": [
+          {
+            "element_id": 990203,
+            "global_id": "0MadeUpDoor00000000203",
+            "category": "Doors",
+            "revit_class": "FamilyInstance",
+            "model_element": true,
+            "family": "Single-Flush",
+            "type": "32\" x 80\"",
+            "type_id": 990212,
+            "level": "Level 1",
+            "coordinates": "internal",
+            "door": {
+              "host_element_id": 990201,
+              "host_global_id": "0MadeUpWall00000000201",
+              "host_change_id": "w1",
+              "location": {
+                "shared_ft": [
+                  13.12336,
+                  0.0
+                ],
+                "internal_ft": [
+                  13.12336,
+                  0.0
+                ]
+              },
+              "along_ft": 13.12336,
+              "along_mm": 4000,
+              "off_line_mm": 0,
+              "width_mm": 812.8,
+              "height_mm": 2032.0,
+              "copied_from": "36\" x 84\"",
+              "new_type": "32\" x 80\"",
+              "new_type_was": "copied",
+              "family_file": "Single-Flush.rfa",
+              "family_was": "loaded",
+              "sizes": [
+                {
+                  "name": "Height",
+                  "of": "type",
+                  "value_ft": 6.666667,
+                  "value_mm": 2032.0,
+                  "asked_ft": 6.666667,
+                  "asked_mm": 2032.0
+                },
+                {
+                  "name": "Thickness",
+                  "of": "type",
+                  "value_ft": 0.145833,
+                  "value_mm": 44.45
+                },
+                {
+                  "name": "Trim Width",
+                  "of": "type",
+                  "value_ft": 0.25,
+                  "value_mm": 76.2
+                },
+                {
+                  "name": "Width",
+                  "of": "type",
+                  "value_ft": 2.666667,
+                  "value_mm": 812.8,
+                  "asked_ft": 2.666667,
+                  "asked_mm": 812.8
+                },
+                {
+                  "name": "Head Height",
+                  "of": "instance",
+                  "value_ft": 6.666667,
+                  "value_mm": 2032.0
+                },
+                {
+                  "name": "Sill Height",
+                  "of": "instance",
+                  "value_ft": 0.0,
+                  "value_mm": 0.0
+                }
+              ]
+            }
+          }
+        ],
+        "seconds": 0.5
+      },
+      {
+        "index": 3,
+        "id": "d3",
+        "kind": "add_door",
+        "status": "applied",
+        "level": {
+          "name": "Level 1",
+          "element_id": 311,
+          "matched_by": "host_wall"
+        },
+        "added": [
+          {
+            "element_id": 990204,
+            "global_id": "0MadeUpDoor00000000204",
+            "category": "Doors",
+            "revit_class": "FamilyInstance",
+            "model_element": true,
+            "family": "Single-Flush",
+            "type": "36\" x 80\"",
+            "type_id": 990211,
+            "level": "Level 1",
+            "coordinates": "internal",
+            "door": {
+              "host_element_id": 990201,
+              "host_global_id": "0MadeUpWall00000000201",
+              "host_change_id": "w1",
+              "location": {
+                "shared_ft": [
+                  17.060367,
+                  0.0
+                ],
+                "internal_ft": [
+                  17.060367,
+                  0.0
+                ]
+              },
+              "along_ft": 17.060367,
+              "along_mm": 5200,
+              "off_line_mm": 0,
+              "width_mm": 914.4,
+              "height_mm": 2032.0,
+              "copied_from": "36\" x 84\"",
+              "new_type": "36\" x 80\"",
+              "new_type_was": "held",
+              "family_file": "Single-Flush.rfa",
+              "family_was": "loaded",
+              "sizes": [
+                {
+                  "name": "Height",
+                  "of": "type",
+                  "value_ft": 6.666667,
+                  "value_mm": 2032.0,
+                  "asked_ft": 6.666667,
+                  "asked_mm": 2032.0
+                },
+                {
+                  "name": "Thickness",
+                  "of": "type",
+                  "value_ft": 0.145833,
+                  "value_mm": 44.45
+                },
+                {
+                  "name": "Trim Width",
+                  "of": "type",
+                  "value_ft": 0.25,
+                  "value_mm": 76.2
+                },
+                {
+                  "name": "Width",
+                  "of": "type",
+                  "value_ft": 3.0,
+                  "value_mm": 914.4,
+                  "asked_ft": 3.0,
+                  "asked_mm": 914.4
+                },
+                {
+                  "name": "Head Height",
+                  "of": "instance",
+                  "value_ft": 6.666667,
+                  "value_mm": 2032.0
+                },
+                {
+                  "name": "Sill Height",
+                  "of": "instance",
+                  "value_ft": 0.0,
+                  "value_mm": 0.0
+                }
+              ]
+            }
+          }
+        ],
+        "seconds": 0.5
+      },
+      {
+        "index": 4,
+        "id": "d4",
+        "kind": "add_door",
+        "status": "not_applied",
+        "why": "family_file \"Footing-Rectangular.rfa\" was not loaded: its family \"Footing-Rectangular\" is in the category Structural Foundations, not Doors, so it was not kept",
+        "seconds": 0
+      }
+    ],
+    "coordinates": {
+      "angle_deg": 0,
+      "offset_x_ft": 0,
+      "offset_y_ft": 0,
+      "how": "shared = R(angle) x internal + offset, from the project base point (BasePoint.Position, SharedPosition) and ProjectLocation.GetProjectPosition(...).Angle, as Revit's IFC exporter places its site for the shared coordinate base"
+    },
+    "families": [
+      {
+        "family_file": "Single-Flush.rfa",
+        "input": "family1.rfa",
+        "bytes": 335872,
+        "sha256": "eb3d1e0104589781db32e23130bd15a9282af8985133ef225e606848af1bd458",
+        "family": "Single-Flush",
+        "family_id": 990210,
+        "category": "Doors",
+        "was": "loaded",
+        "types": [
+          "30\" x 84\"",
+          "36\" x 84\""
+        ],
+        "seconds": 0.5,
+        "category_needed": "Doors"
+      },
+      {
+        "family_file": "Footing-Rectangular.rfa",
+        "input": "family2.rfa",
+        "bytes": 393216,
+        "sha256": "502160e455abc0b0c270d40f63018b0e6383cbf6d8e9c5ae34486a1c2ca47b04",
+        "was": "not_loaded",
+        "why": "its family \"Footing-Rectangular\" is in the category Structural Foundations, not Doors, so it was not kept",
+        "seconds": 0.6,
+        "category_needed": "Doors"
+      }
+    ],
+    "levels_after": [
+      {
+        "name": "Level 1",
+        "elevation_ft": 0,
+        "elevation_mm": 0,
+        "project_elevation_ft": 0,
+        "project_elevation_mm": 0,
+        "element_id": 311,
+        "unique_id": "made-up-level-1"
+      }
+    ],
+    "element_count_total_before": 5000,
+    "element_count_total_after": 5008,
+    "exports": {
+      "model_rvt": {
+        "written": true,
+        "saved_as": "file",
+        "bytes": 1250000
+      },
+      "sheets_pdf": {
+        "written": true,
+        "sheets": 2
+      },
+      "model_ifc": {
+        "written": true,
+        "ifc_version": "IFC4DTV",
+        "base_quantities": true
+      }
+    },
+    "warnings": [],
+    "warnings_total": 0
+  }
+}

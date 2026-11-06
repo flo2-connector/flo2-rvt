@@ -12,7 +12,20 @@
 // A room is kept only when something encloses its point: Revit's NewRoom makes a room at any
 // point, an unbounded one where nothing encloses it, so the change checks the room's area inside
 // its transaction and refuses itself (ChangeRefused) when there is none.
+//
+// ⭐ A DOOR FROM A FAMILY FILE, SIZED AS A NEW TYPE (since add-in 0.14.0, change-list version 6;
+// dec:a-door-type-is-held-or-loaded-from-an-rfa-the-design-keeps-and-sized-as-a-new-type): add_door
+// goes the foundation path of EditJob.Foundations.cs AddAtPoint, step for step, and nothing of its
+// own. Its family_file was loaded before the first change (LoadFamilyFiles, in the Doors category),
+// and its type is looked up in that family alone; its sizes are split between the type and the door
+// (Logic/Foundations.cs FoundationSizes); a type size is set only on a copy of the type made under
+// new_type in the change's own transaction (ElementType.Duplicate), or the family's own type of that
+// name is placed again when its sizes are those asked; a size of the door is set on the new door, and
+// its sill or head height, where Revit places it in its wall, is no size. The report gives the type
+// it was copied from, the family file, and every length parameter of its type and itself beside each
+// size asked; one whose size is not as asked reads applied in part (Logic/Foundations.cs DoorCheck).
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Autodesk.Revit.DB;
@@ -345,6 +358,7 @@ namespace Flo2Rvt.Addin.Jobs
         private static void AddDoor(JobContext context, ElementIndex index, Adding adding, Change change, ChangeReport r)
         {
             Document doc = context.Document;
+            const string what = "door";
             string hostChange;
             Wall wall = HostWall(doc, index, adding, change.Host.WallChange, change.Host.GlobalId, "to put the door in", r, out hostChange);
             if (wall == null && r.Status == ChangeStatus.NotApplied) return;
@@ -367,7 +381,27 @@ namespace Flo2Rvt.Addin.Jobs
                 r.Why = problem;
                 return;
             }
-            HeldType type = Typed(ModelTypes.Doors(doc), change.DoorType, "door", r);
+            // Since add-in 0.14.0: its sizes, and a family file's family alone when it names one, as a footing's (AddAtPoint).
+            List<SizeAsked> sizes;
+            if (!SizesOf(change, r, out sizes)) return;
+            FamilyFileReport file = null;
+            long familyId = 0;
+            if (change.FamilyFile != null)
+            {
+                if (!adding.Families.TryGetValue(change.FamilyFile, out file) || file.Was == FamilyFileReport.NotLoaded)
+                {
+                    NotApplied(r, "family_file \"" + change.FamilyFile + "\" was not loaded: " + (file != null ? file.Why : "the job holds no record of it"));
+                    return;
+                }
+                familyId = file.FamilyId;
+                if (change.DoorType.Family != null && !string.Equals(change.DoorType.Family, file.Family, StringComparison.Ordinal))
+                {
+                    NotApplied(r, "door_type names the family \"" + change.DoorType.Family + "\", and family_file \"" + change.FamilyFile + "\" holds the family \"" + file.Family + "\"");
+                    return;
+                }
+            }
+            List<HeldType> held = ModelTypes.Doors(doc, familyId);
+            HeldType type = Typed(held, change.DoorType, what, r);
             if (type == null) return;
             var symbol = doc.GetElement(new ElementId(type.Id)) as FamilySymbol;
             var level = doc.GetElement(wall.LevelId) as Level;
@@ -377,42 +411,101 @@ namespace Flo2Rvt.Addin.Jobs
                 r.Why = symbol == null ? "the door type cannot be read" : "the wall has no level to stand the door on";
                 return;
             }
+            SizePlan plan = FoundationSizes.Partition(sizes, ModelTypes.LengthParameters(symbol, HeldSize.OfType), change.NewType, what);
+            if (plan.Why != null)
+            {
+                NotApplied(r, plan.Why);
+                return;
+            }
+            // A new_type the family already holds is placed again only with the sizes asked.
+            HeldType again = change.NewType != null ? held.FirstOrDefault(h => h.FamilyId == type.FamilyId && string.Equals(h.Type, change.NewType, StringComparison.Ordinal)) : null;
+            FamilySymbol againSymbol = again != null ? doc.GetElement(new ElementId(again.Id)) as FamilySymbol : null;
+            if (againSymbol != null)
+            {
+                List<string> differ = FoundationSizes.Differences(plan.OfType, ModelTypes.LengthParameters(againSymbol, HeldSize.OfType));
+                if (differ.Count > 0)
+                {
+                    NotApplied(r, "the family \"" + type.Family + "\" already holds a type named \"" + change.NewType + "\", and " + string.Join("; ", differ) + ": give another new_type, or the sizes it has");
+                    return;
+                }
+            }
             ElementIndex.Entry levelEntry = index.Of(level.Id);
             r.Level = new LevelRef { Name = level.Name, ElementId = level.Id.Value, GlobalId = levelEntry != null && levelEntry.IsLevel ? levelEntry.GlobalId : null, MatchedBy = "host_wall" };
             XYZ location = a3 + (b3 - a3) * (along.AlongFt / along.LengthFt);
-            ElementId made = null;
-            RunResult run = ChangeRunner.Run(doc, context.Data.RevitApp, "add a " + type.Type + " door", d =>
+            ElementId made = null, placedType = null;
+            bool copied = false;
+            RunResult run = ChangeRunner.Run(doc, context.Data.RevitApp, "add a " + (change.NewType ?? type.Type) + " door", d =>
             {
-                if (!symbol.IsActive) symbol.Activate();
-                made = d.Create.NewFamilyInstance(location, symbol, wall, level, StructuralType.NonStructural).Id;
+                FamilySymbol from = symbol;
+                if (change.NewType != null)
+                {
+                    if (againSymbol != null) from = againSymbol;
+                    else
+                    {
+                        from = symbol.Duplicate(change.NewType) as FamilySymbol;
+                        if (from == null) throw new ChangeRefused("Revit made no copy of the type \"" + type.Type + "\" named \"" + change.NewType + "\"");
+                        copied = true;
+                        foreach (SizeAsked s in plan.OfType) SetLength(from, s, what + " type \"" + change.NewType + "\"");
+                    }
+                }
+                if (!from.IsActive)
+                {
+                    from.Activate();
+                    d.Regenerate();
+                }
+                FamilyInstance fi = d.Create.NewFamilyInstance(location, from, wall, level, StructuralType.NonStructural);
+                if (fi == null) throw new ChangeRefused("Revit made no door in the wall " + wall.Id.Value);
+                string bad = FoundationSizes.Resolve(plan.OfInstance, plan.OfType, ModelTypes.LengthParameters(fi, HeldSize.OfInstance), ModelTypes.LengthParameters(from, HeldSize.OfType), what, FoundationSizes.DoorPlacement);
+                if (bad != null) throw new ChangeRefused(bad);
+                foreach (SizeAsked s in plan.OfInstance) SetLength(fi, s, what);
+                if (plan.OfInstance.Count > 0) d.Regenerate();
+                made = fi.Id;
+                placedType = from.Id;
             });
-            RecordAdded(doc, r, index, run, made);
+            RecordAdded(doc, r, index, run, made, copied ? placedType : null);
             if (!run.Committed) return;
             var door = doc.GetElement(made) as FamilyInstance;
-            var at = door != null ? door.Location as LocationPoint : null;
-            AddedElement made1 = Made(doc, index, made, type, level.Name, change.Coordinates);
+            var placed = doc.GetElement(placedType) as FamilySymbol;
+            if (door == null || placed == null)
+            {
+                r.Status = ChangeStatus.AppliedInPart;
+                r.Why = "the door was kept but cannot be read back";
+                return;
+            }
+            var at = door.Location as LocationPoint;
+            // Its type as placed: the copy, when the change made or placed one again (as a footing's report names its own).
+            AddedElement made1 = Made(doc, index, made, new HeldType { Family = placed.FamilyName, Type = placed.Name, Id = placed.Id.Value }, level.Name, change.Coordinates);
             ElementFacts host = index.Facts(doc, wall.Id);
             PlanXY stands = at != null ? ModelTypes.XY(at.Point) : ModelTypes.XY(location);
             AlongWall landed = Placement.Along(ModelTypes.XY(a3), ModelTypes.XY(b3), stands);
-            Parameter width = symbol.get_Parameter(BuiltInParameter.DOOR_WIDTH) ?? symbol.get_Parameter(BuiltInParameter.FAMILY_WIDTH_PARAM);
-            Parameter tall = symbol.get_Parameter(BuiltInParameter.DOOR_HEIGHT) ?? symbol.get_Parameter(BuiltInParameter.FAMILY_HEIGHT_PARAM);
+            double? width = ModelTypes.BuiltInLength(door, placed, BuiltInParameter.DOOR_WIDTH, BuiltInParameter.FAMILY_WIDTH_PARAM);
+            double? tall = ModelTypes.BuiltInLength(door, placed, BuiltInParameter.DOOR_HEIGHT, BuiltInParameter.FAMILY_HEIGHT_PARAM);
             made1.Door = new AddedDoor
             {
-                HostElementId = door != null && door.Host != null ? door.Host.Id.Value : 0,
+                HostElementId = door.Host != null ? door.Host.Id.Value : 0,
                 HostGlobalId = host.GlobalId,
                 HostChangeId = hostChange,
                 Location = PlanAt.Of(adding.Frame, stands),
                 AlongFt = Lengths.Round(landed.AlongFt),
                 AlongMm = Lengths.Round(Lengths.ToMm(landed.AlongFt)),
                 OffLineMm = Lengths.Round(Lengths.ToMm(along.OffFt)),
-                WidthMm = width != null && width.HasValue ? Lengths.Round(Lengths.ToMm(width.AsDouble())) : (double?)null,
-                HeightMm = tall != null && tall.HasValue ? Lengths.Round(Lengths.ToMm(tall.AsDouble())) : (double?)null,
+                WidthMm = Mm(width),
+                HeightMm = Mm(tall),
+                CopiedFrom = change.NewType != null ? type.Type : null,
+                NewType = change.NewType,
+                NewTypeWas = change.NewType == null ? null : copied ? "copied" : "held",
+                FamilyFile = change.FamilyFile,
+                FamilyWas = file != null ? file.Was : null,
+                Sizes = ModelTypes.Sizes(door, placed, plan),
             };
             Kept(r, made1);
-            if (made1.Door.HostElementId != wall.Id.Value)
+            var problems = new List<string>();
+            if (made1.Door.HostElementId != wall.Id.Value) problems.Add("Revit hosts it in element " + made1.Door.HostElementId + ", not the wall asked for (" + wall.Id.Value + ")");
+            problems.AddRange(DoorCheck.Problems(made1.Door));
+            if (problems.Count > 0)
             {
                 r.Status = ChangeStatus.AppliedInPart;
-                r.Why = "the door was placed, but Revit hosts it in element " + made1.Door.HostElementId + ", not the wall asked for (" + wall.Id.Value + ")";
+                r.Why = "the door was placed, but " + string.Join("; ", problems);
             }
         }
     }

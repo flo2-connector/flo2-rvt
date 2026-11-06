@@ -3,7 +3,10 @@
 // matched to the parameters a type and its element hold, a footing's turn in either coordinate
 // system, where a footing's or pile's top stands and how the job puts it where top_offset says
 // (since 0.13.1), which IFC class the job sets on a footing or pile and how the report says it,
-// and what makes a placed foundation read applied in part.
+// and what makes a placed foundation read applied in part. Since add-in 0.14.0 (change-list version
+// 6) a door goes the same way: add_door may name a door family file and size a new type copied from
+// the named one, so its family file, its sizes and what makes it read applied in part are here too
+// (dec:a-door-type-is-held-or-loaded-from-an-rfa-the-design-keeps-and-sized-as-a-new-type).
 //
 // ⭐ FAMILY FILES. A list's family_file values, each once, in the order the list first names
 // them, are the edit Activity's inputs family1.rfa, family2.rfa ... (server/src/names.ts
@@ -11,14 +14,19 @@
 // Revit names a family it loads from a file by the file's name without .rfa, so the job copies
 // each input to its own name before it loads it, and a family the model already holds under that
 // name is used as it is, never reloaded (dec:a-foundation-type-is-held-or-loaded-from-an-rfa-the-
-// design-keeps).
+// design-keeps). Since add-in 0.14.0 each comes with the CATEGORY its family must be in, the one the
+// changes naming it need (CategoryFor): Doors for add_door's, Structural Foundations for add_footing's
+// and add_pile's. The job keeps a file whose family is in that category (loaded, or held under its
+// name), and nothing else; so one file cannot serve a door and a foundation, and a list that names one
+// from both is refused before anything runs (ChangeListCheck.cs, as the server refuses it).
 //
 // ⭐ SIZES. A change names each size by its parameter's name, as the probe lists it. A name the
 // type holds is a type size, set only on a copy of the type made under new_type (a type the
 // model holds is never changed: dec:a-foundation-sized-by-a-change-is-a-new-type-copied-from-the-
 // named-one); any other name must be a parameter of the new element. Either way it must be a
 // length Revit lets the change set: not read-only (a formula's, or Revit's own), and not one Revit
-// places the element by (its offset from its level, which top_offset sets).
+// places the element by (its offset from its level, which top_offset sets; a door's sill or head
+// height, which no change sets: DoorPlacement).
 //
 // ⭐ THE TOP (since add-in 0.13.1). top_offset places a footing's or pile's TOP
 // (dec:a-footing-or-pile-stands-at-a-plan-point-on-a-level-its-top-offset-from-it), and a family
@@ -68,6 +76,14 @@ using Flo2Rvt.ChangeLists;
 
 namespace Flo2Rvt.Addin.Edit.Logic
 {
+    /// <summary>Since add-in 0.14.0: one family file a list names, and the category its family must be in, for the changes that name it.</summary>
+    public sealed class FamilyFileNeed
+    {
+        public string File;
+        /// <summary>As Revit names the category: FamilyFiles.Doors or FamilyFiles.StructuralFoundations.</summary>
+        public string Category;
+    }
+
     public static class FamilyFiles
     {
         /// <summary>The most family files one list may name (server/src/change-list.ts MAX_FAMILY_FILES).</summary>
@@ -75,15 +91,31 @@ namespace Flo2Rvt.Addin.Edit.Logic
         /// <summary>The folder of the working folder the job copies each family file into, under its own name, before Revit loads it.</summary>
         public const string Folder = "families";
         public const string Extension = ".rfa";
+        /// <summary>Since add-in 0.14.0: the category a door's family file must hold its family in (BuiltInCategory.OST_Doors), as Revit names it.</summary>
+        public const string Doors = "Doors";
+        /// <summary>The category a footing's or pile's family file must hold its family in (BuiltInCategory.OST_StructuralFoundation), as Revit names it.</summary>
+        public const string StructuralFoundations = "Structural Foundations";
 
-        /// <summary>The family files the list names, each once, in the order it first names them.</summary>
-        public static List<string> Of(ChangeList list)
+        /// <summary>The category the family in a family file a change of this kind names must be in; null for a kind that names none (server/src/change-list.ts FAMILY_FILE_CATEGORIES).</summary>
+        public static string CategoryFor(string kind)
         {
-            var out1 = new List<string>();
+            if (kind == ChangeKinds.AddDoor) return Doors;
+            if (kind == ChangeKinds.AddFooting || kind == ChangeKinds.AddPile) return StructuralFoundations;
+            return null;
+        }
+
+        /// <summary>
+        /// The family files the list names, each once, in the order it first names them, each with the
+        /// category its changes need: the first change's, since a list whose changes need two for one
+        /// file is refused before the job runs (ChangeListCheck.cs).
+        /// </summary>
+        public static List<FamilyFileNeed> Of(ChangeList list)
+        {
+            var out1 = new List<FamilyFileNeed>();
             if (list == null || list.Changes == null) return out1;
             foreach (Change c in list.Changes)
             {
-                if (c.FamilyFile != null && !out1.Contains(c.FamilyFile)) out1.Add(c.FamilyFile);
+                if (c.FamilyFile != null && !out1.Any(f => f.File == c.FamilyFile)) out1.Add(new FamilyFileNeed { File = c.FamilyFile, Category = CategoryFor(c.Kind) });
             }
             return out1;
         }
@@ -143,6 +175,10 @@ namespace Flo2Rvt.Addin.Edit.Logic
     {
         /// <summary>How many of a type's length parameters a refusal lists by name.</summary>
         public const int Listed = 40;
+        /// <summary>What a footing's or pile's placement parameter is in a refusal, and what sets it instead.</summary>
+        public const string FoundationPlacement = "(its offset from its level): top_offset sets it, never sizes";
+        /// <summary>Since add-in 0.14.0: what a door's placement parameter is in a refusal (Revit's INSTANCE_SILL_HEIGHT_PARAM and INSTANCE_HEAD_HEIGHT_PARAM, ModelTypes.PlacedBy); no change sets it.</summary>
+        public const string DoorPlacement = "(its sill or head height, where it stands in its wall), which no change sets";
 
         /// <summary>The sizes a change gives, in feet, in the order its JSON names them (empty when none); or why one cannot be read.</summary>
         public static List<SizeAsked> Read(Dictionary<string, Length> sizes, out string why)
@@ -203,9 +239,11 @@ namespace Flo2Rvt.Addin.Edit.Logic
         /// <summary>
         /// Once the element is placed: every size not the type's is a length parameter of the
         /// element that Revit lets the change set; or why not, naming the length parameters the
-        /// type and the element do have.
+        /// type and the element do have. placedBy says what a placement parameter is and what sets
+        /// it: a foundation's offset from its level (FoundationPlacement), a door's sill or head
+        /// height (DoorPlacement).
         /// </summary>
-        public static string Resolve(IList<SizeAsked> ofInstance, IList<SizeAsked> ofTypeAsked, IList<HeldSize> ofElement, IList<HeldSize> ofType, string what)
+        public static string Resolve(IList<SizeAsked> ofInstance, IList<SizeAsked> ofTypeAsked, IList<HeldSize> ofElement, IList<HeldSize> ofType, string what, string placedBy = FoundationPlacement)
         {
             // A read-only parameter of the element named as the type's (a wall foundation's Width, which reports its type's) is no rival: the type's is the one a change sets.
             foreach (SizeAsked s in ofTypeAsked)
@@ -217,7 +255,7 @@ namespace Flo2Rvt.Addin.Edit.Logic
                 List<HeldSize> named = ofElement.Where(h => string.Equals(h.Name, s.Name, StringComparison.Ordinal)).ToList();
                 if (named.Count == 0) return "no length parameter of the " + what + " or its type is named \"" + s.Name + "\" (" + Held(ofType, ofElement) + ")";
                 if (named.Count > 1) return "the " + what + " holds " + named.Count + " length parameters named \"" + s.Name + "\", so a size cannot say which";
-                if (named[0].Placement) return "\"" + s.Name + "\" is the parameter Revit places the " + what + " by (its offset from its level): top_offset sets it, never sizes";
+                if (named[0].Placement) return "\"" + s.Name + "\" is the parameter Revit places the " + what + " by " + placedBy;
                 if (named[0].ReadOnly) return "\"" + s.Name + "\" is a parameter of the " + what + " that Revit holds read-only (by a formula, or one Revit computes), so no change sets it";
             }
             return null;
@@ -452,7 +490,7 @@ namespace Flo2Rvt.Addin.Edit.Logic
             return out1;
         }
 
-        /// <summary>Each size asked that Revit does not hold as asked, within ToleranceFt.</summary>
+        /// <summary>Each size asked that Revit does not hold as asked, within ToleranceFt (a door's too, DoorCheck).</summary>
         public static List<string> SizeProblems(IList<SizeReport> sizes)
         {
             var out1 = new List<string>();
@@ -468,6 +506,19 @@ namespace Flo2Rvt.Addin.Edit.Logic
         private static string Ft(double v)
         {
             return Lengths.Round(v).ToString("0.######", CultureInfo.InvariantCulture);
+        }
+    }
+
+    /// <summary>
+    /// Since add-in 0.14.0: what makes a kept door read applied in part beside its host (which the
+    /// job checks as it always has): a size asked that its type or itself does not hold as asked,
+    /// within ToleranceFt, in a foundation's words. A door of an earlier add-in names no sizes.
+    /// </summary>
+    public static class DoorCheck
+    {
+        public static List<string> Problems(AddedDoor d)
+        {
+            return d == null ? new List<string>() : FoundationCheck.SizeProblems(d.Sizes);
         }
     }
 }

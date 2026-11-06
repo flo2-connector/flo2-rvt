@@ -38,12 +38,13 @@ export const BUNDLE_FILE = 'Flo2RvtProbe.bundle.zip';
  * and the probe's foundation types with their sizes, 0.12.0 the probe saves the families a person
  * names out of the model as .rfa files, 0.13.0 a new model made from Revit's own project or a template
  * file and filled in one job, and add_level, 0.13.1 a footing or pile placed by its top as Revit
- * holds it, and the IFC class of every footing set as a pile's), and it is what a person's app must carry
+ * holds it, and the IFC class of every footing set as a pile's, 0.14.0 a door from a door family file
+ * the design keeps, sized as a new type copied from the named one), and it is what a person's app must carry
  * for a job to run there: a setup writes it into the AppBundle's and each Activity's
  * description, and a job's check reads it back (server/src/setup.ts). It is not the bundle's
  * sha256, which changes with every CI build of the same add-in.
  */
-export const ADDIN_VERSION = '0.13.1';
+export const ADDIN_VERSION = '0.14.0';
 
 /** What a setup ends each description with, so a check can read which add-in an Activity runs. */
 export function setupMark(addinVersion = ADDIN_VERSION): string {
@@ -172,8 +173,8 @@ export const CHANGES_PARAMETER = 'changes';
 export const CHANGES_NAME = 'changes.json';
 
 /**
- * Since flo2-rvt 0.12.0 (add-in 0.11.0): the family files a list names (family_file), each a
- * further input of the edit Activity, `family1` to `family8`, arriving as `family1.rfa` to
+ * Since flo2-rvt 0.12.0 (add-in 0.11.0): the family files a list names (family_file: a footing's or
+ * pile's, and since flo2-rvt 0.15.0 a door's), each a further input of the edit Activity, `family1` to `family8`, arriving as `family1.rfa` to
  * `family8.rfa` in the order the list first names them (change-list.ts familyFilesOf; the
  * add-in's Logic/Foundations.cs FamilyFiles.Of). Optional: a WorkItem names only those its list
  * uses. The add-in copies each to its own name before Revit loads it, since Revit names a family

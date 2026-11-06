@@ -248,6 +248,32 @@ describe('a new model from a template the design keeps', () => {
     const wi = h.aps.workItems.at(-1) as { arguments: Record<string, { url: string }> };
     assert.ok(wi.arguments.family1?.url.endsWith('%2Ffamily1.rfa'));
   });
+
+  // Since flo2-rvt 0.15.0 (add-in 0.14.0, contract v7, change-list version 6): Revit's own no-template
+  // project holds no door family, so a new model's doors come from a door family file the design
+  // keeps, sized as new types; it goes with the job as a foundation's family file does.
+  test("a door's family file goes with a new model from no template as with an edit, and its sizes as the person approved them", async () => {
+    const list = {
+      version: 6,
+      changes: [
+        { kind: 'add_wall', id: 'w1', level: { level_name: 'Level 1' }, start: { x: 0, y: 0, unit: 'ft' }, end: { x: 20, y: 0, unit: 'ft' }, coordinates: 'internal', wall_type: { type: 'Generic - 8"' }, top: { height: { value: 10, unit: 'ft' } } },
+        { kind: 'add_door', id: 'd1', host: { wall_change: 'w1' }, point: { x: 5, y: 0, unit: 'ft' }, coordinates: 'internal', door_type: { family: 'Single-Flush', type: '36" x 84"' }, family_file: 'Single-Flush.rfa', sizes: { Width: { value: 36, unit: 'in' }, Height: { value: 80, unit: 'in' } }, new_type: '36" x 80"' },
+        { kind: 'add_door', id: 'd2', host: { wall_change: 'w1' }, point: { x: 14, y: 0, unit: 'ft' }, coordinates: 'internal', door_type: { family: 'Single-Flush', type: '36" x 84"' }, family_file: 'Single-Flush.rfa', sizes: { Width: { value: 32, unit: 'in' }, Height: { value: 80, unit: 'in' } }, new_type: '32" x 80"' },
+      ],
+    };
+    const door = familyHandover(h.aps, 'Single-Flush.rfa', Buffer.alloc(25_000, 'Single-Flush.rfa stand-in bytes '));
+    const r = await call(h, 'rvt_new_model_start', { units: 'imperial', change_list: list }, newMeta(h, { families: [door] }));
+    const out = r.result?.structuredContent as { job_id: string; family_files?: Array<Record<string, unknown>> };
+    assert.deepEqual(out.family_files, [{ family_file: 'Single-Flush.rfa', input: 'family1', size: 25_000, sha256: door.sha256 }], JSON.stringify(r));
+    const wi = h.aps.workItems.at(-1) as { activityId: string; arguments: Record<string, { url: string }> };
+    assert.match(wi.activityId, /Flo2RvtNew\+prod$/, 'the new-model Activity');
+    assert.ok(wi.arguments.family1?.url.endsWith('%2Ffamily1.rfa'));
+    assert.ok(!('family2' in wi.arguments), 'one family file, named twice, goes once');
+    const uploaded = JSON.parse(h.aps.objects.get(`${bucket}/${out.job_id}/changes.json`)!.bytes.toString('utf8'));
+    assert.equal(uploaded.version, 6);
+    assert.deepEqual(uploaded.changes[2].sizes, { Height: { unit: 'in', value: 80 }, Width: { unit: 'in', value: 32 } });
+    assert.match(refusal(await call(h, 'rvt_new_model_start', { units: 'imperial', change_list: list }, newMeta(h))), /names the family file "Single-Flush\.rfa", and flo2\.io did not hand it over; no job was started/);
+  });
 });
 
 describe("a new model's report, summarized", () => {

@@ -28,7 +28,12 @@ namespace Flo2Rvt.Addin.Jobs
     public sealed class ProbeJob : IFlo2RvtJob
     {
         public const string Name = "probe";
-        public const string AddinVersion = "0.13.0";
+        /// <summary>
+        /// The version every report says it was written by (probe.addin_version, edit.addin_version):
+        /// the csproj's own &lt;Version&gt;, which server/test/names.test.ts holds it to since add-in 0.14.0
+        /// (add-in 0.13.1 named itself 0.13.0 here, a copy no test held).
+        /// </summary>
+        public const string AddinVersion = "0.14.0";
         public const string ReportName = "report.json";
         /// <summary>1 ft = 304.8 mm exactly; Revit's internal length unit is the foot.</summary>
         private const double MmPerFoot = 304.8;

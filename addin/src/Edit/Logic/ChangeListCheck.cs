@@ -20,7 +20,12 @@
 // object of names, as a dictionary (UseSimpleDictionaryFormat). Since add-in 0.13.0, version 5's
 // add_level needs version 5, its elevation lies within the model extent, and no two add_level
 // changes of one list name the same new level (that no level of the model holds the name is judged
-// with the model before it, Logic/NewLevels.cs).
+// with the model before it, Logic/NewLevels.cs). Since add-in 0.14.0, version 6: add_door may name a
+// family_file, sizes and new_type, and a door that names any says version 6; a door's sizes and
+// new_type are held to a foundation's rules (Sized); and a family file's family must be in the
+// category the change naming it needs (Logic/Foundations.cs FamilyFiles.CategoryFor: Doors for a
+// door's, Structural Foundations for a footing's or pile's), so one file named by a door and by a
+// foundation is refused here, as the server refuses it.
 //
 // PURE LOGIC: no Revit type here, so addin/tests runs it on any OS.
 
@@ -66,6 +71,8 @@ namespace Flo2Rvt.Addin.Edit.Logic
         public const long FoundationsVersion = 4;
         /// <summary>The first change-list version that reads add_level (add-in 0.13.0).</summary>
         public const long LevelsVersion = 5;
+        /// <summary>The first change-list version that reads add_door's family_file, sizes and new_type (add-in 0.14.0).</summary>
+        public const long DoorFamiliesVersion = 6;
         /// <summary>The most sizes one foundation change may set.</summary>
         public const int MaxSizes = 16;
 
@@ -146,6 +153,8 @@ namespace Flo2Rvt.Addin.Edit.Logic
             private int current;
             /// <summary>The family files the list names, each once (Logic/Foundations.cs FamilyFiles).</summary>
             private readonly List<string> familyFiles = new List<string>();
+            /// <summary>Since add-in 0.14.0: each family file with the change that names it first (its index and kind): a later change needing another category is refused.</summary>
+            private readonly Dictionary<string, KeyValuePair<int, string>> familyFileFirst = new Dictionary<string, KeyValuePair<int, string>>(StringComparer.Ordinal);
             /// <summary>Since add-in 0.13.0: each new level's name, with the change that adds it first.</summary>
             private readonly Dictionary<string, int> newLevels = new Dictionary<string, int>(StringComparer.Ordinal);
 
@@ -385,13 +394,20 @@ namespace Flo2Rvt.Addin.Edit.Logic
                         if (m.TryGetValue("number", out x)) Text(x, at + ".number", 1, 64, null);
                         break;
                     case ChangeKinds.AddDoor:
-                        m = Object(e, at, new[] { "kind", "id", "host", "point", "coordinates", "door_type" }, new[] { "kind", "host", "point", "coordinates", "door_type" });
+                        m = Object(e, at, new[] { "kind", "id", "host", "point", "coordinates", "door_type", "family_file", "sizes", "new_type" }, new[] { "kind", "host", "point", "coordinates", "door_type" });
                         if (m == null) return;
                         NeedsAdding(kind, at);
                         if (m.TryGetValue("host", out x)) WallNamed(x, at + ".host", "name the wall once: by global_id or by wall_change");
                         if (m.TryGetValue("point", out x)) Point(x, at + ".point");
                         if (m.TryGetValue("coordinates", out x)) OneOf(x, at + ".coordinates", Systems);
                         if (m.TryGetValue("door_type", out x)) TypeNamed(x, at + ".door_type");
+                        // Since add-in 0.14.0 (version 6): a door's family file, sizes and new type, as a foundation's.
+                        foreach (string added in new[] { "family_file", "sizes", "new_type" })
+                        {
+                            if (m.ContainsKey(added) && version < DoorFamiliesVersion) Fail(at + "." + added, "needs version " + DoorFamiliesVersion + "; say \"version\": " + DoorFamiliesVersion);
+                        }
+                        if (m.TryGetValue("family_file", out x)) FamilyFile(x, at + ".family_file", kind);
+                        Sized(m, at);
                         break;
                     case ChangeKinds.AddFooting:
                     case ChangeKinds.AddPile:
@@ -406,11 +422,7 @@ namespace Flo2Rvt.Addin.Edit.Logic
                         if (m.TryGetValue("point", out x)) Point(x, at + ".point");
                         if (m.TryGetValue("coordinates", out x)) OneOf(x, at + ".coordinates", Systems);
                         if (m.TryGetValue(typeKey, out x)) TypeNamed(x, at + "." + typeKey);
-                        if (m.TryGetValue("family_file", out x))
-                        {
-                            string file = Text(x, at + ".family_file", 5, 204, FamilyFilePattern);
-                            if (file != null && !familyFiles.Contains(file)) familyFiles.Add(file);
-                        }
+                        if (m.TryGetValue("family_file", out x)) FamilyFile(x, at + ".family_file", kind);
                         if (m.TryGetValue("top_offset", out x)) Length(x, at + ".top_offset");
                         if (m.TryGetValue("rotation_deg", out x))
                         {
@@ -462,7 +474,25 @@ namespace Flo2Rvt.Addin.Edit.Logic
                 if (version < FoundationsVersion) Fail(at + ".kind", kind + " needs version " + FoundationsVersion + "; say \"version\": " + FoundationsVersion);
             }
 
-            /// <summary>A foundation's sizes (1 to MaxSizes lengths, each by a name once) and its new_type, which comes only beside them.</summary>
+            /// <summary>
+            /// A family file a door, footing or pile names, counted once; since add-in 0.14.0 one a
+            /// change of another category named first is refused: its family cannot be in both.
+            /// </summary>
+            private void FamilyFile(XElement e, string at, string kind)
+            {
+                string file = Text(e, at, 5, 204, FamilyFilePattern);
+                if (file == null) return;
+                if (!familyFiles.Contains(file)) familyFiles.Add(file);
+                string category = FamilyFiles.CategoryFor(kind);
+                KeyValuePair<int, string> first;
+                if (!familyFileFirst.TryGetValue(file, out first)) familyFileFirst[file] = new KeyValuePair<int, string>(current, kind);
+                else if (FamilyFiles.CategoryFor(first.Value) != category)
+                {
+                    Fail(at, "names " + Quote(file) + ", which change " + (first.Key + 1) + " (" + first.Value + ") names for a " + FamilyFiles.CategoryFor(first.Value) + " family; an " + kind + "'s family is in the " + category + " category, so one family file cannot serve both");
+                }
+            }
+
+            /// <summary>A door's or foundation's sizes (1 to MaxSizes lengths, each by a name once) and its new_type, which comes only beside them.</summary>
             private void Sized(Dictionary<string, XElement> m, string at)
             {
                 XElement x;
