@@ -3,7 +3,10 @@
 // autodesk/*.json, each naming where it was recorded), with only the ids and
 // the signed URLs swapped for this server's own. It keeps what was uploaded in
 // memory and "runs" the add-in by writing the outputs the WorkItem's job would: a
-// probe's three, or an edit's four.
+// probe's three, or an edit's four. Since add-in 0.12.0 a probe asked to save families (the
+// save-families.json it was handed) also writes each one the made-up report names saved, as
+// family<n>.rfa, made-up bytes whose size and sha256 the report gives
+// (fixtures/sample-probe-families-saved.json).
 
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -20,6 +23,15 @@ export function recorded(name: string): { status: number; body: unknown } {
 
 export const SAMPLE_REPORT = readFileSync(new URL('sample-report.json', FIXTURES));
 export const SAMPLE_EDIT_REPORT = readFileSync(new URL('sample-edit-report.json', FIXTURES));
+/** Since add-in 0.12.0: what a probe asked to save families reports of each (an excerpt: `asked` and `families_saved`). */
+export const SAMPLE_PROBE_FAMILIES = JSON.parse(readFileSync(new URL('sample-probe-families-saved.json', FIXTURES), 'utf8')) as {
+  asked: string[];
+  families_saved: Array<{ family: string; was: string; file?: string; output?: string; bytes?: number; sha256?: string; why?: string }>;
+};
+/** The made-up bytes the stand-in writes for a saved family: their size and sha256 are the made-up report's. */
+export function familyStandIn(family: string, bytes: number): Buffer {
+  return Buffer.alloc(bytes, `${family}.rfa: a made-up stand-in for a family file Revit saved `);
+}
 /** Made-up bytes standing for the public sample model; a test never needs a real .rvt. */
 export const SAMPLE_INPUT = Buffer.alloc(70_000, 'rac_basic_sample_project.rvt stand-in bytes ');
 export const SAMPLE_INPUT_SHA256 = createHash('sha256').update(SAMPLE_INPUT).digest('hex');
@@ -55,6 +67,8 @@ export interface MockOptions {
   expireFirstPutOfPart?: number;
   /** Outputs the "add-in" writes on success (default all the job makes). */
   writes?: Array<'report.json' | 'sheets.pdf' | 'model.ifc' | 'model.rvt'>;
+  /** Since add-in 0.12.0: a saved family's output (family<n>.rfa) the "add-in" writes one byte shorter than its report says. */
+  shortFamily?: string;
   /**
    * What flo2-rvt finds registered on the app, and whether a WorkItem is refused for an
    * Activity the app does not hold (as Autodesk refused one on 2026-11-01):
@@ -390,20 +404,44 @@ export class MockAps {
     return !!parts && parts[1] === this.owner() && this.entities.has(`${kind}/${parts[2]}`) && this.aliases.has(`${kind}/${parts[2]}/${parts[3]}`);
   }
 
+  /**
+   * What the made-up add-in reports of each family a probe was handed in save-families.json: the
+   * made-up report's entry for a name it holds (its output moved to the name's place in the list),
+   * and "not held" for any other.
+   */
+  private familiesSaved(urn: string | undefined): typeof SAMPLE_PROBE_FAMILIES.families_saved {
+    const m = /^urn:adsk\.objects:os\.object:([^/]+)\/(.+)$/.exec(urn ?? '');
+    const handed = m ? this.objects.get(`${decodeURIComponent(m[1] as string)}/${decodeURIComponent(m[2] as string)}`) : undefined;
+    if (!handed) return [];
+    const asked = (JSON.parse(handed.bytes.toString('utf8')) as { families: string[] }).families;
+    return asked.map((family, i) => {
+      const known = SAMPLE_PROBE_FAMILIES.families_saved.find((f) => f.family === family);
+      if (!known) return { family, was: 'not_saved', why: `the model holds no family named exactly "${family}" (case and spaces count)` };
+      return known.was === 'saved' ? { ...known, output: `family${i + 1}.rfa` } : known;
+    });
+  }
+
   /** What the add-in would leave: the outputs, written where the WorkItem said to put them. */
   private runAddin(): void {
     const wi = this.workItems.at(-1) as { activityId: string; arguments: Record<string, { url: string }> } | undefined;
     if (!wi) return;
     const edit = wi.activityId.includes('.Flo2RvtEdit+');
     const writes = this.opts.writes ?? (edit ? ['report.json', 'model.rvt', 'sheets.pdf', 'model.ifc'] : ['report.json', 'sheets.pdf', 'model.ifc']);
+    const families = edit ? [] : this.familiesSaved(wi.arguments.saveFamilies?.url);
+    const probeReport = families.length ? Buffer.from(JSON.stringify({ ...(JSON.parse(SAMPLE_REPORT.toString('utf8')) as Record<string, unknown>), families_saved: families })) : SAMPLE_REPORT;
     const content: Record<string, [string, Buffer, string]> = {
-      report: ['report.json', edit ? SAMPLE_EDIT_REPORT : SAMPLE_REPORT, 'application/json'],
+      report: ['report.json', edit ? SAMPLE_EDIT_REPORT : probeReport, 'application/json'],
       sheets: ['sheets.pdf', Buffer.from('%PDF-1.7 made-up\n'), 'application/pdf'],
       ifc: ['model.ifc', Buffer.from('ISO-10303-21; made-up\n'), 'application/x-step'],
       ...(edit ? { result: ['model.rvt', Buffer.alloc(40_000, 'edited model stand-in bytes '), 'application/octet-stream'] as [string, Buffer, string] } : {}),
     };
+    for (const f of families) {
+      if (f.was !== 'saved' || !f.output || !f.bytes) continue;
+      const bytes = familyStandIn(f.family, f.bytes);
+      content[f.output.replace(/\.rfa$/, '')] = [f.output, f.output === this.opts.shortFamily ? bytes.subarray(1) : bytes, 'application/octet-stream'];
+    }
     for (const [param, [name, bytes, type]] of Object.entries(content)) {
-      if (!writes.includes(name as 'report.json')) continue;
+      if (!writes.includes(name as 'report.json') && !/^family\d\.rfa$/.test(name)) continue;
       const urn = wi.arguments[param]?.url ?? '';
       const m = /^urn:adsk\.objects:os\.object:([^/]+)\/(.+)$/.exec(urn);
       if (m) this.objects.set(`${decodeURIComponent(m[1] as string)}/${decodeURIComponent(m[2] as string)}`, { bytes, contentType: type });

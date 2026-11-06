@@ -99,6 +99,12 @@ describe('the tools, as the contract names them', () => {
     assert.equal(start.inputSchema.properties.max_minutes?.minimum, 1);
     assert.equal(start.inputSchema.properties.max_minutes?.maximum, 30);
     assert.equal(start.inputSchema.properties.max_minutes?.default, 15);
+    // Since flo2-rvt 0.13.0 (add-in 0.12.0): the families the probe saves out of the model, by name, at most 8.
+    const families = (start.inputSchema.properties as Record<string, { type?: string; maxItems?: number; minItems?: number; items?: { type?: string } }>).save_families;
+    assert.equal(families?.type, 'array');
+    assert.equal(families?.minItems, 1);
+    assert.equal(families?.maxItems, 8);
+    assert.equal(families?.items?.type, 'string');
   });
 
   // A chat cannot pause between its own calls: told by these texts to poll "every minute or so"
@@ -186,12 +192,16 @@ describe('a probe from start to success', () => {
     assert.equal(wi.limitProcessingTimeSec, 600, 'the lower of max_minutes and flo2.io limit');
     assert.equal(wi.arguments.rvtFile?.verb, 'get');
     assert.equal(wi.arguments.rvtFile?.url, `urn:adsk.objects:os.object:${bucket}/${jobId}%2Finput.rvt`);
-    for (const [arg, name, optional] of [['report', 'report.json', undefined], ['sheets', 'sheets.pdf', true], ['ifc', 'model.ifc', true]] as const) {
+    for (const [arg, name, optional] of [['report', 'report.json', undefined], ['sheets', 'sheets.pdf', true], ['ifc', 'model.ifc', true], ...[1, 2, 3, 4, 5, 6, 7, 8].map((n) => [`family${n}`, `family${n}.rfa`, true] as const)] as const) {
       assert.equal(wi.arguments[arg]?.verb, 'put');
       assert.equal(wi.arguments[arg]?.url, `urn:adsk.objects:os.object:${bucket}/${jobId}%2F${name}`);
       assert.equal(wi.arguments[arg]?.optional, optional);
       assert.equal(wi.arguments[arg]?.headers.Authorization, `Bearer ${APS_TOKEN}`);
     }
+    // Since add-in 0.12.0 every probe hands over the families it saves, none here, so no input is ever left out.
+    assert.equal(wi.arguments.saveFamilies?.verb, 'get');
+    assert.equal(wi.arguments.saveFamilies?.url, `urn:adsk.objects:os.object:${bucket}/${jobId}%2Fsave-families.json`);
+    assert.equal(h.aps.objects.get(`${bucket}/${jobId}/save-families.json`)?.bytes.toString('utf8'), '{"families":[],"version":1}');
     assert.ok(h.aps.objects.has(`${bucket}/${jobId}/workitem.json`), 'the job record is kept beside the input');
   });
 
@@ -231,6 +241,7 @@ describe('a probe from start to success', () => {
       assert.ok(Date.parse(o.expires_at) > clock);
     }
     assert.deepEqual(r.result?._meta?.['flo2.io/usage'], { processing_seconds: 11, workitem_id: 'f62103c311a54a6ba571a0950ce6eca3' });
+    assert.ok(!h.aps.calls.some((c) => c.path.includes('family')), 'a probe that saved no family is asked for none');
     assert.ok(!(r.result?.content?.[0]?.text ?? '').includes('signed'), 'the agent-visible text carries no signed URL');
   });
 
