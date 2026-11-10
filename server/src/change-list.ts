@@ -25,6 +25,11 @@
 // family must be in the category the change naming it needs (FAMILY_FILE_CATEGORIES: Doors for a
 // door's, Structural Foundations for a footing's or pile's), so a list that names one file from both
 // is refused, as the add-in refuses it (ChangeListCheck.cs; Logic/Foundations.cs FamilyFiles.CategoryFor).
+// Since flo2-rvt 0.16.0, version 7: add_drawing_set, a conceptual drawing set, says version 7; it names
+// its levels and says what to do with an empty one only beside plans (a set that asks for no plans has
+// no plan to make of them); and a list makes one drawing set (two would number their sheets as one
+// series and print each view twice). Its levels by their storey's GlobalId count as references. A set
+// adds no building content (ADDING_KINDS leaves it out), so a new model's first list needs more than it.
 //
 // ⭐ ITS CANONICAL FORM: the JSON with every object's keys sorted, no whitespace. That is the
 // exact byte string flo2-rvt uploads as changes.json, and its SHA-256 is the change list's
@@ -62,6 +67,8 @@ export const FOUNDATIONS_VERSION = 4;
 export const LEVELS_VERSION = 5;
 /** The first change-list version that reads add_door's family_file, sizes and new_type (flo2-rvt 0.15.0). */
 export const DOOR_FAMILIES_VERSION = 6;
+/** The first change-list version that reads add_drawing_set (flo2-rvt 0.16.0). */
+export const DRAWING_SET_VERSION = 7;
 /** The most family files (family_file, counted once each) one list may name (the add-in's FamilyFiles.Max). */
 export const MAX_FAMILY_FILES = 8;
 /** How close two points must be to be one, in feet (the add-in's Placement.ToleranceFt, LevelMoves.ToleranceFt). */
@@ -244,6 +251,18 @@ export function checkChangeList(value: unknown): CheckedChangeList {
     extent(`changes.${i}.point`, pointFeet(c.point));
     if (c.top_offset !== undefined) lengthWithin(`changes.${i}.top_offset`, c.top_offset);
   };
+  // Since 0.16.0 (version 7): a drawing set, once in a list, its levels and empty levels only beside plans.
+  let drawingSet: number | undefined;
+  const drawing = (c: Change, i: number) => {
+    if (c.kind !== 'add_drawing_set') return;
+    if (list.version < DRAWING_SET_VERSION) errors.push(`changes.${i}.kind: add_drawing_set needs version ${DRAWING_SET_VERSION}; say "version": ${DRAWING_SET_VERSION}`);
+    if (drawingSet !== undefined) errors.push(`changes.${i}.kind: a list makes one drawing set, and change ${drawingSet + 1} makes it already`);
+    else drawingSet = i;
+    const plans = c.views === undefined || c.views.includes('plans');
+    if (!plans && c.levels !== undefined) errors.push(`changes.${i}.levels: names the levels whose plans the set makes, but its views ask for no plans; add "plans" to views, or leave levels out`);
+    if (!plans && c.empty_levels !== undefined) errors.push(`changes.${i}.empty_levels: says what to do with a level nothing stands on, but its views ask for no plans; add "plans" to views, or leave empty_levels out`);
+    references += (c.levels ?? []).filter((l) => 'global_id' in l).length;
+  };
   // Each new level's name, with the change that adds it first: no two add_level changes may name one.
   const newLevels = new Map<string, number>();
   list.changes.forEach((c, i) => {
@@ -294,6 +313,7 @@ export function checkChangeList(value: unknown): CheckedChangeList {
     }
     foundation(c, i);
     familyFile(c, i);
+    drawing(c, i);
     if (c.kind === 'set_level_elevation' && Math.abs(feetOf(c.elevation)) >= MODEL_EXTENT_FEET) {
       errors.push(`changes.${i}.elevation: beyond Revit's model extent (20 miles from the internal origin)`);
     }

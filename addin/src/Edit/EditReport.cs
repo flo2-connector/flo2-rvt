@@ -51,7 +51,13 @@
 // an Elevation at Top (its bounding box's top until then; the two agreed on both families the first
 // live edit placed);
 // and a footing, pile or wall footing says whether its IFC class was set by the add-in or predicted
-// (`ifc_entity_basis`; a wall footing names its `ifc_entity` too).
+// (`ifc_entity_basis`; a wall footing names its `ifc_entity` too). Add-in 0.15.0 writes version 2 still,
+// with fields added and none changed: an add_drawing_set change (change-list version 7) says what its set
+// made under `drawing_set` (the title block its sheets took and how it was chosen, the sheet's usable area,
+// the building's extent, and for each view its kind, level, face or cut, which way Revit made it look, its
+// view, sheet, viewport and elevation marker by element id, its scale, where its viewport sits on the sheet
+// and whether it fits, or why it was not made, placed or fitted: Logic/DrawingSets.cs), and `totals`
+// counts the views and sheets kept sets made (`views_added`, `sheets_added`).
 
 using System.Collections.Generic;
 using System.Linq;
@@ -193,6 +199,10 @@ namespace Flo2Rvt.Addin.Edit
         [DataMember(Name = "elements_reshaped_unexpected", Order = 16)] public int ElementsReshapedUnexpected;
         /// <summary>Since add-in 0.10.0: the elements the kept changes added (each change's `added`).</summary>
         [DataMember(Name = "elements_added", Order = 17)] public int ElementsAdded;
+        /// <summary>Since add-in 0.15.0: the views the kept drawing sets made (each change's drawing_set.views_made).</summary>
+        [DataMember(Name = "views_added", Order = 18)] public int ViewsAdded;
+        /// <summary>Since add-in 0.15.0: the sheets the kept drawing sets made (drawing_set.sheets_made), which sheets.pdf prints.</summary>
+        [DataMember(Name = "sheets_added", Order = 19)] public int SheetsAdded;
 
         public void Count(ChangeReport c)
         {
@@ -230,6 +240,11 @@ namespace Flo2Rvt.Addin.Edit
             if (c.Groups != null && c.Groups.Ungrouped != null) GroupsUngrouped += c.Groups.Ungrouped.Count;
             if (c.ReshapedByRevit != null) ElementsReshapedUnexpected += c.ReshapedByRevit.Unexpected;
             if (c.Added != null) ElementsAdded += c.Added.Count;
+            if (c.DrawingSet != null)
+            {
+                ViewsAdded += c.DrawingSet.ViewsMade;
+                SheetsAdded += c.DrawingSet.SheetsMade;
+            }
         }
     }
 
@@ -293,6 +308,8 @@ namespace Flo2Rvt.Addin.Edit
         [DataMember(Name = "attempts", Order = 19, EmitDefaultValue = false)] public List<MoveAttempt> Attempts;
         [DataMember(Name = "revit_messages", Order = 19, EmitDefaultValue = false)] public List<RevitMessage> RevitMessages;
         [DataMember(Name = "seconds", Order = 20)] public double Seconds;
+        /// <summary>Since add-in 0.15.0, add_drawing_set: what its set made, view by view and sheet by sheet (Logic/DrawingSets.cs).</summary>
+        [DataMember(Name = "drawing_set", Order = 21, EmitDefaultValue = false)] public DrawingSetReport DrawingSet;
 
         /// <summary>Not written: whether a transaction was committed for it (EditRun counts them).</summary>
         public bool Committed;
@@ -1094,5 +1111,125 @@ namespace Flo2Rvt.Addin.Edit
         [DataMember(Name = "elements", Order = 0)] public int Elements;
         [DataMember(Name = "worksets", Order = 1)] public int Worksets;
         [DataMember(Name = "error", Order = 2, EmitDefaultValue = false)] public string Error;
+    }
+    /// <summary>
+    /// Since add-in 0.15.0: what an add_drawing_set change made (change-list version 7), as the model
+    /// holds it after the change: each view the set asked for, the sheet it is on and its viewport, or
+    /// why not (Logic/DrawingSets.cs plans, judges and checks it).
+    /// </summary>
+    [DataContract]
+    public sealed class DrawingSetReport
+    {
+        /// <summary>The kinds of view asked (plans, elevations, sections, isometric), in the set's own order: every kind when the change named none.</summary>
+        [DataMember(Name = "views_asked", Order = 0)] public List<string> ViewsAsked = new List<string>();
+        /// <summary>include (a level nothing stands on still gets its plan) or leave_out.</summary>
+        [DataMember(Name = "empty_levels", Order = 1)] public string EmptyLevels;
+        /// <summary>imperial or metric, the model's display units, which choose the scales and a sheet with no title block.</summary>
+        [DataMember(Name = "units", Order = 2)] public string Units;
+        /// <summary>The title block type every sheet took; absent when the model holds none.</summary>
+        [DataMember(Name = "title_block", Order = 3, EmitDefaultValue = false)] public TitleBlockRef TitleBlock;
+        /// <summary>named (the change named it), first_held (the first the model holds, by family then type) or none (the model holds none: each sheet has no title block).</summary>
+        [DataMember(Name = "title_block_was", Order = 4)] public string TitleBlockWas;
+        /// <summary>Every title block type the model holds, "family: type", the first TypeMatch.Listed.</summary>
+        [DataMember(Name = "title_blocks_held", Order = 5, EmitDefaultValue = false)] public List<string> TitleBlocksHeld;
+        /// <summary>The sheet the views are fitted to and where on it they go, read from the first sheet made.</summary>
+        [DataMember(Name = "sheet_area", Order = 6, EmitDefaultValue = false)] public DrawingSheetArea SheetArea;
+        /// <summary>The building's extent, internal feet: the box every view is cropped to, with a margin.</summary>
+        [DataMember(Name = "building", Order = 7, EmitDefaultValue = false)] public BuildingExtent Building;
+        /// <summary>Why the model has no building to face, cut or show; its elevations, sections and 3D view are then not made.</summary>
+        [DataMember(Name = "building_why", Order = 8, EmitDefaultValue = false)] public string BuildingWhy;
+        /// <summary>Each view asked, in sheet-number order of its kind: what was made, or why not.</summary>
+        [DataMember(Name = "sheets", Order = 9)] public List<DrawingSheet> Sheets = new List<DrawingSheet>();
+        [DataMember(Name = "views_made", Order = 10)] public int ViewsMade;
+        [DataMember(Name = "sheets_made", Order = 11)] public int SheetsMade;
+        [DataMember(Name = "placed", Order = 12)] public int Placed;
+        [DataMember(Name = "not_made", Order = 13)] public int NotMade;
+        /// <summary>Plans of a level nothing stands on, left out on the list's empty_levels leave_out.</summary>
+        [DataMember(Name = "left_out", Order = 14)] public int LeftOut;
+        [DataMember(Name = "note", Order = 15, EmitDefaultValue = false)] public string Note;
+    }
+
+    [DataContract]
+    public sealed class TitleBlockRef
+    {
+        [DataMember(Name = "family", Order = 0)] public string Family;
+        [DataMember(Name = "type", Order = 1)] public string Type;
+        [DataMember(Name = "type_id", Order = 2)] public long TypeId;
+    }
+
+    /// <summary>A sheet, and the part of it a view is fitted to, in sheet feet: the title block's box (or a default sheet) less a margin, and the title strip at its right.</summary>
+    [DataContract]
+    public sealed class DrawingSheetArea
+    {
+        /// <summary>title_block (the box of the title block on the first sheet made) or default (no title block: 36 x 24 in, or 841 x 594 mm in a metric model).</summary>
+        [DataMember(Name = "from", Order = 0)] public string From;
+        [DataMember(Name = "sheet_min_ft", Order = 1)] public List<double> SheetMinFt;
+        [DataMember(Name = "sheet_max_ft", Order = 2)] public List<double> SheetMaxFt;
+        [DataMember(Name = "usable_min_ft", Order = 3)] public List<double> UsableMinFt;
+        [DataMember(Name = "usable_max_ft", Order = 4)] public List<double> UsableMaxFt;
+
+        public double Width { get { return UsableMaxFt[0] - UsableMinFt[0]; } }
+        public double Height { get { return UsableMaxFt[1] - UsableMinFt[1]; } }
+        public double CenterX { get { return (UsableMinFt[0] + UsableMaxFt[0]) / 2; } }
+        public double CenterY { get { return (UsableMinFt[1] + UsableMaxFt[1]) / 2; } }
+    }
+
+    [DataContract]
+    public sealed class BuildingExtent
+    {
+        [DataMember(Name = "min_ft", Order = 0)] public List<double> MinFt;
+        [DataMember(Name = "max_ft", Order = 1)] public List<double> MaxFt;
+        /// <summary>How many model elements it is the extent of.</summary>
+        [DataMember(Name = "elements", Order = 2)] public int Elements;
+    }
+
+    /// <summary>One view a drawing set asked for: what was made of it, and the sheet it is on, or why not.</summary>
+    [DataContract]
+    public sealed class DrawingSheet
+    {
+        /// <summary>plans, elevations, sections or isometric.</summary>
+        [DataMember(Name = "kind", Order = 0)] public string Kind;
+        /// <summary>A plan's level, as the model names it.</summary>
+        [DataMember(Name = "level", Order = 1, EmitDefaultValue = false)] public string Level;
+        [DataMember(Name = "level_id", Order = 2, EmitDefaultValue = false)] public long LevelId;
+        /// <summary>An elevation's face of the building: north, east, south or west, in the model's own axes.</summary>
+        [DataMember(Name = "facing", Order = 3, EmitDefaultValue = false)] public string Facing;
+        /// <summary>A section's cut: east_west or north_south, through the middle of the building.</summary>
+        [DataMember(Name = "cut", Order = 4, EmitDefaultValue = false)] public string Cut;
+        /// <summary>Which way an elevation or section looks: as planned, then as Revit made it (the opposite of its view direction).</summary>
+        [DataMember(Name = "looking", Order = 5, EmitDefaultValue = false)] public string Looking;
+        /// <summary>made, not_made or left_out; absent while only planned.</summary>
+        [DataMember(Name = "view_was", Order = 6, EmitDefaultValue = false)] public string ViewWas;
+        [DataMember(Name = "view_name", Order = 7, EmitDefaultValue = false)] public string ViewName;
+        [DataMember(Name = "view_id", Order = 8, EmitDefaultValue = false)] public long ViewId;
+        /// <summary>The view family type it was made of, by name.</summary>
+        [DataMember(Name = "view_type", Order = 9, EmitDefaultValue = false)] public string ViewType;
+        /// <summary>Revit's ViewDirection for it, toward the viewer, x y z.</summary>
+        [DataMember(Name = "view_direction", Order = 10, EmitDefaultValue = false)] public List<double> ViewDirection;
+        /// <summary>A section's cut plane origin as Revit holds it (View.Origin), internal feet.</summary>
+        [DataMember(Name = "origin_ft", Order = 11, EmitDefaultValue = false)] public List<double> OriginFt;
+        /// <summary>A section: how far its cut plane stands from the middle of the building, toward the viewer, in feet.</summary>
+        [DataMember(Name = "cut_off_middle_ft", Order = 12, EmitDefaultValue = false)] public double? CutOffMiddleFt;
+        /// <summary>An elevation: the ElevationMarker it hangs on.</summary>
+        [DataMember(Name = "marker_id", Order = 13, EmitDefaultValue = false)] public long MarkerId;
+        /// <summary>Its scale, the ratio of true size to paper (View.Scale): 48 is 1/4" = 1'-0", 100 is 1 : 100.</summary>
+        [DataMember(Name = "scale", Order = 14, EmitDefaultValue = false)] public int Scale;
+        [DataMember(Name = "scale_text", Order = 15, EmitDefaultValue = false)] public string ScaleText;
+        [DataMember(Name = "sheet_number", Order = 16, EmitDefaultValue = false)] public string SheetNumber;
+        [DataMember(Name = "sheet_name", Order = 17, EmitDefaultValue = false)] public string SheetName;
+        [DataMember(Name = "sheet_id", Order = 18, EmitDefaultValue = false)] public long SheetId;
+        /// <summary>The title block ViewSheet.Create placed on the sheet.</summary>
+        [DataMember(Name = "title_block_instance_id", Order = 19, EmitDefaultValue = false)] public long TitleBlockInstanceId;
+        [DataMember(Name = "viewport_id", Order = 20, EmitDefaultValue = false)] public long ViewportId;
+        [DataMember(Name = "placed", Order = 21)] public bool Placed;
+        /// <summary>Its viewport lies within the sheet's usable area.</summary>
+        [DataMember(Name = "fits", Order = 22)] public bool Fits;
+        /// <summary>Its viewport's box on the sheet (Viewport.GetBoxOutline, the label left out), sheet feet.</summary>
+        [DataMember(Name = "viewport_min_ft", Order = 23, EmitDefaultValue = false)] public List<double> ViewportMinFt;
+        [DataMember(Name = "viewport_max_ft", Order = 24, EmitDefaultValue = false)] public List<double> ViewportMaxFt;
+        /// <summary>Why it was not made, placed or fitted, or is not as asked; absent when it is.</summary>
+        [DataMember(Name = "why", Order = 25, EmitDefaultValue = false)] public string Why;
+        /// <summary>What a person should know of it that is no shortfall.</summary>
+        [DataMember(Name = "note", Order = 26, EmitDefaultValue = false)] public string Note;
     }
 }

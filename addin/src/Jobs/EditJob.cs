@@ -31,6 +31,11 @@
 // ⭐ LEVELS (since 0.13.0, change-list version 5): add_level, in EditJob.Levels.cs, in its own
 // transaction like every change; later changes place on the new level by its name.
 //
+// ⭐ A DRAWING SET (since 0.15.0, change-list version 7): add_drawing_set, in EditJob.DrawingSet.cs, in
+// its own transaction like every change, each view and sheet a part of it (ChangeRunner.Part): a floor plan
+// of every level, the four elevations, two sections and a 3D view, each on a numbered sheet, which the
+// export below prints into sheets.pdf with the model's other printable sheets (Logic/DrawingSets.cs).
+//
 // ⭐ A NEW MODEL (since 0.13.0, the new-model job, Jobs/NewModelJob.cs): the job box makes the model
 // (Jobs/JobBox.cs ExecuteNew) and this job fills it exactly as it edits one, with what an edit
 // does not need: a list that adds nothing is refused, the report says what the model was made from
@@ -283,6 +288,7 @@ namespace Flo2Rvt.Addin.Jobs
                     case ChangeKinds.AddWallFooting: AddWallFooting(context, index, adding, change, r); break;
                     case ChangeKinds.AddPile: AddPile(context, index, adding, change, r); break;
                     case ChangeKinds.AddLevel: AddLevel(context, index, change, r); break;
+                    case ChangeKinds.AddDrawingSet: AddDrawingSet(context, index, change, r); break;
                     default:
                         r.Status = ChangeStatus.NotApplied;
                         r.Why = "the kind is not in this add-in's vocabulary";

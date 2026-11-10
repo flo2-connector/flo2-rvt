@@ -255,7 +255,7 @@ describe('flo2-rvt register', () => {
       ifc: ['put', 'model.ifc', false],
     });
     assert.ok(!('rvtFile' in body.parameters), 'no model goes in');
-    assert.match(body.description, /\(flo2-rvt add-in 0\.14\.0\)$/);
+    assert.match(body.description, /\(flo2-rvt add-in 0\.15\.0\)$/);
   });
 
   test('the Activity runs revitcoreconsole with the AppBundle on the 2024 engine and names its files', () => {

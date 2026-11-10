@@ -302,6 +302,8 @@ export function editSummary(report: Record<string, unknown>): EditSummary {
     ...(typeof totals.elements_reshaped_unexpected === 'number' ? { reshaped_unexpected: n('elements_reshaped_unexpected') } : {}),
     // Since add-in 0.10.0: the elements the kept changes added (change-list version 3). Left out for an older report.
     ...(typeof totals.elements_added === 'number' ? { elements_added: n('elements_added') } : {}),
+    // Since add-in 0.15.0: the sheets a kept drawing set made (change-list version 7). Left out for an older report.
+    ...(typeof totals.sheets_added === 'number' ? { sheets_added: n('sheets_added') } : {}),
     model_saved: rvt.written === true,
   };
 }
