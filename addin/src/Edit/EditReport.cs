@@ -57,7 +57,12 @@
 // the building's extent, and for each view its kind, level, face or cut, which way Revit made it look, its
 // view, sheet, viewport and elevation marker by element id, its scale, where its viewport sits on the sheet
 // and whether it fits, or why it was not made, placed or fitted: Logic/DrawingSets.cs), and `totals`
-// counts the views and sheets kept sets made (`views_added`, `sheets_added`).
+// counts the views and sheets kept sets made (`views_added`, `sheets_added`). Add-in 0.15.1 writes version
+// 2 still, with fields added and none changed: each elevation and section of a set says, read back once it
+// is set and cropped, whether its far clipping is on (`far_clip_active`), how far it sees (`far_clip_ft`)
+// beside how far it needs to (`depth_needed_ft`), its crop box in model terms (`crop_min_ft`,
+// `crop_max_ft`), and an elevation its View.Origin (`origin_ft`) as a section did; one short of the
+// building says why. A report of 0.15.0, which says none of it, reads as it did.
 
 using System.Collections.Generic;
 using System.Linq;
@@ -1206,30 +1211,39 @@ namespace Flo2Rvt.Addin.Edit
         [DataMember(Name = "view_type", Order = 9, EmitDefaultValue = false)] public string ViewType;
         /// <summary>Revit's ViewDirection for it, toward the viewer, x y z.</summary>
         [DataMember(Name = "view_direction", Order = 10, EmitDefaultValue = false)] public List<double> ViewDirection;
-        /// <summary>A section's cut plane origin as Revit holds it (View.Origin), internal feet.</summary>
+        /// <summary>Its View.Origin as Revit holds it ("the origin of the screen"), internal feet: a section's is its cut face's lower-left corner as the viewer sees it, which the first live run measured (2026-11-10); since add-in 0.15.1 an elevation's too, a point of the plane its depth is measured from.</summary>
         [DataMember(Name = "origin_ft", Order = 11, EmitDefaultValue = false)] public List<double> OriginFt;
         /// <summary>A section: how far its cut plane stands from the middle of the building, toward the viewer, in feet.</summary>
         [DataMember(Name = "cut_off_middle_ft", Order = 12, EmitDefaultValue = false)] public double? CutOffMiddleFt;
+        /// <summary>Since add-in 0.15.1, an elevation or section: whether Revit's far clipping is on for it, read back once it is set and cropped (Far Clip Active, VIEWER_BOUND_ACTIVE_FAR, not 0, or Far Clipping, VIEWER_BOUND_FAR_CLIPPING, other than No clip); absent when neither could be read.</summary>
+        [DataMember(Name = "far_clip_active", Order = 13, EmitDefaultValue = false)] public bool? FarClipActive;
+        /// <summary>Since add-in 0.15.1, an elevation or section: how far it sees from its plane along the way it looks, its Far Clip Offset (VIEWER_BOUND_OFFSET_FAR) as Revit holds it once set and cropped, in feet; absent when it could not be read.</summary>
+        [DataMember(Name = "far_clip_ft", Order = 14, EmitDefaultValue = false)] public double? FarClipFt;
+        /// <summary>Since add-in 0.15.1, an elevation or section: how far it must see to hold the building, from its plane to the building's far side, and the margin (DrawingSets.DepthNeeded), in feet; a far clip short of it says why.</summary>
+        [DataMember(Name = "depth_needed_ft", Order = 15, EmitDefaultValue = false)] public double? DepthNeededFt;
+        /// <summary>Since add-in 0.15.1, an elevation or section: its crop box as Revit holds it once set (View.CropBox), its corners taken into the model's internal axes, their least x y z and greatest, internal feet.</summary>
+        [DataMember(Name = "crop_min_ft", Order = 16, EmitDefaultValue = false)] public List<double> CropMinFt;
+        [DataMember(Name = "crop_max_ft", Order = 17, EmitDefaultValue = false)] public List<double> CropMaxFt;
         /// <summary>An elevation: the ElevationMarker it hangs on.</summary>
-        [DataMember(Name = "marker_id", Order = 13, EmitDefaultValue = false)] public long MarkerId;
+        [DataMember(Name = "marker_id", Order = 18, EmitDefaultValue = false)] public long MarkerId;
         /// <summary>Its scale, the ratio of true size to paper (View.Scale): 48 is 1/4" = 1'-0", 100 is 1 : 100.</summary>
-        [DataMember(Name = "scale", Order = 14, EmitDefaultValue = false)] public int Scale;
-        [DataMember(Name = "scale_text", Order = 15, EmitDefaultValue = false)] public string ScaleText;
-        [DataMember(Name = "sheet_number", Order = 16, EmitDefaultValue = false)] public string SheetNumber;
-        [DataMember(Name = "sheet_name", Order = 17, EmitDefaultValue = false)] public string SheetName;
-        [DataMember(Name = "sheet_id", Order = 18, EmitDefaultValue = false)] public long SheetId;
+        [DataMember(Name = "scale", Order = 19, EmitDefaultValue = false)] public int Scale;
+        [DataMember(Name = "scale_text", Order = 20, EmitDefaultValue = false)] public string ScaleText;
+        [DataMember(Name = "sheet_number", Order = 21, EmitDefaultValue = false)] public string SheetNumber;
+        [DataMember(Name = "sheet_name", Order = 22, EmitDefaultValue = false)] public string SheetName;
+        [DataMember(Name = "sheet_id", Order = 23, EmitDefaultValue = false)] public long SheetId;
         /// <summary>The title block ViewSheet.Create placed on the sheet.</summary>
-        [DataMember(Name = "title_block_instance_id", Order = 19, EmitDefaultValue = false)] public long TitleBlockInstanceId;
-        [DataMember(Name = "viewport_id", Order = 20, EmitDefaultValue = false)] public long ViewportId;
-        [DataMember(Name = "placed", Order = 21)] public bool Placed;
+        [DataMember(Name = "title_block_instance_id", Order = 24, EmitDefaultValue = false)] public long TitleBlockInstanceId;
+        [DataMember(Name = "viewport_id", Order = 25, EmitDefaultValue = false)] public long ViewportId;
+        [DataMember(Name = "placed", Order = 26)] public bool Placed;
         /// <summary>Its viewport lies within the sheet's usable area.</summary>
-        [DataMember(Name = "fits", Order = 22)] public bool Fits;
+        [DataMember(Name = "fits", Order = 27)] public bool Fits;
         /// <summary>Its viewport's box on the sheet (Viewport.GetBoxOutline, the label left out), sheet feet.</summary>
-        [DataMember(Name = "viewport_min_ft", Order = 23, EmitDefaultValue = false)] public List<double> ViewportMinFt;
-        [DataMember(Name = "viewport_max_ft", Order = 24, EmitDefaultValue = false)] public List<double> ViewportMaxFt;
+        [DataMember(Name = "viewport_min_ft", Order = 28, EmitDefaultValue = false)] public List<double> ViewportMinFt;
+        [DataMember(Name = "viewport_max_ft", Order = 29, EmitDefaultValue = false)] public List<double> ViewportMaxFt;
         /// <summary>Why it was not made, placed or fitted, or is not as asked; absent when it is.</summary>
-        [DataMember(Name = "why", Order = 25, EmitDefaultValue = false)] public string Why;
+        [DataMember(Name = "why", Order = 30, EmitDefaultValue = false)] public string Why;
         /// <summary>What a person should know of it that is no shortfall.</summary>
-        [DataMember(Name = "note", Order = 26, EmitDefaultValue = false)] public string Note;
+        [DataMember(Name = "note", Order = 31, EmitDefaultValue = false)] public string Note;
     }
 }

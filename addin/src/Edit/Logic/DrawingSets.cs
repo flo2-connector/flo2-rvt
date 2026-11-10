@@ -21,12 +21,20 @@
 //   · WHERE A VIEW STANDS: the building is the union of its elements' boxes (Box3.Union); every view is
 //     cropped to it with a margin (Margin: 5% of its largest side, never less than 3 ft); an elevation's
 //     marker stands MarkerOffset beyond the side it shows, at that side's middle (MarkerAt), so a plan's
-//     crop leaves it out; a section is cut through the middle with a box whose near face is the cut and
-//     whose far face holds the far half (Section); a direction is named by the compass point it is
-//     nearest within ~8 degrees (Toward), in the model's own axes (Revit's project north is internal +y).
+//     crop leaves it out; a section is cut through the middle with a box whose BasisZ is the way it looks
+//     and whose Min.Z = 0, the viewer's side, is the cut, its Max.Z past the far half (Section: since add-in
+//     0.15.1; CreateSection's "view direction" is the way a section looks, and View.ViewDirection, toward the
+//     viewer, its opposite, which the first live run measured); a direction is named by the compass point it
+//     is nearest within ~8 degrees (Toward), in the model's own axes (Revit's project north is internal +y).
 //     Revit's ElevationMarker does not document which of its slots looks which way ("View direction is
 //     determined by the index"), so the job tries each slot and keeps the one whose view looks at the face
 //     asked (EditJob.DrawingSet.cs), and each view says which way Revit made it look (`looking`).
+//   · HOW FAR AN ELEVATION OR SECTION SEES (since add-in 0.15.1): the depth it needs, from its plane along
+//     the way it looks to the building's far side, and the margin (DepthNeeded; ElevationDepth from its
+//     marker, SectionDepth from its cut, PlannedDepth for either), which the job sets as its far clip, then
+//     reads back with its crop and judges (ReachWhy: a far clip short of the depth, or not read, says why;
+//     CropWhy: a crop that leaves the building out across the view says why). The first live run's north
+//     elevation saw short of the building and printed no house, and nothing read it back.
 //   · THE SCALE AND THE VIEWPORT: the sheet's usable area is the title block's box less a margin (4% of
 //     its shorter side) and, for a title block, its right 18% for the title strip; a sheet of no title block
 //     is ARCH D (36 x 24 in), or A1 (841 x 594 mm) in a metric model (Area, DefaultSheet). The scale is the
@@ -37,7 +45,8 @@
 //   · HOW IT IS JUDGED (Judge, Count, RolledBack, Problems): applied when every view asked (but a plan left
 //     out on the list's word) was made, placed on its sheet and fits, and says nothing against itself;
 //     applied in part when some view was made; none made, not kept. The invariants the report keeps are
-//     Problems', which ReportCheck runs on every drawing set change.
+//     Problems', which ReportCheck runs on every drawing set change; since add-in 0.15.1 among them, an
+//     elevation or section read as asked reaches the depth it needs, and says how far it reaches.
 //
 // The margins, the title strip, the default sheet and the scales are this add-in's own choices, not
 // Revit's or any standard's: a live run on a real title block is what tells whether they suit it.
@@ -122,19 +131,31 @@ namespace Flo2Rvt.Addin.Edit.Logic
         public ISet<string> TakenViewNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     }
 
-    /// <summary>The box ViewSection.CreateSection is handed: its frame (origin and axes, model feet) and its extent in that frame.</summary>
+    /// <summary>
+    /// The box ViewSection.CreateSection is handed: its frame (origin and axes, model feet) and its extent in
+    /// that frame. CreateSection, in Revit 2024's RevitAPI.xml: "The view direction of the resulting section
+    /// will be sectionBox.Transform.BasisZ and the up direction will be sectionBox.Transform.BasisY. The right
+    /// hand direction will be computed so that (right, up, view direction) form a left handed coordinate
+    /// system", and "The far clip distance will be equal to the difference of the z-coordinates of
+    /// BoundingBoxXYZ.Min and BoundingBoxXYZ.Max". That view direction is the way the section LOOKS, away from
+    /// the viewer: View.ViewDirection, "The direction towards the viewer", is its opposite, so the viewer and
+    /// the cut stand at Min.Z and the far clip at Max.Z. Add-in 0.15.0 took BasisZ for View.ViewDirection, and
+    /// the first live run's sections looked the opposite way, cut at the far face (2026-11-10).
+    /// </summary>
     public sealed class SectionSpec
     {
         public double[] Origin;
-        /// <summary>Right on the sheet: BasisY cross BasisZ.</summary>
+        /// <summary>BasisY cross BasisZ, so the frame is right-handed and orthonormal. Revit computes the screen's right itself (look cross up, the opposite of this), and the box is the same either side of its middle, so the crop is the same.</summary>
         public double[] BasisX;
         /// <summary>Up.</summary>
         public double[] BasisY;
-        /// <summary>The view direction, toward the viewer (View.ViewDirection), as CreateSection takes it.</summary>
+        /// <summary>The way the section looks, away from the viewer, as CreateSection takes its "view direction"; Revit's View.ViewDirection is its opposite.</summary>
         public double[] BasisZ;
+        /// <summary>Min.Z = 0 is the cut, on the viewer's side.</summary>
         public double[] Min;
+        /// <summary>Max.Z, positive, is the far clip: the far half and the margin.</summary>
         public double[] Max;
-        /// <summary>The way it looks: the opposite of BasisZ.</summary>
+        /// <summary>The way it looks: the compass point BasisZ points to.</summary>
         public string Looking;
     }
 
@@ -167,6 +188,8 @@ namespace Flo2Rvt.Addin.Edit.Logic
         public const double CompassCos = 0.99;
         /// <summary>How far a section's cut may stand from the middle and still be through it, in feet.</summary>
         public const double CutToleranceFt = 0.01;
+        /// <summary>How far short of the depth it needs a view's far clip, or of the building its crop, may stand and still reach it, in feet.</summary>
+        public const double DepthToleranceFt = 0.01;
         /// <summary>What a viewport may overrun its area by and still fit, sheet feet (Lengths.Round's millionth, and some).</summary>
         public const double SheetToleranceFt = 1e-5;
         public const double MmPerFoot = 304.8;
@@ -363,16 +386,17 @@ namespace Flo2Rvt.Addin.Edit.Logic
 
         /// <summary>
         /// The box a section is cut with: its frame at the middle of the building in plan, at its foot, up
-        /// its y axis, its z axis the view direction (toward the viewer: south for an east-west cut that
-        /// looks north, west for a north-south cut that looks east), x = y cross z (right on the sheet, a
-        /// right-handed frame); its near face (z = 0) the cut through the middle, its far face (z negative,
-        /// away from the viewer) past the far half, its width and height the building's, each with the margin.
+        /// its y axis, its z axis the way it looks, as CreateSection takes its "view direction" (north for an
+        /// east-west cut, east for a north-south one; View.ViewDirection, toward the viewer, is its opposite),
+        /// x = y cross z (a right-handed frame; Revit computes the screen's right itself, and the box is the same
+        /// either side of its middle); its Min.Z = 0, the viewer's side, the cut through the middle, its Max.Z
+        /// past the far half, its width and height the building's, each with the margin.
         /// </summary>
         public static SectionSpec Section(Box3 b, string cut)
         {
             double m = Margin(b);
             bool ew = cut == EastWest;
-            double[] z = ew ? new[] { 0.0, -1, 0 } : new[] { -1.0, 0, 0 };
+            double[] z = ew ? new[] { 0.0, 1, 0 } : new[] { 1.0, 0, 0 };
             double[] y = { 0.0, 0, 1 };
             double[] x = { y[1] * z[2] - y[2] * z[1], y[2] * z[0] - y[0] * z[2], y[0] * z[1] - y[1] * z[0] };
             double halfWidth = (ew ? b.Width : b.Depth) / 2;
@@ -383,16 +407,108 @@ namespace Flo2Rvt.Addin.Edit.Logic
                 BasisX = x,
                 BasisY = y,
                 BasisZ = z,
-                Min = new[] { -(halfWidth + m), -m, -(halfDepth + m) },
-                Max = new[] { halfWidth + m, b.Height + m, 0.0 },
-                Looking = Looking(z[0], z[1]),
+                Min = new[] { -(halfWidth + m), -m, 0.0 },
+                Max = new[] { halfWidth + m, b.Height + m, halfDepth + m },
+                Looking = Toward(z[0], z[1]),
             };
         }
 
-        /// <summary>How far a section's cut plane stands from the middle of the building in plan, measured toward the viewer: 0 through the middle.</summary>
+        /// <summary>
+        /// How far a section's cut plane stands from the middle of the building in plan, along the way it looks
+        /// (the opposite of its view direction, which points toward the viewer): 0 through the middle, positive
+        /// beyond it, negative nearer the viewer.
+        /// </summary>
         public static double CutOffMiddle(double[] origin, double[] viewDirection, Box3 b)
         {
             return Lengths.Round((b.CenterX - origin[0]) * viewDirection[0] + (b.CenterY - origin[1]) * viewDirection[1]);
+        }
+
+        /// <summary>A compass point as a unit direction in plan, in the model's own axes (+y north, +x east); null for none.</summary>
+        public static double[] Direction(string toward)
+        {
+            switch (toward)
+            {
+                case North: return new[] { 0.0, 1, 0 };
+                case East: return new[] { 1.0, 0, 0 };
+                case South: return new[] { 0.0, -1, 0 };
+                case West: return new[] { -1.0, 0, 0 };
+                default: return null;
+            }
+        }
+
+        /// <summary>How far the building's far side stands from a view's plane through point, along the way it looks (look, a unit direction): its farthest corner's distance.</summary>
+        public static double FarSide(Box3 b, double[] point, double[] look)
+        {
+            return b.Corners().Max(c => (c[0] - point[0]) * look[0] + (c[1] - point[1]) * look[1] + (c[2] - point[2]) * look[2]);
+        }
+
+        /// <summary>How far a view whose plane passes through point, looking along look, must see to hold the building: to its far side, and the margin.</summary>
+        public static double DepthNeeded(Box3 b, double[] point, double[] look)
+        {
+            return FarSide(b, point, look) + Margin(b);
+        }
+
+        /// <summary>The depth the elevation of a face needs, from its marker's plane: the marker's offset beyond that side, the building across, and the margin.</summary>
+        public static double ElevationDepth(Box3 b, string face)
+        {
+            PlanXY at = MarkerAt(b, face);
+            return DepthNeeded(b, new[] { at.X, at.Y, b.MinZ }, Direction(Opposite(face)));
+        }
+
+        /// <summary>The depth a section needs, from its cut through the middle: the far half and the margin, its box's own depth (Max.Z less Min.Z).</summary>
+        public static double SectionDepth(Box3 b, string cut)
+        {
+            SectionSpec s = Section(b, cut);
+            return s.Max[2] - s.Min[2];
+        }
+
+        /// <summary>The depth a view of the set is planned to see to: an elevation's from its marker, a section's from its cut; 0 for a plan or the 3D view, which have no far clip of the set's.</summary>
+        public static double PlannedDepth(Box3 b, DrawingSheet s)
+        {
+            if (s.Kind == DrawingSetViewValues.Elevations && Opposite(s.Facing) != null) return ElevationDepth(b, s.Facing);
+            if (s.Kind == DrawingSetViewValues.Sections && (s.Cut == EastWest || s.Cut == NorthSouth)) return SectionDepth(b, s.Cut);
+            return 0;
+        }
+
+        private static string Ft(double v)
+        {
+            return Lengths.Round(v).ToString("0.##", CultureInfo.InvariantCulture);
+        }
+
+        /// <summary>
+        /// Why an elevation's or section's far clip, as Revit holds it once set and cropped, does not reach the
+        /// depth it needs, in plain words; null when it does, or when far clipping reads off (the view then sees
+        /// without end, the building with it). Far clipping not read (active null) is taken as on, and a far
+        /// clip not read is never taken as enough.
+        /// </summary>
+        public static string ReachWhy(bool? farClipActive, double? farClipFt, double depthNeededFt, double marginFt)
+        {
+            if (farClipActive == false) return null;
+            string side = "the building's far side at " + Ft(depthNeededFt - marginFt) + " ft";
+            if (!farClipFt.HasValue) return "its far clip could not be read back, so whether it reaches " + side + " (" + Ft(depthNeededFt) + " ft with the margin) is not known";
+            if (farClipFt.Value >= depthNeededFt - DepthToleranceFt) return null;
+            return "its far clip reaches " + Ft(farClipFt.Value) + " ft, short of the " + Ft(depthNeededFt) + " ft it needs to hold " + side + " and the margin";
+        }
+
+        /// <summary>
+        /// Why a view's crop, as Revit holds it (View.CropBox: x right on screen, y up, in its own frame), leaves
+        /// part of the building out across the view, naming each side it runs past; null when it holds it. Seen
+        /// is the building's corners in the crop's frame. Its depth is the far clip's to judge (ReachWhy).
+        /// </summary>
+        public static string CropWhy(double[] cropMin, double[] cropMax, IEnumerable<double[]> seen)
+        {
+            List<double[]> p = seen.ToList();
+            double minX = p.Min(v => v[0]), maxX = p.Max(v => v[0]), minY = p.Min(v => v[1]), maxY = p.Max(v => v[1]);
+            double t = DepthToleranceFt;
+            var past = new List<string>();
+            if (minX < cropMin[0] - t) past.Add("left");
+            if (maxX > cropMax[0] + t) past.Add("right");
+            if (minY < cropMin[1] - t) past.Add("bottom");
+            if (maxY > cropMax[1] + t) past.Add("top");
+            if (past.Count == 0) return null;
+            string sides = past.Count == 1 ? past[0] : string.Join(", ", past.Take(past.Count - 1)) + " and " + past.Last();
+            return "its crop leaves part of the building out across the view, past its " + sides + " (the crop spans x " + Ft(cropMin[0]) + " to " + Ft(cropMax[0]) + " and y " + Ft(cropMin[1]) + " to " + Ft(cropMax[1]) +
+                   " ft in the view's frame, the building x " + Ft(minX) + " to " + Ft(maxX) + " and y " + Ft(minY) + " to " + Ft(maxY) + ")";
         }
 
         /// <summary>A view's crop box, in its own frame: every point given (the building's corners as the view sees them) and the margin, its near plane kept where it is. Min x y z, max x y z.</summary>
@@ -595,6 +711,11 @@ namespace Flo2Rvt.Addin.Edit.Logic
                 s.Fits = false;
                 s.ViewportMinFt = null;
                 s.ViewportMaxFt = null;
+                s.FarClipActive = null;
+                s.FarClipFt = null;
+                s.DepthNeededFt = null;
+                s.CropMinFt = null;
+                s.CropMaxFt = null;
                 s.Why = was || s.Why == null ? "rolled back with the change: " + because : s.Why;
             }
             Count(r);
@@ -641,6 +762,12 @@ namespace Flo2Rvt.Addin.Edit.Logic
                     if (want == null) found.Add(at + " is a section of no cut");
                     else if (s.Looking != want) found.Add(at + " is cut " + s.Cut + " but reads looking " + (s.Looking ?? "nowhere") + ", not " + want);
                     if (s.CutOffMiddleFt.HasValue && Math.Abs(s.CutOffMiddleFt.Value) > CutToleranceFt) found.Add(at + " reads as asked, though its cut stands " + s.CutOffMiddleFt.Value.ToString("0.######", CultureInfo.InvariantCulture) + " ft from the middle");
+                }
+                // Since add-in 0.15.1: an elevation or section that says how far it needs to see says how far it does, and reaches it, or says why.
+                if ((s.Kind == DrawingSetViewValues.Elevations || s.Kind == DrawingSetViewValues.Sections) && s.ViewWas == Made && s.Why == null && s.DepthNeededFt.HasValue && s.FarClipActive != false)
+                {
+                    if (!s.FarClipFt.HasValue) found.Add(at + " reads as asked, though it says not how far its far clip reaches");
+                    else if (s.FarClipFt.Value < s.DepthNeededFt.Value - DepthToleranceFt) found.Add(at + " reads as asked, though its far clip reaches " + Ft(s.FarClipFt.Value) + " ft, short of the " + Ft(s.DepthNeededFt.Value) + " ft it needs");
                 }
             }
             int made = r.Sheets.Count(s => s.ViewWas == Made);
