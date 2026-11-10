@@ -1143,6 +1143,9 @@ namespace Flo2Rvt.Addin.Tests
             // Since add-in 0.14.0: a door from a door family file, sized as a new type copied from the named one (DoorsTests.cs).
             DoorCases(root);
 
+            // Since add-in 0.15.0: a drawing set, each view on a numbered sheet the job's sheets.pdf prints (DrawingSetTests.cs).
+            DrawingSetCases(root);
+
             Console.WriteLine();
             Console.WriteLine(passed + " passed, " + failed.Count + " failed");
             return failed.Count == 0 ? 0 : 1;

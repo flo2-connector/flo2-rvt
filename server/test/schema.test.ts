@@ -88,7 +88,13 @@ test('the C# types and their schema hash are generated from the schema as it is 
   assert.equal(readFileSync(new URL('../../addin/Generated/change-list.schema.sha256', import.meta.url), 'utf8').trim(), sha);
   for (const kind of ['delete_elements_on_level', 'delete_elements_by_global_id', 'set_level_elevation', 'move_levels_together']) assert.ok(cs.includes(`"${kind}"`));
   assert.ok(cs.includes('public static class GroupsInTheWayValues'), 'groups_in_the_way\'s values, for the add-in');
-  assert.ok(cs.includes('public static readonly long[] VersionValues = { 0, 1, 2, 3, 4, 5, 6 };'), 'the versions this schema reads');
+  assert.ok(cs.includes('public static readonly long[] VersionValues = { 0, 1, 2, 3, 4, 5, 6, 7 };'), 'the versions this schema reads');
+  // Since version 7: a drawing set, its views by kind and its options, for the add-in.
+  const drawingSet = /public sealed partial class AddDrawingSet\b[\s\S]*?\n {4}\}\n/.exec(cs)?.[0] ?? '';
+  for (const field of ['public List<string> Views { get; set; }', 'public List<LevelReference> Levels { get; set; }', 'public string EmptyLevels { get; set; }', 'public TypeName TitleBlock { get; set; }']) assert.ok(drawingSet.includes(field), `a drawing set's ${field}, for the add-in`);
+  assert.ok(cs.includes('"add_drawing_set"'), 'add_drawing_set, for the add-in');
+  assert.ok(cs.includes('public static class DrawingSetViewValues') && cs.includes('public const string Isometric = "isometric";'), "a drawing set's kinds of view, for the add-in");
+  assert.ok(cs.includes('public static class EmptyLevelsValues') && cs.includes('public const string LeaveOut = "leave_out";'), 'what a set does with an empty level, for the add-in');
   const addDoor = /public sealed partial class AddDoor\b[\s\S]*?\n {4}\}\n/.exec(cs)?.[0] ?? '';
   for (const field of ['public string FamilyFile { get; set; }', 'public Dictionary<string, Length> Sizes { get; set; }', 'public string NewType { get; set; }']) assert.ok(addDoor.includes(field), `since version 6 a door's ${field}, for the add-in`);
   for (const kind of ['add_footing', 'add_wall_footing', 'add_pile']) assert.ok(cs.includes(`"${kind}"`), `${kind}, for the add-in`);
@@ -299,4 +305,52 @@ test("the schema says a family file's family is in the category its changes need
   assert.match(String(defs.NewTypeName?.description), /The name of the type a door or foundation is placed from/);
   const version = schema.properties as Record<string, { description?: string }>;
   assert.match(String(version.version?.description), /Version 6 \(flo2-rvt 0\.15\.0, add-in 0\.14\.0\) adds add_door's family_file, sizes and new_type/);
+});
+
+// Since flo2-rvt 0.16.0 (change-list version 7): add_drawing_set, a conceptual drawing set of the model
+// as the list leaves it: a floor plan of each level, the four elevations, two sections through the
+// middle and a 3D view, each on a numbered sheet of its own, which the job's sheets.pdf prints (step 5
+// of flo2-rvt's plan, cap:cloud-revit-makes-plan-views-and-sheets-of-added-content). Its options ask for
+// less, never for a new kind.
+test('version 7: a list that makes a drawing set says version 7, and each rule beside the schema says where and why', () => {
+  const set = { kind: 'add_drawing_set', id: 'ds1' };
+  const why = (list: unknown) => {
+    const r = checkChangeList(list);
+    return r.ok ? '' : r.errors.join(' | ');
+  };
+  assert.match(why({ version: 6, changes: [set] }), /changes\.0\.kind: add_drawing_set needs version 7; say "version": 7/);
+  assert.match(
+    why({ version: 7, changes: [{ ...set, views: ['elevations', 'sections'], levels: [{ level_name: 'Level 1' }] }] }),
+    /changes\.0\.levels: names the levels whose plans the set makes, but its views ask for no plans; add "plans" to views, or leave levels out/,
+  );
+  assert.match(
+    why({ version: 7, changes: [{ ...set, views: ['isometric'], empty_levels: 'leave_out' }] }),
+    /changes\.0\.empty_levels: says what to do with a level nothing stands on, but its views ask for no plans; add "plans" to views, or leave empty_levels out/,
+  );
+  assert.match(why({ version: 7, changes: [{ ...set, views: ['plans'] }, { ...set, id: 'ds2', views: ['elevations'] }] }), /changes\.1\.kind: a list makes one drawing set, and change 1 makes it already/);
+  const ok = checkChangeList({ version: 7, changes: [{ ...set, views: ['plans'], levels: [{ level_name: 'Level 1' }, { global_id: '3cUkl32yn9qRSPvBJVyWYp' }], empty_levels: 'leave_out', title_block: { family: 'E1 30 x 42 Horizontal', type: 'E1 30x42 Horizontal' } }] });
+  assert.ok(ok.ok, ok.ok ? '' : ok.errors.join('; '));
+  assert.equal(ok.ok && ok.references, 1, 'a level by its storey GlobalId counts as one reference');
+  assert.ok(checkChangeList({ version: 7, changes: [set] }).ok, 'a set that says nothing makes every view');
+});
+
+test("a drawing set adds no building content: a new model's first list of a drawing set alone adds nothing", () => {
+  assert.ok(!(ADDING_KINDS as readonly string[]).includes('add_drawing_set'), 'its views and sheets are drawings of the model, not content of it');
+  assert.equal(addsSomething({ version: 7, changes: [{ kind: 'add_drawing_set' }] } as ChangeList), false);
+  assert.equal(addsSomething({ version: 7, changes: [{ kind: 'add_level', name: 'L', elevation: { value: 0, unit: 'ft' }, relative_to: 'project_origin' }, { kind: 'add_drawing_set' }] } as ChangeList), true);
+});
+
+test("the schema says what a drawing set makes, how its sheets are numbered, which title block they take, and that the job's sheets.pdf prints them", () => {
+  const defs = schema.$defs as Record<string, { description?: string; enum?: string[]; properties?: Record<string, { $ref?: string; items?: { $ref?: string } }> }>;
+  const set = defs.AddDrawingSet;
+  const said = String(set?.description);
+  for (const words of [/a floor plan of every level/, /the four elevations/, /two sections through the middle of the building/, /a 3D view/, /A-101/, /A-201 to A-204/, /A-301 and A-302/, /A-401/, /the first title block the model holds/, /no title block/, /a scale chosen to fit/, /sheets\.pdf/, /Needs change-list version 7/]) assert.match(said, words);
+  assert.deepEqual(defs.DrawingSetView?.enum, ['plans', 'elevations', 'sections', 'isometric']);
+  assert.deepEqual(defs.EmptyLevels?.enum, ['include', 'leave_out']);
+  assert.equal(set?.properties?.views?.items?.$ref, '#/$defs/DrawingSetView');
+  assert.equal(set?.properties?.levels?.items?.$ref, '#/$defs/LevelReference');
+  assert.equal(set?.properties?.title_block?.$ref, '#/$defs/TypeName');
+  assert.equal(set?.properties?.empty_levels?.$ref, '#/$defs/EmptyLevels');
+  const version = schema.properties as Record<string, { description?: string }>;
+  assert.match(String(version.version?.description), /Version 7 \(flo2-rvt 0\.16\.0, add-in 0\.15\.0\) adds add_drawing_set/);
 });

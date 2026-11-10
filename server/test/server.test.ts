@@ -149,8 +149,24 @@ describe('the tools, as the contract names them', () => {
     assert.match(said('rvt_edit_start'), /A door, footing or pile is of a type the model holds, or of one in a family file/);
     assert.match(said('rvt_edit_start'), /Doors for a door's, Structural Foundations for a footing's or pile's/);
     assert.match(said('rvt_edit_start'), /flo2\.io requires every foundation size and top offset to come from the calc record the edit names \(numbers_from\); a door's sizes may, and need not/);
+  });
+
+  // Since flo2-rvt 0.16.0 (add-in 0.15.0, change-list version 7): a chat is told the edit and the new
+  // model can make a drawing set of the model, each view on a numbered sheet the job's sheets.pdf prints.
+  test('the edit and new-model texts say a list may make a drawing set, what it holds and how its options ask for less', async () => {
+    const r = await rpc(h.url, { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} });
+    const tools = (r.json as Rpc).result?.tools ?? [];
+    const said = (name: string) => String(tools.find((t) => t.name === name)?.description ?? '');
+    for (const name of ['rvt_edit_start', 'rvt_new_model_start']) {
+      assert.match(said(name), /change-list version 7/, name);
+      assert.match(said(name), /add_drawing_set/, name);
+      assert.match(said(name), /sheets\.pdf/, name);
+    }
+    assert.match(said('rvt_edit_start'), /a floor plan of every level, the four elevations, two sections through the middle and a 3D view, each on a numbered sheet/);
+    assert.match(said('rvt_edit_start'), /views \(plans, elevations, sections, isometric\), levels, empty_levels \(include or leave_out\) and title_block/);
+    assert.match(said('rvt_job_status'), /sheets_added/);
     const editSchema = JSON.stringify((tools.find((t) => t.name === 'rvt_edit_start') as { inputSchema: Record<string, unknown> }).inputSchema);
-    assert.ok(editSchema.includes('schema/change-list.schema.json, version 6'), 'the change list the agent sees says version 6');
+    assert.ok(editSchema.includes('schema/change-list.schema.json, version 7'), 'the change list the agent sees says version 7');
   });
 
   test('both tools refuse a call without the hidden job context', async () => {

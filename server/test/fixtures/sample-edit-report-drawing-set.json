@@ -1,0 +1,513 @@
+{
+  "_note": "A made-up report of add-in 0.15.0 (report version 2, fields added), shaped as flo2's own fixtures of a list and its report, for change_list, a version-7 list on a made-up model (no person's, no building's): one add_drawing_set that says nothing, so every view is made. The model holds three levels (Level 1, Level 2, and Roof, which nothing stands on and still gets its plan, as empty_levels include says), one title block type (E1 30 x 42 Horizontal, a 42 x 30 in sheet), and a building 60 x 40 ft in plan, 24 ft high, in the model's internal axes. Ten views, each on a sheet of its own: three floor plans (A-101 to A-103, lowest level first), the four elevations (A-201 to A-204: north, east, south, west, each named by the face it shows, looking at it from outside), two sections through the middle (A-301 east-west, looking north; A-302 north-south, looking east) and a 3D view (A-401). Each viewport sits at the middle of the sheet's usable area (the title block's box inset by 4% of its shorter side, its right 18% kept for the title strip) at 1/4\" = 1'-0\", the largest standard scale at which it fits there. The job's sheets.pdf holds the ten sheets. Made-up ids; every value consistent with the add-in's invariants (ReportCheck, DrawingSets.Problems).",
+  "change_list": {
+    "version": 7,
+    "list_id": "drawing-set-1",
+    "description": "Made-up: a conceptual drawing set of a small made-up model, every view on a numbered sheet.",
+    "changes": [
+      {
+        "kind": "add_drawing_set",
+        "id": "ds1"
+      }
+    ]
+  },
+  "report": {
+    "schema": "flo2-rvt/edit-report",
+    "version": 2,
+    "edit": {
+      "addin_version": "0.15.0",
+      "started_at": "2026-11-09T12:00:00.0000000Z",
+      "finished_at": "2026-11-09T12:02:10.0000000Z",
+      "transactions_committed": 1,
+      "transactions_rolled_back": 0,
+      "saved": true,
+      "on_failure": "rolls_back_alone"
+    },
+    "engine": {
+      "version_name": "Autodesk Revit 2024",
+      "version_number": "2024",
+      "sub_version_number": "2024.3",
+      "build": "24.3.0.0"
+    },
+    "file": {
+      "format": "2024",
+      "is_workshared": false,
+      "is_central": false,
+      "saved_in_current_version": true,
+      "saved_in_later_version": false,
+      "opened_detached": false
+    },
+    "change_list": {
+      "list_id": "drawing-set-1",
+      "description": "Made-up: a conceptual drawing set of a small made-up model, every view on a numbered sheet.",
+      "sha256": "93599acd4ad879cb19266e1a1ec7603c5437752e17c09b58caa8e536d885baef",
+      "bytes": 197,
+      "changes": 1
+    },
+    "outcome": "all_applied",
+    "totals": {
+      "changes": 1,
+      "applied": 1,
+      "applied_in_part": 0,
+      "rolled_back": 0,
+      "not_applied": 0,
+      "elements_deleted": 0,
+      "other_elements_deleted": 0,
+      "elements_deleted_by_revit": 0,
+      "other_elements_deleted_by_revit": 0,
+      "elements_deleted_with_host": 0,
+      "elements_modified_by_revit": 0,
+      "other_elements_modified_by_revit": 0,
+      "elements_could_not": 0,
+      "elements_left_on_level": 0,
+      "other_elements_left_on_level": 0,
+      "groups_ungrouped": 0,
+      "elements_reshaped_unexpected": 0,
+      "elements_added": 0,
+      "views_added": 10,
+      "sheets_added": 10
+    },
+    "changes": [
+      {
+        "index": 0,
+        "id": "ds1",
+        "kind": "add_drawing_set",
+        "status": "applied",
+        "drawing_set": {
+          "views_asked": [
+            "plans",
+            "elevations",
+            "sections",
+            "isometric"
+          ],
+          "empty_levels": "include",
+          "units": "imperial",
+          "title_block": {
+            "family": "E1 30 x 42 Horizontal",
+            "type": "E1 30x42 Horizontal",
+            "type_id": 4500
+          },
+          "title_block_was": "first_held",
+          "title_blocks_held": [
+            "E1 30 x 42 Horizontal: E1 30x42 Horizontal"
+          ],
+          "sheet_area": {
+            "from": "title_block",
+            "sheet_min_ft": [
+              0,
+              0
+            ],
+            "sheet_max_ft": [
+              3.5,
+              2.5
+            ],
+            "usable_min_ft": [
+              0.1,
+              0.1
+            ],
+            "usable_max_ft": [
+              2.77,
+              2.4
+            ]
+          },
+          "building": {
+            "min_ft": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "max_ft": [
+              60.0,
+              40.0,
+              24.0
+            ],
+            "elements": 14
+          },
+          "sheets": [
+            {
+              "kind": "plans",
+              "level": "Level 1",
+              "level_id": 311,
+              "view_was": "made",
+              "view_name": "Level 1 Floor Plan",
+              "view_id": 990310,
+              "view_type": "Floor Plan",
+              "view_direction": [
+                0,
+                0,
+                1
+              ],
+              "scale": 48,
+              "scale_text": "1/4\" = 1'-0\"",
+              "sheet_number": "A-101",
+              "sheet_name": "Level 1 Floor Plan",
+              "sheet_id": 990311,
+              "title_block_instance_id": 990312,
+              "viewport_id": 990313,
+              "placed": true,
+              "fits": true,
+              "viewport_min_ft": [
+                0.7475,
+                0.770833
+              ],
+              "viewport_max_ft": [
+                2.1225,
+                1.729167
+              ]
+            },
+            {
+              "kind": "plans",
+              "level": "Level 2",
+              "level_id": 1240,
+              "view_was": "made",
+              "view_name": "Level 2 Floor Plan",
+              "view_id": 990320,
+              "view_type": "Floor Plan",
+              "view_direction": [
+                0,
+                0,
+                1
+              ],
+              "scale": 48,
+              "scale_text": "1/4\" = 1'-0\"",
+              "sheet_number": "A-102",
+              "sheet_name": "Level 2 Floor Plan",
+              "sheet_id": 990321,
+              "title_block_instance_id": 990322,
+              "viewport_id": 990323,
+              "placed": true,
+              "fits": true,
+              "viewport_min_ft": [
+                0.7475,
+                0.770833
+              ],
+              "viewport_max_ft": [
+                2.1225,
+                1.729167
+              ]
+            },
+            {
+              "kind": "plans",
+              "level": "Roof",
+              "level_id": 1302,
+              "view_was": "made",
+              "view_name": "Roof Floor Plan",
+              "view_id": 990330,
+              "view_type": "Floor Plan",
+              "view_direction": [
+                0,
+                0,
+                1
+              ],
+              "scale": 48,
+              "scale_text": "1/4\" = 1'-0\"",
+              "sheet_number": "A-103",
+              "sheet_name": "Roof Floor Plan",
+              "sheet_id": 990331,
+              "title_block_instance_id": 990332,
+              "viewport_id": 990333,
+              "placed": true,
+              "fits": true,
+              "viewport_min_ft": [
+                0.7475,
+                0.770833
+              ],
+              "viewport_max_ft": [
+                2.1225,
+                1.729167
+              ],
+              "note": "nothing stands on level \"Roof\" by its Revit settings; it has its plan, as empty_levels include says"
+            },
+            {
+              "kind": "elevations",
+              "facing": "north",
+              "looking": "south",
+              "view_was": "made",
+              "view_name": "North Elevation",
+              "view_id": 990340,
+              "view_type": "Building Elevation",
+              "view_direction": [
+                0,
+                1,
+                0
+              ],
+              "marker_id": 990900,
+              "scale": 48,
+              "scale_text": "1/4\" = 1'-0\"",
+              "sheet_number": "A-201",
+              "sheet_name": "North Elevation",
+              "sheet_id": 990341,
+              "title_block_instance_id": 990342,
+              "viewport_id": 990343,
+              "placed": true,
+              "fits": true,
+              "viewport_min_ft": [
+                0.7475,
+                0.9375
+              ],
+              "viewport_max_ft": [
+                2.1225,
+                1.5625
+              ]
+            },
+            {
+              "kind": "elevations",
+              "facing": "east",
+              "looking": "west",
+              "view_was": "made",
+              "view_name": "East Elevation",
+              "view_id": 990350,
+              "view_type": "Building Elevation",
+              "view_direction": [
+                1,
+                0,
+                0
+              ],
+              "marker_id": 990901,
+              "scale": 48,
+              "scale_text": "1/4\" = 1'-0\"",
+              "sheet_number": "A-202",
+              "sheet_name": "East Elevation",
+              "sheet_id": 990351,
+              "title_block_instance_id": 990352,
+              "viewport_id": 990353,
+              "placed": true,
+              "fits": true,
+              "viewport_min_ft": [
+                0.955833,
+                0.9375
+              ],
+              "viewport_max_ft": [
+                1.914167,
+                1.5625
+              ]
+            },
+            {
+              "kind": "elevations",
+              "facing": "south",
+              "looking": "north",
+              "view_was": "made",
+              "view_name": "South Elevation",
+              "view_id": 990360,
+              "view_type": "Building Elevation",
+              "view_direction": [
+                0,
+                -1,
+                0
+              ],
+              "marker_id": 990902,
+              "scale": 48,
+              "scale_text": "1/4\" = 1'-0\"",
+              "sheet_number": "A-203",
+              "sheet_name": "South Elevation",
+              "sheet_id": 990361,
+              "title_block_instance_id": 990362,
+              "viewport_id": 990363,
+              "placed": true,
+              "fits": true,
+              "viewport_min_ft": [
+                0.7475,
+                0.9375
+              ],
+              "viewport_max_ft": [
+                2.1225,
+                1.5625
+              ]
+            },
+            {
+              "kind": "elevations",
+              "facing": "west",
+              "looking": "east",
+              "view_was": "made",
+              "view_name": "West Elevation",
+              "view_id": 990370,
+              "view_type": "Building Elevation",
+              "view_direction": [
+                -1,
+                0,
+                0
+              ],
+              "marker_id": 990903,
+              "scale": 48,
+              "scale_text": "1/4\" = 1'-0\"",
+              "sheet_number": "A-204",
+              "sheet_name": "West Elevation",
+              "sheet_id": 990371,
+              "title_block_instance_id": 990372,
+              "viewport_id": 990373,
+              "placed": true,
+              "fits": true,
+              "viewport_min_ft": [
+                0.955833,
+                0.9375
+              ],
+              "viewport_max_ft": [
+                1.914167,
+                1.5625
+              ]
+            },
+            {
+              "kind": "sections",
+              "cut": "east_west",
+              "looking": "north",
+              "view_was": "made",
+              "view_name": "East-West Section",
+              "view_id": 990380,
+              "view_type": "Building Section",
+              "view_direction": [
+                0,
+                -1,
+                0
+              ],
+              "origin_ft": [
+                30,
+                20,
+                0
+              ],
+              "cut_off_middle_ft": 0,
+              "scale": 48,
+              "scale_text": "1/4\" = 1'-0\"",
+              "sheet_number": "A-301",
+              "sheet_name": "East-West Section",
+              "sheet_id": 990381,
+              "title_block_instance_id": 990382,
+              "viewport_id": 990383,
+              "placed": true,
+              "fits": true,
+              "viewport_min_ft": [
+                0.7475,
+                0.9375
+              ],
+              "viewport_max_ft": [
+                2.1225,
+                1.5625
+              ]
+            },
+            {
+              "kind": "sections",
+              "cut": "north_south",
+              "looking": "east",
+              "view_was": "made",
+              "view_name": "North-South Section",
+              "view_id": 990390,
+              "view_type": "Building Section",
+              "view_direction": [
+                -1,
+                0,
+                0
+              ],
+              "origin_ft": [
+                30,
+                20,
+                0
+              ],
+              "cut_off_middle_ft": 0,
+              "scale": 48,
+              "scale_text": "1/4\" = 1'-0\"",
+              "sheet_number": "A-302",
+              "sheet_name": "North-South Section",
+              "sheet_id": 990391,
+              "title_block_instance_id": 990392,
+              "viewport_id": 990393,
+              "placed": true,
+              "fits": true,
+              "viewport_min_ft": [
+                0.955833,
+                0.9375
+              ],
+              "viewport_max_ft": [
+                1.914167,
+                1.5625
+              ]
+            },
+            {
+              "kind": "isometric",
+              "view_was": "made",
+              "view_name": "3D View",
+              "view_id": 990400,
+              "view_type": "3D View",
+              "view_direction": [
+                0.57735,
+                -0.57735,
+                0.57735
+              ],
+              "scale": 48,
+              "scale_text": "1/4\" = 1'-0\"",
+              "sheet_number": "A-401",
+              "sheet_name": "3D View",
+              "sheet_id": 990401,
+              "title_block_instance_id": 990402,
+              "viewport_id": 990403,
+              "placed": true,
+              "fits": true,
+              "viewport_min_ft": [
+                0.535,
+                0.6
+              ],
+              "viewport_max_ft": [
+                2.335,
+                1.9
+              ]
+            }
+          ],
+          "views_made": 10,
+          "sheets_made": 10,
+          "placed": 10,
+          "not_made": 0,
+          "left_out": 0,
+          "note": "each sheet is printed with the model's other printable sheets into the job's sheets.pdf, in sheet-number order"
+        },
+        "seconds": 41.2
+      }
+    ],
+    "levels_after": [
+      {
+        "name": "Level 1",
+        "elevation_ft": 0.0,
+        "elevation_mm": 0.0,
+        "project_elevation_ft": 0.0,
+        "project_elevation_mm": 0.0,
+        "element_id": 311,
+        "unique_id": "made-up-level-1"
+      },
+      {
+        "name": "Level 2",
+        "elevation_ft": 10.0,
+        "elevation_mm": 3048.0,
+        "project_elevation_ft": 10.0,
+        "project_elevation_mm": 3048.0,
+        "element_id": 1240,
+        "unique_id": "made-up-level-2"
+      },
+      {
+        "name": "Roof",
+        "elevation_ft": 20.0,
+        "elevation_mm": 6096.0,
+        "project_elevation_ft": 20.0,
+        "project_elevation_mm": 6096.0,
+        "element_id": 1302,
+        "unique_id": "made-up-level-3"
+      }
+    ],
+    "element_count_total_before": 5000,
+    "element_count_total_after": 5060,
+    "exports": {
+      "model_rvt": {
+        "written": true,
+        "saved_as": "file",
+        "bytes": 1400000
+      },
+      "sheets_pdf": {
+        "written": true,
+        "sheets": 10
+      },
+      "model_ifc": {
+        "written": true,
+        "ifc_version": "IFC4DTV",
+        "base_quantities": true
+      }
+    },
+    "warnings": [],
+    "warnings_total": 0
+  }
+}
