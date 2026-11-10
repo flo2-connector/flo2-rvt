@@ -20,6 +20,13 @@
 //
 // Since add-in 0.10.0 a change may refuse itself inside its transaction (ChangeRefused: a room
 // placed where nothing encloses it), which rolls it back like an error, in its own words.
+//
+// Since add-in 0.15.0 a change may be made of PARTS (Part): a drawing set's views, each in a
+// sub-transaction of the change's own, committed into it or rolled back alone when the Revit API
+// refuses that part, so one view Revit will not make leaves the others standing and the report says
+// why. A part commits nothing to the model on its own: Revit commits sub-transactions only "when the
+// active transaction is committed" (SubTransaction.Commit, Revit 2024's API reference), so the
+// change still stands or falls whole at its own commit, and failure processing judges it there.
 
 using System;
 using System.Collections.Generic;
@@ -141,6 +148,31 @@ namespace Flo2Rvt.Addin.Edit
 
     public static class ChangeRunner
     {
+        /// <summary>
+        /// Since add-in 0.15.0: one part of a change, inside the change's own open transaction, in a
+        /// sub-transaction of its own: committed into the change when it runs through, rolled back alone
+        /// when it throws. Null when it ran through; otherwise why not (a ChangeRefused's own words, or the
+        /// exception's type and message).
+        /// </summary>
+        public static string Part(Document doc, Action part)
+        {
+            using (var sub = new SubTransaction(doc))
+            {
+                sub.Start();
+                try
+                {
+                    part();
+                }
+                catch (Exception ex)
+                {
+                    if (sub.HasStarted() && !sub.HasEnded()) sub.RollBack();
+                    return ex is ChangeRefused ? ex.Message : ex.GetType().Name + ": " + ex.Message;
+                }
+                TransactionStatus status = sub.Commit();
+                return status == TransactionStatus.Committed ? null : "Revit did not keep it (" + status + ")";
+            }
+        }
+
         /// <summary>Run one change in its own transaction: committed whole, or rolled back whole.</summary>
         public static RunResult Run(Document doc, Application app, string name, Action<Document> change)
         {

@@ -25,7 +25,10 @@
 // new_type are held to a foundation's rules (Sized); and a family file's family must be in the
 // category the change naming it needs (Logic/Foundations.cs FamilyFiles.CategoryFor: Doors for a
 // door's, Structural Foundations for a footing's or pile's), so one file named by a door and by a
-// foundation is refused here, as the server refuses it.
+// foundation is refused here, as the server refuses it. Since add-in 0.15.0, version 7's add_drawing_set
+// needs version 7; its views name each kind of view once, from the set's own (plans, elevations, sections,
+// isometric); it names levels and says what to do with an empty one only beside plans; and a list makes
+// one drawing set (Logic/DrawingSets.cs).
 //
 // PURE LOGIC: no Revit type here, so addin/tests runs it on any OS.
 
@@ -73,6 +76,8 @@ namespace Flo2Rvt.Addin.Edit.Logic
         public const long LevelsVersion = 5;
         /// <summary>The first change-list version that reads add_door's family_file, sizes and new_type (add-in 0.14.0).</summary>
         public const long DoorFamiliesVersion = 6;
+        /// <summary>The first change-list version that reads add_drawing_set (add-in 0.15.0).</summary>
+        public const long DrawingSetVersion = 7;
         /// <summary>The most sizes one foundation change may set.</summary>
         public const int MaxSizes = 16;
 
@@ -84,6 +89,7 @@ namespace Flo2Rvt.Addin.Edit.Logic
         private static readonly string[] LevelDatums = { AddLevelRelativeToValues.ProjectOrigin, AddLevelRelativeToValues.ElevationBase };
         private static readonly string[] Systems = { CoordinatesValues.Shared, CoordinatesValues.Internal };
         private static readonly string[] Joins = { WallJoinsValues.Join, WallJoinsValues.DoNotJoin };
+        private static readonly string[] EmptyLevelChoices = { EmptyLevelsValues.Include, EmptyLevelsValues.LeaveOut };
 
         public static string Sha256Hex(byte[] bytes)
         {
@@ -155,6 +161,8 @@ namespace Flo2Rvt.Addin.Edit.Logic
             private readonly List<string> familyFiles = new List<string>();
             /// <summary>Since add-in 0.14.0: each family file with the change that names it first (its index and kind): a later change needing another category is refused.</summary>
             private readonly Dictionary<string, KeyValuePair<int, string>> familyFileFirst = new Dictionary<string, KeyValuePair<int, string>>(StringComparer.Ordinal);
+            /// <summary>Since add-in 0.15.0: the change that makes the list's drawing set, once one has.</summary>
+            private int? drawingSet;
             /// <summary>Since add-in 0.13.0: each new level's name, with the change that adds it first.</summary>
             private readonly Dictionary<string, int> newLevels = new Dictionary<string, int>(StringComparer.Ordinal);
 
@@ -457,11 +465,54 @@ namespace Flo2Rvt.Addin.Edit.Logic
                             if (datum != null && Array.IndexOf(LevelDatums, datum) < 0) Fail(at + ".relative_to", "must be one of " + string.Join(", ", LevelDatums));
                         }
                         break;
+                    case ChangeKinds.AddDrawingSet:
+                        m = Object(e, at, new[] { "kind", "id", "views", "levels", "empty_levels", "title_block" }, new[] { "kind" });
+                        if (m == null) return;
+                        DrawingSet(m, at);
+                        break;
                     default:
                         Fail(at, "kind " + Quote(kind) + " is not in the vocabulary (" + string.Join(", ", ChangeKinds.All) + ")");
                         return;
                 }
                 if (m.TryGetValue("id", out x)) Text(x, at + ".id", 1, 64, IdPattern);
+            }
+
+            /// <summary>Since add-in 0.15.0: a drawing set, once in a list, its views each a kind of the set's once, its levels and empty levels only beside plans.</summary>
+            private void DrawingSet(Dictionary<string, XElement> m, string at)
+            {
+                if (version < DrawingSetVersion) Fail(at + ".kind", ChangeKinds.AddDrawingSet + " needs version " + DrawingSetVersion + "; say \"version\": " + DrawingSetVersion);
+                if (drawingSet.HasValue) Fail(at + ".kind", "a list makes one drawing set, and change " + (drawingSet.Value + 1) + " makes it already");
+                else drawingSet = current;
+                XElement x;
+                bool plans = true;
+                if (m.TryGetValue("views", out x))
+                {
+                    List<XElement> items = ArrayOf(x, at + ".views", 1, DrawingSets.Order.Length);
+                    var seen = new HashSet<string>(StringComparer.Ordinal);
+                    if (items != null)
+                    {
+                        for (int i = 0; i < items.Count; i++)
+                        {
+                            string here = at + ".views[" + i + "]";
+                            string v = Text(items[i], here, 1, 64, null);
+                            if (v == null) continue;
+                            if (Array.IndexOf(DrawingSets.Order, v) < 0) Fail(here, "must be one of " + string.Join(", ", DrawingSets.Order));
+                            else if (!seen.Add(v)) Fail(here, "names " + Quote(v) + " a second time");
+                        }
+                        plans = seen.Contains(DrawingSetViewValues.Plans);
+                    }
+                }
+                if (m.TryGetValue("levels", out x))
+                {
+                    Levels(x, at + ".levels");
+                    if (!plans) Fail(at + ".levels", "names the levels whose plans the set makes, but its views ask for no plans; add \"plans\" to views, or leave levels out");
+                }
+                if (m.TryGetValue("empty_levels", out x))
+                {
+                    OneOf(x, at + ".empty_levels", EmptyLevelChoices);
+                    if (!plans) Fail(at + ".empty_levels", "says what to do with a level nothing stands on, but its views ask for no plans; add \"plans\" to views, or leave empty_levels out");
+                }
+                if (m.TryGetValue("title_block", out x)) TypeNamed(x, at + ".title_block");
             }
 
             private void NeedsAdding(string kind, string at)

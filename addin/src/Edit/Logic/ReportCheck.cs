@@ -32,7 +32,13 @@
 //     was asked (Logic/NewLevels.cs Problems): named as asked, where it was asked to stand, a
 //     building storey with its storey's GlobalId;
 //   · (since 0.14.0) an add_door change's element is a door, and one read applied holds each size
-//     asked, its type's or its own, as Revit holds it (Logic/Foundations.cs DoorCheck).
+//     asked, its type's or its own, as Revit holds it (Logic/Foundations.cs DoorCheck);
+//   · (since 0.15.0) a kept add_drawing_set change says what its set made, and its set keeps its own
+//     invariants (Logic/DrawingSets.cs Problems): a view read made names its view and a name of its own, one
+//     not made names nothing made of it and says why, each sheet number once, a view placed names its
+//     viewport and one that fits lies within the sheet's usable area, an elevation looks at its face and a
+//     section as its cut says, its counts add up, nothing reads made of a change not kept, and its status
+//     is the one its views earn.
 //
 // The lists are read as the report lists them: past ElementTally.Cap a set is truncated, and
 // only its listed elements are checked.
@@ -131,6 +137,7 @@ namespace Flo2Rvt.Addin.Edit.Logic
             LevelMoves(r, at, found);
             Reshaped(r, deleted, at, found);
             Added(r, deleted, at, found);
+            Drew(r, at, found);
             bool delete = r.Kind == ChangeKinds.DeleteElementsOnLevel || r.Kind == ChangeKinds.DeleteElementsByGlobalId;
             if (delete && ChangeStatus.Kept(r.Status))
             {
@@ -203,6 +210,22 @@ namespace Flo2Rvt.Addin.Edit.Logic
                 Leveled(r, e, at, found);
                 Doored(r, e, at, found);
             }
+        }
+
+        /// <summary>Since add-in 0.15.0: a drawing set change says what its set made, and the set keeps its invariants.</summary>
+        private static void Drew(ChangeReport r, string at, List<string> found)
+        {
+            if (r.Kind != ChangeKinds.AddDrawingSet)
+            {
+                if (r.DrawingSet != null) found.Add(at + "says it made a drawing set, though it is a " + r.Kind + " change");
+                return;
+            }
+            if (r.DrawingSet == null)
+            {
+                if (ChangeStatus.Kept(r.Status)) found.Add(at + "reads " + r.Status + " but says nothing of the drawing set it made");
+                return;
+            }
+            foreach (string p in DrawingSets.Problems(r.DrawingSet, r.Status)) found.Add(at + p);
         }
 
         /// <summary>Since add-in 0.14.0: an add_door change's element is a door, and all that was asked of its sizes when it reads applied.</summary>

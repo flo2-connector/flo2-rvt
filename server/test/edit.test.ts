@@ -123,6 +123,39 @@ describe('an edit that moves levels together', () => {
   });
 });
 
+// Since contract v8 (flo2-rvt 0.16.0, change-list version 7): a drawing set travels in the list like any
+// change; it names no family file, so nothing but the model and the list is uploaded.
+describe('an edit that makes a drawing set', () => {
+  let h: Harness;
+  before(async () => {
+    h = await startHarness();
+  });
+  after(() => h.close());
+
+  test('a version 7 list with add_drawing_set is uploaded as it was approved, with no family file', async () => {
+    const list = {
+      version: 7,
+      list_id: 'drawing-set-1',
+      changes: [{ kind: 'add_drawing_set', id: 'ds1', views: ['plans', 'elevations'], levels: [{ level_name: 'Level 1' }, { level_name: 'Level 2' }], empty_levels: 'leave_out' }],
+    };
+    const r = await call(h, 'rvt_edit_start', { file: 'rac_basic_sample_project.rvt', change_list: list }, jobMeta(h.aps));
+    const out = r.result?.structuredContent as { job_id: string; state: string; change_list_sha256: string; family_files?: unknown };
+    assert.equal(out.state, 'submitted', JSON.stringify(r));
+    assert.equal(out.family_files, undefined, 'a drawing set loads nothing');
+    const bucket = `flo2rvt-${CLIENT_ID.toLowerCase()}-t`;
+    const uploaded = h.aps.objects.get(`${bucket}/${out.job_id}/changes.json`);
+    assert.equal(uploaded?.bytes.toString('utf8'), canonicalJson(list));
+    assert.equal(out.change_list_sha256, sha(uploaded!.bytes));
+  });
+
+  test('a version 6 list that makes a drawing set starts nothing, and Autodesk is never asked', async () => {
+    const before = h.aps.workItems.length;
+    const r = await call(h, 'rvt_edit_start', { file: 'rac_basic_sample_project.rvt', change_list: { version: 6, changes: [{ kind: 'add_drawing_set' }] } }, jobMeta(h.aps));
+    assert.match(refusal(r), /add_drawing_set needs version 7; say "version": 7/);
+    assert.equal(h.aps.workItems.length, before);
+  });
+});
+
 describe('an edit from start to success', () => {
   let h: Harness;
   let clock = Date.parse('2023-07-26T02:46:05Z');
@@ -499,6 +532,31 @@ describe("an edit's report summary", () => {
     assert.deepEqual(doors.map((c) => c.added?.[0]?.door?.new_type_was), ['copied', 'copied', 'held'], 'the third door placed the first copy again');
     assert.deepEqual(report.families.map((x) => [x.family_file, x.was, x.category_needed]), [['Single-Flush.rfa', 'loaded', 'Doors'], ['Footing-Rectangular.rfa', 'not_loaded', 'Doors']]);
     assert.match(String(report.changes.find((c) => c.id === 'd4')?.why), /in the category Structural Foundations, not Doors/);
+  });
+
+  // Since add-in 0.15.0 a list may make a drawing set (change-list version 7); the made-up report flo2
+  // reads names, per view, the sheet it is on, its scale and where its viewport sits on the sheet.
+  test('from a report of add-in 0.15.0, counts the sheets a drawing set added, and each view says its sheet, its scale and that it fits', () => {
+    const f = fixture('sample-edit-report-drawing-set.json');
+    const report = f.report as { edit: { addin_version: string }; exports: { sheets_pdf: { sheets: number } }; changes: Array<{ kind: string; status: string; drawing_set?: Record<string, unknown> }> };
+    const s = editSummary(report as unknown as Record<string, unknown>);
+    assert.equal(s.sheets_added, 10, 'three plans, four elevations, two sections and a 3D view');
+    assert.equal(s.elements_added, 0, 'a drawing set adds no building content');
+    assert.equal(s.outcome, 'all_applied');
+    assert.ok(EditSummary.safeParse(s).success, 'in the contract');
+    assert.equal(report.edit.addin_version, '0.15.0');
+    assert.equal(report.exports.sheets_pdf.sheets, 10, "the job's sheets.pdf prints them");
+    const set = report.changes[0]?.drawing_set as { sheets: Array<Record<string, unknown>>; sheet_area: { usable_min_ft: number[]; usable_max_ft: number[] } };
+    assert.deepEqual(set.sheets.map((x) => x.sheet_number), ['A-101', 'A-102', 'A-103', 'A-201', 'A-202', 'A-203', 'A-204', 'A-301', 'A-302', 'A-401']);
+    assert.deepEqual(set.sheets.filter((x) => x.kind === 'elevations').map((x) => [x.facing, x.looking]), [['north', 'south'], ['east', 'west'], ['south', 'north'], ['west', 'east']]);
+    const [lo, hi] = [set.sheet_area.usable_min_ft, set.sheet_area.usable_max_ft] as [number[], number[]];
+    for (const x of set.sheets) {
+      assert.equal(x.view_was, 'made');
+      assert.equal(x.placed, true);
+      assert.equal(x.fits, true);
+      const [a, b] = [x.viewport_min_ft as number[], x.viewport_max_ft as number[]];
+      assert.ok(a[0]! >= lo[0]! && a[1]! >= lo[1]! && b[0]! <= hi[0]! && b[1]! <= hi[1]!, `${String(x.sheet_number)} sits inside the sheet's usable area`);
+    }
   });
 
   test('from a version-1 report (add-in 0.2.0), reads as before, without the counts it did not keep', () => {

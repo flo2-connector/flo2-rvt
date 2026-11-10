@@ -220,7 +220,7 @@
       "schema": false,
       "accepted": false,
       "list": {
-        "version": 7,
+        "version": 8,
         "list_id": "sample-1",
         "description": "Made-up changes to a public sample model.",
         "changes": [
@@ -6424,6 +6424,440 @@
               "value": 0,
               "unit": "mm"
             }
+          }
+        ]
+      }
+    },
+    {
+      "why": "version 7: a drawing set of every view: a floor plan of every level, the four elevations, two sections through the middle and a 3D view, each on a numbered sheet with the model's first title block",
+      "schema": true,
+      "accepted": true,
+      "list": {
+        "version": 7,
+        "changes": [
+          {
+            "kind": "add_drawing_set",
+            "id": "ds1"
+          }
+        ]
+      }
+    },
+    {
+      "why": "version 7: a drawing set of plans alone, of two levels named by name and by storey GlobalId, leaving out a level nothing stands on, on sheets with a title block named by family and type",
+      "schema": true,
+      "accepted": true,
+      "list": {
+        "version": 7,
+        "changes": [
+          {
+            "kind": "add_drawing_set",
+            "id": "ds1",
+            "views": [
+              "plans"
+            ],
+            "levels": [
+              {
+                "level_name": "Level 1"
+              },
+              {
+                "global_id": "3cUkl32yn9qRSPvBJVyWYp"
+              }
+            ],
+            "empty_levels": "leave_out",
+            "title_block": {
+              "family": "E1 30 x 42 Horizontal",
+              "type": "E1 30x42 Horizontal"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "version 7: a drawing set after the changes it draws: two new levels and a wall between them, then the elevations, the sections and a 3D view",
+      "schema": true,
+      "accepted": true,
+      "list": {
+        "version": 7,
+        "changes": [
+          {
+            "kind": "add_level",
+            "id": "l1",
+            "name": "Ground Floor",
+            "elevation": {
+              "value": 0,
+              "unit": "ft"
+            },
+            "relative_to": "project_origin"
+          },
+          {
+            "kind": "add_level",
+            "id": "l2",
+            "name": "Level 2",
+            "elevation": {
+              "value": 10,
+              "unit": "ft"
+            },
+            "relative_to": "project_origin"
+          },
+          {
+            "kind": "add_wall",
+            "id": "w1",
+            "level": {
+              "level_name": "Ground Floor"
+            },
+            "start": {
+              "x": 0,
+              "y": 0,
+              "unit": "ft"
+            },
+            "end": {
+              "x": 40,
+              "y": 0,
+              "unit": "ft"
+            },
+            "coordinates": "internal",
+            "wall_type": {
+              "family": "Basic Wall",
+              "type": "Generic - 8\""
+            },
+            "top": {
+              "top_level": {
+                "level_name": "Level 2"
+              }
+            }
+          },
+          {
+            "kind": "add_drawing_set",
+            "id": "ds1",
+            "views": [
+              "elevations",
+              "sections",
+              "isometric"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "why": "version 7 reads a list of version 6's vocabulary as it did",
+      "schema": true,
+      "accepted": true,
+      "list": {
+        "version": 7,
+        "list_id": "doors-1",
+        "description": "Made-up: three swing doors from a door family file, sized as two new types, in a new wall.",
+        "changes": [
+          {
+            "kind": "add_wall",
+            "id": "w1",
+            "level": {
+              "level_name": "Level 1"
+            },
+            "start": {
+              "x": 0,
+              "y": 0,
+              "unit": "mm"
+            },
+            "end": {
+              "x": 6000,
+              "y": 0,
+              "unit": "mm"
+            },
+            "coordinates": "internal",
+            "wall_type": {
+              "family": "Basic Wall",
+              "type": "Generic - 200mm"
+            },
+            "top": {
+              "height": {
+                "value": 3000,
+                "unit": "mm"
+              }
+            }
+          },
+          {
+            "kind": "add_door",
+            "id": "d1",
+            "host": {
+              "wall_change": "w1"
+            },
+            "point": {
+              "x": 1500,
+              "y": 0,
+              "unit": "mm"
+            },
+            "coordinates": "internal",
+            "door_type": {
+              "family": "Single-Flush",
+              "type": "36\" x 84\""
+            },
+            "family_file": "Single-Flush.rfa",
+            "sizes": {
+              "Width": {
+                "value": 36,
+                "unit": "in"
+              },
+              "Height": {
+                "value": 80,
+                "unit": "in"
+              }
+            },
+            "new_type": "36\" x 80\""
+          },
+          {
+            "kind": "add_door",
+            "id": "d2",
+            "host": {
+              "wall_change": "w1"
+            },
+            "point": {
+              "x": 4000,
+              "y": 0,
+              "unit": "mm"
+            },
+            "coordinates": "internal",
+            "door_type": {
+              "family": "Single-Flush",
+              "type": "36\" x 84\""
+            },
+            "family_file": "Single-Flush.rfa",
+            "sizes": {
+              "Width": {
+                "value": 32,
+                "unit": "in"
+              },
+              "Height": {
+                "value": 80,
+                "unit": "in"
+              }
+            },
+            "new_type": "32\" x 80\""
+          },
+          {
+            "kind": "add_door",
+            "id": "d3",
+            "host": {
+              "wall_change": "w1"
+            },
+            "point": {
+              "x": 5200,
+              "y": 0,
+              "unit": "mm"
+            },
+            "coordinates": "internal",
+            "door_type": {
+              "family": "Single-Flush",
+              "type": "36\" x 84\""
+            },
+            "family_file": "Single-Flush.rfa",
+            "sizes": {
+              "Width": {
+                "value": 36,
+                "unit": "in"
+              },
+              "Height": {
+                "value": 80,
+                "unit": "in"
+              }
+            },
+            "new_type": "36\" x 80\""
+          }
+        ]
+      }
+    },
+    {
+      "why": "version 6 naming add_drawing_set, which needs version 7",
+      "schema": true,
+      "accepted": false,
+      "list": {
+        "version": 6,
+        "changes": [
+          {
+            "kind": "add_drawing_set",
+            "id": "ds1"
+          }
+        ]
+      }
+    },
+    {
+      "why": "a drawing set that names the levels whose plans it makes, but asks for no plans",
+      "schema": true,
+      "accepted": false,
+      "list": {
+        "version": 7,
+        "changes": [
+          {
+            "kind": "add_drawing_set",
+            "id": "ds1",
+            "views": [
+              "elevations",
+              "sections"
+            ],
+            "levels": [
+              {
+                "level_name": "Level 1"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "why": "a drawing set that says what to do with a level nothing stands on, but asks for no plans",
+      "schema": true,
+      "accepted": false,
+      "list": {
+        "version": 7,
+        "changes": [
+          {
+            "kind": "add_drawing_set",
+            "id": "ds1",
+            "views": [
+              "isometric"
+            ],
+            "empty_levels": "leave_out"
+          }
+        ]
+      }
+    },
+    {
+      "why": "two drawing sets in one list",
+      "schema": true,
+      "accepted": false,
+      "list": {
+        "version": 7,
+        "changes": [
+          {
+            "kind": "add_drawing_set",
+            "id": "ds1",
+            "views": [
+              "plans"
+            ]
+          },
+          {
+            "kind": "add_drawing_set",
+            "id": "ds2",
+            "views": [
+              "elevations"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "why": "a drawing set asking for a kind of view outside the set",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 7,
+        "changes": [
+          {
+            "kind": "add_drawing_set",
+            "id": "ds1",
+            "views": [
+              "plans",
+              "roof_plans"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "why": "a drawing set naming one kind of view twice",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 7,
+        "changes": [
+          {
+            "kind": "add_drawing_set",
+            "id": "ds1",
+            "views": [
+              "plans",
+              "plans"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "why": "a drawing set asking for no view at all",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 7,
+        "changes": [
+          {
+            "kind": "add_drawing_set",
+            "id": "ds1",
+            "views": []
+          }
+        ]
+      }
+    },
+    {
+      "why": "a drawing set whose empty_levels is outside the set",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 7,
+        "changes": [
+          {
+            "kind": "add_drawing_set",
+            "id": "ds1",
+            "empty_levels": "skip"
+          }
+        ]
+      }
+    },
+    {
+      "why": "a drawing set with a scale, a key the schema does not name",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 7,
+        "changes": [
+          {
+            "kind": "add_drawing_set",
+            "id": "ds1",
+            "scale": 100
+          }
+        ]
+      }
+    },
+    {
+      "why": "a drawing set naming one level twice",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 7,
+        "changes": [
+          {
+            "kind": "add_drawing_set",
+            "id": "ds1",
+            "levels": [
+              {
+                "level_name": "Level 1"
+              },
+              {
+                "level_name": "Level 1"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "why": "a drawing set whose title block is given as text, not by type and family",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 7,
+        "changes": [
+          {
+            "kind": "add_drawing_set",
+            "id": "ds1",
+            "title_block": "E1 30x42 Horizontal"
           }
         ]
       }

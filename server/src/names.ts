@@ -39,12 +39,13 @@ export const BUNDLE_FILE = 'Flo2RvtProbe.bundle.zip';
  * names out of the model as .rfa files, 0.13.0 a new model made from Revit's own project or a template
  * file and filled in one job, and add_level, 0.13.1 a footing or pile placed by its top as Revit
  * holds it, and the IFC class of every footing set as a pile's, 0.14.0 a door from a door family file
- * the design keeps, sized as a new type copied from the named one), and it is what a person's app must carry
+ * the design keeps, sized as a new type copied from the named one, 0.15.0 a drawing set: a floor plan of
+ * every level, the four elevations, two sections and a 3D view, each on a numbered sheet), and it is what a person's app must carry
  * for a job to run there: a setup writes it into the AppBundle's and each Activity's
  * description, and a job's check reads it back (server/src/setup.ts). It is not the bundle's
  * sha256, which changes with every CI build of the same add-in.
  */
-export const ADDIN_VERSION = '0.14.0';
+export const ADDIN_VERSION = '0.15.0';
 
 /** What a setup ends each description with, so a check can read which add-in an Activity runs. */
 export function setupMark(addinVersion = ADDIN_VERSION): string {
