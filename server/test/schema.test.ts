@@ -88,7 +88,10 @@ test('the C# types and their schema hash are generated from the schema as it is 
   assert.equal(readFileSync(new URL('../../addin/Generated/change-list.schema.sha256', import.meta.url), 'utf8').trim(), sha);
   for (const kind of ['delete_elements_on_level', 'delete_elements_by_global_id', 'set_level_elevation', 'move_levels_together']) assert.ok(cs.includes(`"${kind}"`));
   assert.ok(cs.includes('public static class GroupsInTheWayValues'), 'groups_in_the_way\'s values, for the add-in');
-  assert.ok(cs.includes('public static readonly long[] VersionValues = { 0, 1, 2, 3, 4, 5, 6, 7 };'), 'the versions this schema reads');
+  assert.ok(cs.includes('public static readonly long[] VersionValues = { 0, 1, 2, 3, 4, 5, 6, 7, 8 };'), 'the versions this schema reads');
+  // Since version 8: the room schedule, a kind of the set's, for the add-in.
+  assert.ok(cs.includes('public const string RoomSchedule = "room_schedule";'), "a drawing set's room schedule, for the add-in");
+  assert.ok(cs.includes('public const string Cover = "cover";'), "and its cover");
   // Since version 7: a drawing set, its views by kind and its options, for the add-in.
   const drawingSet = /public sealed partial class AddDrawingSet\b[\s\S]*?\n {4}\}\n/.exec(cs)?.[0] ?? '';
   for (const field of ['public List<string> Views { get; set; }', 'public List<LevelReference> Levels { get; set; }', 'public string EmptyLevels { get; set; }', 'public TypeName TitleBlock { get; set; }']) assert.ok(drawingSet.includes(field), `a drawing set's ${field}, for the add-in`);
@@ -345,7 +348,7 @@ test("the schema says what a drawing set makes, how its sheets are numbered, whi
   const set = defs.AddDrawingSet;
   const said = String(set?.description);
   for (const words of [/a floor plan of every level/, /the four elevations/, /two sections through the middle of the building/, /a 3D view/, /A-101/, /A-201 to A-204/, /A-301 and A-302/, /A-401/, /the first title block the model holds/, /no title block/, /a scale chosen to fit/, /sheets\.pdf/, /Needs change-list version 7/]) assert.match(said, words);
-  assert.deepEqual(defs.DrawingSetView?.enum, ['plans', 'elevations', 'sections', 'isometric']);
+  assert.deepEqual(defs.DrawingSetView?.enum, ['plans', 'elevations', 'sections', 'isometric', 'room_schedule', 'cover'], "the set's kinds, since version 8 its room schedule and its cover last");
   assert.deepEqual(defs.EmptyLevels?.enum, ['include', 'leave_out']);
   assert.equal(set?.properties?.views?.items?.$ref, '#/$defs/DrawingSetView');
   assert.equal(set?.properties?.levels?.items?.$ref, '#/$defs/LevelReference');
@@ -353,4 +356,46 @@ test("the schema says what a drawing set makes, how its sheets are numbered, whi
   assert.equal(set?.properties?.empty_levels?.$ref, '#/$defs/EmptyLevels');
   const version = schema.properties as Record<string, { description?: string }>;
   assert.match(String(version.version?.description), /Version 7 \(flo2-rvt 0\.16\.0, add-in 0\.15\.0\) adds add_drawing_set/);
+});
+
+// Since flo2-rvt 0.17.0 (change-list version 8): the owner settled that a drawing set also tags every plan's
+// rooms and holds a room schedule and a cover, each on a sheet of its own. A version 8 set that says nothing makes
+// both too and tags its plans' rooms; room_schedule and cover need version 8; and a version 7 list's set is as it was.
+test('version 8: a drawing set that names room_schedule or cover says version 8, a version 7 set is as it was, and each rule beside the schema says where and why', () => {
+  const set = { kind: 'add_drawing_set', id: 'ds1' };
+  const why = (list: unknown) => {
+    const r = checkChangeList(list);
+    return r.ok ? '' : r.errors.join(' | ');
+  };
+  assert.match(why({ version: 7, changes: [{ ...set, views: ['plans', 'room_schedule'] }] }), /changes\.0\.views\.1: room_schedule needs version 8; say "version": 8/);
+  assert.match(why({ version: 6, changes: [{ ...set, views: ['room_schedule'] }] }), /changes\.0\.kind: add_drawing_set needs version 7; say "version": 7/, 'below version 7, the set itself is refused first');
+  assert.match(
+    why({ version: 8, changes: [{ ...set, views: ['room_schedule'], levels: [{ level_name: 'Level 1' }] }] }),
+    /changes\.0\.levels: names the levels whose plans the set makes, but its views ask for no plans; add "plans" to views, or leave levels out/,
+    'a room schedule is no plan: levels only beside plans',
+  );
+  assert.ok(checkChangeList({ version: 8, changes: [set] }).ok, 'a version 8 set that says nothing makes every view, the room schedule among them');
+  assert.ok(checkChangeList({ version: 8, changes: [{ ...set, views: ['room_schedule'] }] }).ok, 'the room schedule alone');
+  assert.ok(checkChangeList({ version: 8, changes: [{ ...set, views: ['plans', 'elevations', 'sections', 'isometric', 'room_schedule', 'cover'] }] }).ok, 'all six kinds, named');
+  assert.match(why({ version: 7, changes: [{ ...set, views: ['cover', 'plans'] }] }), /changes\.0\.views\.0: cover needs version 8; say "version": 8/);
+  assert.match(why({ version: 7, changes: [{ ...set, views: ['room_schedule', 'cover'] }] }), /changes\.0\.views\.0: room_schedule needs version 8[^|]*\| changes\.0\.views\.1: cover needs version 8/, 'each named, each refused');
+  assert.ok(checkChangeList({ version: 8, changes: [{ ...set, views: ['cover'] }] }).ok, 'the cover alone');
+  assert.match(why({ version: 8, changes: [{ ...set, views: ['cover'], empty_levels: 'include' }] }), /changes\.0\.empty_levels: says what to do with a level nothing stands on, but its views ask for no plans/, 'a cover is no plan');
+  assert.ok(checkChangeList({ version: 7, changes: [set] }).ok, "a version 7 set that says nothing still reads, and makes version 7's set");
+  assert.ok(checkChangeList({ version: 7, changes: [{ ...set, views: ['plans', 'isometric'] }] }).ok, 'and one that names version 7 kinds');
+});
+
+test("the schema says a version 8 set's plans tag their rooms and its room schedule goes on A-601, a series of its own, split side by side when it is taller than the sheet", () => {
+  const defs = schema.$defs as Record<string, { description?: string; properties?: Record<string, { description?: string; maxItems?: number }> }>;
+  const kinds = String(defs.DrawingSetView?.description);
+  for (const words of [/room_schedule \(since change-list version 8\)/, /Level, Number, Name and Area/, /sorted by level then number/, /grand total row of the count and the area/, /A-601/, /sheet type 6, schedules/, /top-left of the sheet's usable area/, /fewest segments that each fit its height, placed side by side/, /A model that holds no room still gets its schedule/]) assert.match(kinds, words);
+  const set = String(defs.AddDrawingSet?.description);
+  for (const words of [/Since change-list version 8 a set's plans also tag their rooms/, /the model's default room tag type/, /a tag Revit refuses is counted out/, /a room schedule on A-601 \(room_schedule\)/, /a cover on A-001 \(cover: a sheet index of every sheet the model holds and a note saying what the set is\), which sheets\.pdf prints first/, /A set of a version 7 list is as it always was: no room tag, no room schedule and no cover/, /its room tags, room schedule and cover, version 8/]) assert.match(set, words);
+  for (const words of [/cover \(since change-list version 8\): a cover sheet, A-001/, /sheet type 0, the general sheets/, /which sheets\.pdf prints first/, /ViewSchedule\.CreateSheetList/, /named Sheet Index, of every sheet the model holds by its number and name, sorted by number/, /split side by side as the room schedule is/, /not for permit or construction/, /The cover is made last, so its index lists every sheet the set made/, /A model that holds no text note type still gets its cover, without the note, saying why/]) assert.match(kinds, words);
+  assert.equal(defs.AddDrawingSet?.properties?.views?.maxItems, 6, 'six kinds, each once');
+  assert.match(String(defs.AddDrawingSet?.properties?.views?.description), /room_schedule and cover need version 8/);
+  const version = schema.properties as Record<string, { description?: string; enum?: number[] }>;
+  assert.deepEqual(version.version?.enum, [0, 1, 2, 3, 4, 5, 6, 7, 8]);
+  assert.match(String(version.version?.description), /Version 8 \(flo2-rvt 0\.17\.0, add-in 0\.16\.0\) adds a drawing set's room tags, room schedule and cover/);
+  assert.match(String(version.version?.description), /every list of version 7 reads as it did, its drawing set with no room tag, no room schedule and no cover/);
 });

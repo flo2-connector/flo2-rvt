@@ -154,6 +154,33 @@ describe('an edit that makes a drawing set', () => {
     assert.match(refusal(r), /add_drawing_set needs version 7; say "version": 7/);
     assert.equal(h.aps.workItems.length, before);
   });
+
+  // Since contract v9 (flo2-rvt 0.17.0, change-list version 8): a set's plans tag their rooms and it may hold a
+  // room schedule, which travels in the list as any view kind does, and needs version 8.
+  test('a version 8 list whose drawing set names the room schedule is uploaded as it was approved, with no family file', async () => {
+    const list = {
+      version: 8,
+      list_id: 'rooms-in-the-set-1',
+      changes: [{ kind: 'add_drawing_set', id: 'ds1', views: ['plans', 'room_schedule'], levels: [{ level_name: 'Level 1' }] }],
+    };
+    const r = await call(h, 'rvt_edit_start', { file: 'rac_basic_sample_project.rvt', change_list: list }, jobMeta(h.aps));
+    const out = r.result?.structuredContent as { job_id: string; state: string; change_list_sha256: string; family_files?: unknown };
+    assert.equal(out.state, 'submitted', JSON.stringify(r));
+    assert.equal(out.family_files, undefined, 'a room schedule loads nothing');
+    const bucket = `flo2rvt-${CLIENT_ID.toLowerCase()}-t`;
+    const uploaded = h.aps.objects.get(`${bucket}/${out.job_id}/changes.json`);
+    assert.equal(uploaded?.bytes.toString('utf8'), canonicalJson(list));
+    assert.equal(out.change_list_sha256, sha(uploaded!.bytes));
+  });
+
+  test('a version 7 list whose drawing set names the room schedule or the cover starts nothing, and Autodesk is never asked', async () => {
+    const before = h.aps.workItems.length;
+    const r = await call(h, 'rvt_edit_start', { file: 'rac_basic_sample_project.rvt', change_list: { version: 7, changes: [{ kind: 'add_drawing_set', views: ['plans', 'room_schedule'] }] } }, jobMeta(h.aps));
+    assert.match(refusal(r), /changes\.0\.views\.1: room_schedule needs version 8; say "version": 8/);
+    const c = await call(h, 'rvt_edit_start', { file: 'rac_basic_sample_project.rvt', change_list: { version: 7, changes: [{ kind: 'add_drawing_set', views: ['cover'] }] } }, jobMeta(h.aps));
+    assert.match(refusal(c), /changes\.0\.views\.0: cover needs version 8; say "version": 8/);
+    assert.equal(h.aps.workItems.length, before);
+  });
 });
 
 describe('an edit from start to success', () => {
@@ -535,19 +562,21 @@ describe("an edit's report summary", () => {
   });
 
   // Since add-in 0.15.0 a list may make a drawing set (change-list version 7); the made-up report flo2
-  // reads names, per view, the sheet it is on, its scale and where its viewport sits on the sheet.
-  test('from a report of add-in 0.15.2, counts the sheets a drawing set added, and each view says its sheet, its scale and that it fits', () => {
+  // reads names, per view, the sheet it is on, its scale and where its viewport sits on the sheet. Since add-in
+  // 0.16.0 it is a version-8 list's set, the room schedule's sheet among them.
+  test('from a report of add-in 0.16.0, counts the sheets a drawing set added, and each view says its sheet, its scale and that it fits', () => {
     const f = fixture('sample-edit-report-drawing-set.json');
     const report = f.report as { edit: { addin_version: string }; exports: { sheets_pdf: { sheets: number } }; changes: Array<{ kind: string; status: string; drawing_set?: Record<string, unknown> }> };
     const s = editSummary(report as unknown as Record<string, unknown>);
-    assert.equal(s.sheets_added, 10, 'three plans, four elevations, two sections and a 3D view');
+    assert.equal(s.sheets_added, 12, 'three plans, four elevations, two sections, a 3D view, the room schedule and the cover');
     assert.equal(s.elements_added, 0, 'a drawing set adds no building content');
     assert.equal(s.outcome, 'all_applied');
     assert.ok(EditSummary.safeParse(s).success, 'in the contract');
-    assert.equal(report.edit.addin_version, '0.15.2');
-    assert.equal(report.exports.sheets_pdf.sheets, 10, "the job's sheets.pdf prints them");
+    assert.equal(report.edit.addin_version, '0.16.0');
+    assert.equal(report.exports.sheets_pdf.sheets, 12, "the job's sheets.pdf prints them");
+    assert.equal((f.change_list as { version: number }).version, 8, 'of a version 8 list');
     const set = report.changes[0]?.drawing_set as { sheets: Array<Record<string, unknown>>; sheet_area: { usable_min_ft: number[]; usable_max_ft: number[] } };
-    assert.deepEqual(set.sheets.map((x) => x.sheet_number), ['A-101', 'A-102', 'A-103', 'A-201', 'A-202', 'A-203', 'A-204', 'A-301', 'A-302', 'A-401']);
+    assert.deepEqual(set.sheets.map((x) => x.sheet_number), ['A-101', 'A-102', 'A-103', 'A-201', 'A-202', 'A-203', 'A-204', 'A-301', 'A-302', 'A-401', 'A-601', 'A-001'], 'in the order the set makes them: the cover last, though its sheet prints first');
     assert.deepEqual(set.sheets.filter((x) => x.kind === 'elevations').map((x) => [x.facing, x.looking]), [['north', 'south'], ['east', 'west'], ['south', 'north'], ['west', 'east']]);
     const [lo, hi] = [set.sheet_area.usable_min_ft, set.sheet_area.usable_max_ft] as [number[], number[]];
     for (const x of set.sheets) {
@@ -567,7 +596,7 @@ describe("an edit's report summary", () => {
   // (`building_elements_seen`, which flo2 reads); its far clip and crop are raw readings, and each elevation
   // gives the view plane its crop and depth were set from, its crop region read back, and Revit's readings of
   // it as made, cropped, far clipped and placed.
-  test("from a report of add-in 0.15.2, each elevation and section says how many of the building's elements Revit shows in it, its far clip and crop as raw readings, and each section looks the way its cut says", () => {
+  test("from a report of add-in 0.16.0, each elevation and section says how many of the building's elements Revit shows in it, its far clip and crop as raw readings, and each section looks the way its cut says", () => {
     const f = fixture('sample-edit-report-drawing-set.json');
     const report = f.report as { changes: Array<{ drawing_set?: { building: { min_ft: number[]; max_ft: number[]; elements: number }; sheets: Array<Record<string, unknown>> } }> };
     const set = report.changes[0]!.drawing_set!;
@@ -609,10 +638,82 @@ describe("an edit's report summary", () => {
       [['east_west', 'north', [0, -1, 0], 0], ['north_south', 'east', [-1, 0, 0], 0]],
       "each section looks the way its cut says, Revit's view direction toward the viewer, its cut through the middle",
     );
-    for (const x of set.sheets.filter((s) => s.kind === 'plans' || s.kind === 'isometric')) {
+    for (const x of set.sheets.filter((s) => s.kind === 'plans' || s.kind === 'isometric' || s.kind === 'room_schedule' || s.kind === 'cover')) {
       const at = String(x.sheet_number);
-      assert.ok(x.far_clip_ft === undefined && x.building_elements_seen === undefined && x.readings === undefined, `${at} looks down or around, and says no far clip, count or readings`);
+      assert.ok(x.far_clip_ft === undefined && x.building_elements_seen === undefined && x.readings === undefined, `${at} looks down or around, or is a schedule, and says no far clip, count or readings`);
     }
+  });
+
+  // Since add-in 0.16.0 (change-list version 8): the owner settled that a set tags every plan's rooms and holds a
+  // room schedule. flo2 reads, per plan, how many rooms are placed on its level and how many it tagged, and for the
+  // room schedule its sheet, its segments on it and how many rooms it lists.
+  test("from a report of add-in 0.16.0, each plan says how many rooms are placed on its level and how many it tagged, and the room schedule its sheet, its segments and the rooms it lists", () => {
+    const f = fixture('sample-edit-report-drawing-set.json');
+    const report = f.report as { changes: Array<{ drawing_set?: Record<string, unknown> & { sheets: Array<Record<string, unknown>>; sheet_area: { usable_min_ft: number[]; usable_max_ft: number[] } } }> };
+    const set = report.changes[0]!.drawing_set!;
+    assert.deepEqual(set.views_asked, ['plans', 'elevations', 'sections', 'isometric', 'room_schedule', 'cover'], 'a version 8 set that says nothing asks for the room schedule and the cover too');
+    assert.equal(set.tags_rooms, true, 'its plans tag their rooms');
+    assert.deepEqual(set.room_tag_type, { family: 'Room Tag', type: 'Room Tag', type_id: 4700 });
+    assert.equal(set.room_tag_type_was, 'default', "the model's default room tag type");
+    const plans = set.sheets.filter((x) => x.kind === 'plans');
+    assert.deepEqual(plans.map((x) => [x.level, x.rooms_on_level, x.rooms_tagged]), [['Level 1', 3, 3], ['Level 2', 2, 2], ['Roof', 0, 0]], 'every placed room on each level tagged; none on the roof');
+    for (const x of plans) {
+      assert.ok(Number(x.rooms_tagged) <= Number(x.rooms_on_level), `${String(x.sheet_number)} tags no more rooms than are on its level`);
+      assert.equal(x.rooms_why, undefined, `${String(x.sheet_number)} tags every one, so says no why`);
+    }
+    for (const x of set.sheets.filter((s) => s.kind !== 'plans')) assert.ok(x.rooms_on_level === undefined && x.rooms_tagged === undefined, `${String(x.sheet_number)} is no plan, and tags no room`);
+    const schedule = set.sheets.filter((x) => x.kind === 'room_schedule');
+    assert.equal(schedule.length, 1, 'one room schedule');
+    const rs = schedule[0]!;
+    assert.equal(rs.sheet_number, 'A-601', 'on a sheet of its own, in a series of its own');
+    assert.equal(rs.view_name, 'Room Schedule');
+    assert.equal(rs.sheet_name, 'Room Schedule');
+    assert.deepEqual(rs.schedule_fields, ['Level', 'Number', 'Name', 'Area']);
+    assert.equal(rs.view_was, 'made');
+    assert.equal(rs.placed, true);
+    assert.equal(rs.fits, true);
+    assert.equal(rs.segments, 1, 'not split: it fits the sheet whole');
+    assert.equal(rs.rooms_scheduled, 5, 'it lists the five rooms');
+    assert.ok(rs.scale === undefined && rs.scale_text === undefined && rs.viewport_id === undefined && rs.crop_min_ft === undefined, 'a schedule has no scale, viewport or crop of the set\'s');
+    const segments = rs.schedule_segments as Array<{ segment: number; instance_id: number; min_ft: number[]; max_ft: number[] }>;
+    assert.deepEqual(segments.map((x) => x.segment), [0]);
+    assert.ok(segments.every((x) => Number.isInteger(x.instance_id) && x.instance_id > 0), 'each segment by its schedule instance');
+    const [lo, hi] = [set.sheet_area.usable_min_ft, set.sheet_area.usable_max_ft] as [number[], number[]];
+    const seg = segments[0]!;
+    assert.deepEqual([seg.min_ft[0], seg.max_ft[1]], [lo[0], hi[1]], "its top-left at the usable area's");
+    assert.deepEqual([rs.viewport_min_ft, rs.viewport_max_ft], [seg.min_ft, seg.max_ft], 'the box of all its segments is the one segment');
+  });
+
+  // Since add-in 0.16.0 (change-list version 8): the owner added a cover. flo2 reads its sheet, its sheet index's
+  // segments, how many sheets the index lists, and whether its note was placed, with why when not.
+  test('from a report of add-in 0.16.0, the cover says its sheet A-001, its sheet index, the sheets it lists and its note', () => {
+    const f = fixture('sample-edit-report-drawing-set.json');
+    const report = f.report as { changes: Array<{ drawing_set?: { sheets: Array<Record<string, unknown>>; sheet_area: { usable_min_ft: number[]; usable_max_ft: number[] } } }> };
+    const set = report.changes[0]!.drawing_set!;
+    const covers = set.sheets.filter((x) => x.kind === 'cover');
+    assert.equal(covers.length, 1, 'one cover');
+    const cover = covers[0]!;
+    assert.equal(set.sheets.at(-1), cover, 'made last, so its index lists every sheet the set made');
+    assert.equal(cover.sheet_number, 'A-001', 'a series of its own, which sheets.pdf prints first');
+    assert.equal(cover.sheet_name, 'Cover Sheet');
+    assert.equal(cover.view_name, 'Sheet Index', 'the view its entry names is its sheet index');
+    assert.deepEqual(cover.schedule_fields, ['Sheet Number', 'Sheet Name']);
+    assert.equal(cover.view_was, 'made');
+    assert.equal(cover.placed, true);
+    assert.equal(cover.fits, true);
+    assert.equal(cover.segments, 1);
+    assert.equal(cover.sheets_listed, set.sheets.filter((x) => typeof x.sheet_number === 'string').length, 'its index lists every sheet the model holds: the set\'s twelve, its own among them');
+    assert.equal(cover.note_placed, true);
+    assert.equal(cover.note_why, undefined, 'its note placed, so no why');
+    assert.match(String(cover.note_text), /^Conceptual drawing set of Made-up Model: drawings of the model to look the design over, not for permit or construction\.$/);
+    assert.ok(cover.scale === undefined && cover.viewport_id === undefined && cover.rooms_scheduled === undefined && cover.rooms_on_level === undefined, 'no scale, viewport, rooms of its own');
+    const [lo, hi] = [set.sheet_area.usable_min_ft, set.sheet_area.usable_max_ft] as [number[], number[]];
+    const index = (cover.schedule_segments as Array<{ min_ft: number[]; max_ft: number[] }>)[0]!;
+    assert.deepEqual([index.min_ft[0], index.max_ft[1]], [lo[0], hi[1]], "its index's top-left at the usable area's");
+    const [nmin, nmax] = [cover.note_min_ft as number[], cover.note_max_ft as number[]];
+    assert.ok(nmax[1]! < index.min_ft[1]! && nmin[0] === lo[0], 'its note under its index, at the usable area\'s left');
+    assert.deepEqual([cover.viewport_min_ft, cover.viewport_max_ft], [[lo[0], nmin[1]], [nmax[0], hi[1]]], 'the box of its index and its note');
+    for (const x of set.sheets.filter((s) => s.kind !== 'cover')) assert.ok(x.sheets_listed === undefined && x.note_placed === undefined, `${String(x.sheet_number)} is no cover`);
   });
 
   test('from a version-1 report (add-in 0.2.0), reads as before, without the counts it did not keep', () => {
