@@ -1,5 +1,5 @@
 {
-  "_note": "A made-up report of add-in 0.16.0 (report version 2, fields added), shaped as flo2's own fixtures of a list and its report, for change_list, a version-8 list on a made-up model (no person's, no building's): one add_drawing_set that says nothing, so every view is made, the room schedule and the cover among them, and its plans tag their rooms. The model, its Project Name \"Made-up Model\", holds three levels (Level 1, Level 2, and Roof, which nothing stands on and still gets its plan, as empty_levels include says), one title block type (E1 30 x 42 Horizontal, a 42 x 30 in sheet), one room tag type (Room Tag, the model's default for room tags), five made-up rooms, each placed (101 Living, 102 Kitchen and 103 Hall on Level 1; 201 Bedroom and 202 Bath on Level 2; none on Roof), and a building 60 x 40 ft in plan, 24 ft high, of 14 elements, in the model's internal axes. Twelve views, each on a sheet of its own: three floor plans (A-101 to A-103, lowest level first), each saying how many rooms are placed on its level and how many it tagged (rooms_on_level and rooms_tagged: 3 and 3, 2 and 2, 0 and 0); the four elevations (A-201 to A-204: north, east, south, west, each named by the face it shows, looking at it from outside); two sections through the middle (A-301 east-west, looking north; A-302 north-south, looking east); a 3D view (A-401); and, since add-in 0.16.0 (change-list version 8), the room schedule (A-601, a series of its own: the US National CAD Standard's sheet type 6 is schedules), its fields Level, Number, Name and Area, placed whole in one segment by its schedule instance at the top-left of the sheet's usable area, its box there 5 x 2.25 in, listing the five rooms (rooms_scheduled); and the cover (A-001, a series of its own, the general sheets, which sheets.pdf prints first), made last: its sheet index (Sheet Index: Sheet Number and Sheet Name) placed whole in one segment at the top-left of the usable area, its box there 3.5 x 3 in, listing the twelve sheets the model then holds (sheets_listed: the set's eleven and the cover's own), and its note under it (note_placed, note_text, its box 6 x 0.75 in), saying what the set is. The cover's entry comes last in sheets, as the set makes it last. Each other view's viewport sits at the middle of the sheet's usable area (the title block's box inset by 4% of its shorter side, its right 18% kept for the title strip) at 1/4\" = 1'-0\", the largest standard scale at which it fits there; the schedule and the cover have no scale, viewport or crop, and each fits as a view does, the box of its segments (and the cover's note) within the usable area (viewport_min_ft, viewport_max_ft). The job's sheets.pdf holds the twelve sheets, the cover first. Since add-in 0.15.2 each elevation and section is judged by what Revit says it shows: how many of the building's 14 elements Revit passes in it (building_elements_seen). Its far clip and crop box as Revit reads them back once everything is set (far_clip_active, far_clip_ft, crop_min_ft and crop_max_ft in model terms, origin_ft) are raw readings and not judged: the south elevation's Far Clip Offset reads 46 ft beside the 54 ft set, as the second live run's read 108.78 ft beside 157.49. depth_needed_ft is the depth the add-in set, from the view's plane to the building's far side, and the 3 ft margin. Each elevation gives its view plane (view_plane_ft: the middle of the crop region Revit made, read in model coordinates, on its marker's plane 11 ft beyond the side it shows), its crop region read back once set (crop_loop_ft: a rectangle on that plane along its right and up directions holding the building and the margin), and Revit's readings of it as made, cropped, far clipped and placed (readings: its View.CropBox and that box's frame, View.Origin, its right, up and view directions, its Far Clip Offset and its crop region). Each section's view_direction and origin_ft are where CreateSection's documented convention puts the box asked (it looks along the box's BasisZ, its View.Origin the cut face's lower-left corner as the viewer sees it). Made-up ids; every value consistent with the add-in's invariants (ReportCheck, DrawingSets.Problems).",
+  "_note": "A made-up report of add-in 0.16.1 (report version 2, fields added), shaped as flo2's own fixtures of a list and its report, for change_list, a version-8 list on a made-up model (no person's, no building's): one add_drawing_set that says nothing, so every view is made, the room schedule and the cover among them, and its plans tag their rooms. The model, its Project Name \"Made-up Model\", holds three levels (Level 1, Level 2, and Roof, which nothing stands on and still gets its plan, as empty_levels include says), one title block type (E1 30 x 42 Horizontal, a 42 x 30 in sheet), one room tag type (Room Tag, the model's default for room tags), five made-up rooms, each placed (101 Living, 102 Kitchen and 103 Hall on Level 1; 201 Bedroom and 202 Bath on Level 2; none on Roof), and a building 60 x 40 ft in plan, 24 ft high, of 14 elements, in the model's internal axes. Twelve views, each on a sheet of its own: three floor plans (A-101 to A-103, lowest level first), each saying how many rooms are placed on its level and how many it tagged (rooms_on_level and rooms_tagged: 3 and 3, 2 and 2, 0 and 0); the four elevations (A-201 to A-204: north, east, south, west, each named by the face it shows, looking at it from outside); two sections through the middle (A-301 east-west, looking north; A-302 north-south, looking east); a 3D view (A-401); and, since add-in 0.16.0 (change-list version 8), the room schedule (A-601, a series of its own: the US National CAD Standard's sheet type 6 is schedules), its fields Level, Number, Name and Area, placed whole in one segment by its schedule instance at the top-left of the sheet's usable area, its box there 5 x 2.25 in, listing the five rooms (rooms_scheduled); and the cover (A-001, a series of its own, the general sheets, which sheets.pdf prints first), made last: its sheet index (Sheet Index: Sheet Number and Sheet Name) placed whole in one segment at the top-left of the usable area, its box there 3.5 x 3 in, listing the twelve sheets the model then holds (sheets_listed: the set's eleven and the cover's own), and its note under it (note_placed, note_text, its box 6 x 0.75 in), saying what the set is. The cover's entry comes last in sheets, as the set makes it last. Each other view's viewport sits at the middle of the sheet's usable area (the title block's box inset by 4% of its shorter side, its right 18% kept for the title strip) at 1/4\" = 1'-0\", the largest standard scale at which it fits there; the schedule and the cover have no scale, viewport or crop, and each fits as a view does, the box of its segments (and the cover's note) within the usable area (viewport_min_ft, viewport_max_ft). The job's sheets.pdf holds the twelve sheets, the cover first. Since add-in 0.15.2 each elevation and section is judged by what Revit says it shows: how many of the building's 14 elements Revit passes in it (building_elements_seen). Its far clip and crop box as Revit reads them back once everything is set (far_clip_active, far_clip_ft, crop_min_ft and crop_max_ft in model terms, origin_ft) are raw readings and not judged: the south elevation's Far Clip Offset reads 46 ft beside the 54 ft set, as the second live run's read 108.78 ft beside 157.49. depth_needed_ft is the depth the add-in set, from the view's plane to the building's far side, and the 3 ft margin. Each elevation gives its view plane (view_plane_ft: the middle of the crop region Revit made, read in model coordinates, on its marker's plane 11 ft beyond the side it shows), its crop region read back once set (crop_loop_ft: a rectangle on that plane along its right and up directions holding the building and the margin), and Revit's readings of it as made, cropped, far clipped and placed (readings: its View.CropBox and that box's frame, View.Origin, its right, up and view directions, its Far Clip Offset and its crop region). Each section's view_direction and origin_ft are where CreateSection's documented convention puts the box asked (it looks along the box's BasisZ, its View.Origin the cut face's lower-left corner as the viewer sees it). Since add-in 0.16.1 the set reads the model's phases once (phases: Existing, then New Construction, the last_phase) and each placed room's phase and design option once (rooms: 2001 to 2003 on Level 1, 2101 and 2102 on Level 2, each in Existing, read from its Phase parameter, in the main model). Revit made each plan and the room schedule in the last phase, New Construction, as Design Automation gives what it makes the latest, and the set put each in its rooms' phase, Existing, before any tag was made (rooms_phase, rooms_phase_was one; each view's room_fixes, its phase from New Construction to Existing), reading each as made and once fixed (room_readings: its phase, its phase filter Show All, no view template; a plan's Rooms, Room Tags, model and annotation categories, none hidden; the schedule's body rows, 1 as made, its column headers alone, and 7 once fixed, its headers, its five rooms and its grand total, made-up counts a live run is to tell). Each plan is judged by what Revit shows: rooms_shown (the rooms on its level Revit passes in it: 3, 2, 0), room_tags (each tag's text read back and whether Revit passes it in the plan) and room_tags_shown (3, 2, 0, beside rooms_tagged); the room schedule by the rows of its body that name a placed room's number (schedule_rows 5) beside the rooms it should list (rooms_to_list 5: the placed rooms in its phase, and every room whose tag a plan shows). Made-up ids; every value consistent with the add-in's invariants (ReportCheck, DrawingSets.Problems).",
   "change_list": {
     "version": 8,
     "list_id": "drawing-set-1",
@@ -15,7 +15,7 @@
     "schema": "flo2-rvt/edit-report",
     "version": 2,
     "edit": {
-      "addin_version": "0.16.0",
+      "addin_version": "0.16.1",
       "started_at": "2026-11-09T12:00:00.0000000Z",
       "finished_at": "2026-11-09T12:02:10.0000000Z",
       "transactions_committed": 1,
@@ -157,7 +157,68 @@
                 1.729167
               ],
               "rooms_on_level": 3,
-              "rooms_tagged": 3
+              "rooms_tagged": 3,
+              "room_readings": [
+                {
+                  "at": "made",
+                  "phase": {
+                    "id": 4801,
+                    "name": "New Construction"
+                  },
+                  "phase_filter": {
+                    "id": 4810,
+                    "name": "Show All"
+                  },
+                  "rooms_hidden": false,
+                  "room_tags_hidden": false,
+                  "model_categories_hidden": false,
+                  "annotation_categories_hidden": false
+                },
+                {
+                  "at": "fixed",
+                  "phase": {
+                    "id": 4800,
+                    "name": "Existing"
+                  },
+                  "phase_filter": {
+                    "id": 4810,
+                    "name": "Show All"
+                  },
+                  "rooms_hidden": false,
+                  "room_tags_hidden": false,
+                  "model_categories_hidden": false,
+                  "annotation_categories_hidden": false
+                }
+              ],
+              "room_fixes": [
+                {
+                  "what": "phase",
+                  "was": "New Construction",
+                  "became": "Existing"
+                }
+              ],
+              "rooms_shown": 3,
+              "room_tags": [
+                {
+                  "tag_id": 990314,
+                  "room_id": 2001,
+                  "text": "Living 101",
+                  "in_view": true
+                },
+                {
+                  "tag_id": 990315,
+                  "room_id": 2002,
+                  "text": "Kitchen 102",
+                  "in_view": true
+                },
+                {
+                  "tag_id": 990316,
+                  "room_id": 2003,
+                  "text": "Hall 103",
+                  "in_view": true
+                }
+              ],
+              "room_tags_shown": 3
             },
             {
               "kind": "plans",
@@ -190,7 +251,62 @@
                 1.729167
               ],
               "rooms_on_level": 2,
-              "rooms_tagged": 2
+              "rooms_tagged": 2,
+              "room_readings": [
+                {
+                  "at": "made",
+                  "phase": {
+                    "id": 4801,
+                    "name": "New Construction"
+                  },
+                  "phase_filter": {
+                    "id": 4810,
+                    "name": "Show All"
+                  },
+                  "rooms_hidden": false,
+                  "room_tags_hidden": false,
+                  "model_categories_hidden": false,
+                  "annotation_categories_hidden": false
+                },
+                {
+                  "at": "fixed",
+                  "phase": {
+                    "id": 4800,
+                    "name": "Existing"
+                  },
+                  "phase_filter": {
+                    "id": 4810,
+                    "name": "Show All"
+                  },
+                  "rooms_hidden": false,
+                  "room_tags_hidden": false,
+                  "model_categories_hidden": false,
+                  "annotation_categories_hidden": false
+                }
+              ],
+              "room_fixes": [
+                {
+                  "what": "phase",
+                  "was": "New Construction",
+                  "became": "Existing"
+                }
+              ],
+              "rooms_shown": 2,
+              "room_tags": [
+                {
+                  "tag_id": 990324,
+                  "room_id": 2101,
+                  "text": "Bedroom 201",
+                  "in_view": true
+                },
+                {
+                  "tag_id": 990325,
+                  "room_id": 2102,
+                  "text": "Bath 202",
+                  "in_view": true
+                }
+              ],
+              "room_tags_shown": 2
             },
             {
               "kind": "plans",
@@ -224,7 +340,49 @@
               ],
               "note": "nothing stands on level \"Roof\" by its Revit settings; it has its plan, as empty_levels include says",
               "rooms_on_level": 0,
-              "rooms_tagged": 0
+              "rooms_tagged": 0,
+              "room_readings": [
+                {
+                  "at": "made",
+                  "phase": {
+                    "id": 4801,
+                    "name": "New Construction"
+                  },
+                  "phase_filter": {
+                    "id": 4810,
+                    "name": "Show All"
+                  },
+                  "rooms_hidden": false,
+                  "room_tags_hidden": false,
+                  "model_categories_hidden": false,
+                  "annotation_categories_hidden": false
+                },
+                {
+                  "at": "fixed",
+                  "phase": {
+                    "id": 4800,
+                    "name": "Existing"
+                  },
+                  "phase_filter": {
+                    "id": 4810,
+                    "name": "Show All"
+                  },
+                  "rooms_hidden": false,
+                  "room_tags_hidden": false,
+                  "model_categories_hidden": false,
+                  "annotation_categories_hidden": false
+                }
+              ],
+              "room_fixes": [
+                {
+                  "what": "phase",
+                  "was": "New Construction",
+                  "became": "Existing"
+                }
+              ],
+              "rooms_shown": 0,
+              "room_tags": [],
+              "room_tags_shown": 0
             },
             {
               "kind": "elevations",
@@ -957,7 +1115,42 @@
                   ]
                 }
               ],
-              "rooms_scheduled": 5
+              "rooms_scheduled": 5,
+              "room_readings": [
+                {
+                  "at": "made",
+                  "phase": {
+                    "id": 4801,
+                    "name": "New Construction"
+                  },
+                  "phase_filter": {
+                    "id": 4810,
+                    "name": "Show All"
+                  },
+                  "body_rows": 1
+                },
+                {
+                  "at": "fixed",
+                  "phase": {
+                    "id": 4800,
+                    "name": "Existing"
+                  },
+                  "phase_filter": {
+                    "id": 4810,
+                    "name": "Show All"
+                  },
+                  "body_rows": 7
+                }
+              ],
+              "room_fixes": [
+                {
+                  "what": "phase",
+                  "was": "New Construction",
+                  "became": "Existing"
+                }
+              ],
+              "schedule_rows": 5,
+              "rooms_to_list": 5
             },
             {
               "kind": "cover",
@@ -1023,7 +1216,88 @@
             "type": "Room Tag",
             "type_id": 4700
           },
-          "room_tag_type_was": "default"
+          "room_tag_type_was": "default",
+          "phases": [
+            {
+              "id": 4800,
+              "name": "Existing"
+            },
+            {
+              "id": 4801,
+              "name": "New Construction"
+            }
+          ],
+          "last_phase": {
+            "id": 4801,
+            "name": "New Construction"
+          },
+          "rooms": [
+            {
+              "room_id": 2001,
+              "number": "101",
+              "name": "Living",
+              "level": "Level 1",
+              "level_id": 311,
+              "phase": {
+                "id": 4800,
+                "name": "Existing"
+              },
+              "phase_from": "ROOM_PHASE"
+            },
+            {
+              "room_id": 2002,
+              "number": "102",
+              "name": "Kitchen",
+              "level": "Level 1",
+              "level_id": 311,
+              "phase": {
+                "id": 4800,
+                "name": "Existing"
+              },
+              "phase_from": "ROOM_PHASE"
+            },
+            {
+              "room_id": 2003,
+              "number": "103",
+              "name": "Hall",
+              "level": "Level 1",
+              "level_id": 311,
+              "phase": {
+                "id": 4800,
+                "name": "Existing"
+              },
+              "phase_from": "ROOM_PHASE"
+            },
+            {
+              "room_id": 2101,
+              "number": "201",
+              "name": "Bedroom",
+              "level": "Level 2",
+              "level_id": 1240,
+              "phase": {
+                "id": 4800,
+                "name": "Existing"
+              },
+              "phase_from": "ROOM_PHASE"
+            },
+            {
+              "room_id": 2102,
+              "number": "202",
+              "name": "Bath",
+              "level": "Level 2",
+              "level_id": 1240,
+              "phase": {
+                "id": 4800,
+                "name": "Existing"
+              },
+              "phase_from": "ROOM_PHASE"
+            }
+          ],
+          "rooms_phase": {
+            "id": 4800,
+            "name": "Existing"
+          },
+          "rooms_phase_was": "one"
         },
         "seconds": 41.2
       }

@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import { ADDIN_VERSION, BUCKET_KEY_RULE, COMMAND_LINE, JOBS, JOB_SCOPES, activityIdFor, bucketKeyFor, isJobId, markedAddinVersion, newJobId, objectKey, setupMark } from '../src/names.ts';
 import { expiresAtMs } from '../src/contract.ts';
 import { scrub } from '../src/log.ts';
+import { SERVER_VERSION } from '../src/mcp.ts';
 
 test('the bucket key is flo2rvt- plus the lowercased client id plus -t', () => {
   assert.equal(bucketKeyFor('MadeUpClientId0123456789abcdefAB'), 'flo2rvt-madeupclientid0123456789abcdefab-t');
@@ -72,4 +73,12 @@ test("ADDIN_VERSION is the add-in's own <Version>, which a setup writes into eac
   assert.equal(markedAddinVersion(`flo2-rvt edit: a change list applied. ${setupMark()}`), ADDIN_VERSION);
   assert.equal(markedAddinVersion('flo2-rvt read-only probe: report.json, sheets.pdf and model.ifc from a Revit 2024 model.'), null, 'an older registration names none');
   assert.equal(markedAddinVersion(undefined), null);
+});
+
+// flo2-rvt 0.17.0 moved package.json to 0.17.0 and left SERVER_VERSION, the version the server names itself
+// by to every client (the MCP initialize result's serverInfo, the log's listening line), at 0.16.2: nothing
+// held the two together until this test.
+test("SERVER_VERSION is package.json's own version, which the server names itself by to every client", () => {
+  const pkg = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')) as { version: string };
+  assert.equal(SERVER_VERSION, pkg.version);
 });
