@@ -19,16 +19,34 @@
 //      whose view looks at the face asked (View.ViewDirection is "the direction towards the viewer"); the
 //      others are deleted. A section: ViewSection.CreateSection(document, a Section ViewFamilyType, a
 //      BoundingBoxXYZ), whose "view direction ... will be sectionBox.Transform.BasisZ and the up direction
-//      ... BasisY", "cropped, and far clipping will be active"; the box is DrawingSets.Section's, its near
-//      face the cut through the middle. A 3D view: View3D.CreateIsometric(document, a ThreeDimensional
-//      ViewFamilyType), "oriented in the same position as the default 3D view", with View3D.SetSectionBox
-//      the building's and the section box's own lines hidden. Each is named (View.Name) as planned.
+//      ... BasisY", "cropped, and far clipping will be active", its "far clip distance ... the difference of
+//      the z-coordinates of BoundingBoxXYZ.Min and BoundingBoxXYZ.Max"; the box is DrawingSets.Section's.
+//      That view direction is the way the section LOOKS, away from the viewer (View.ViewDirection, "the
+//      direction towards the viewer", is its opposite), so the box's BasisZ is the way it is asked to look and
+//      its Min.Z = 0, the viewer's side, the cut through the middle, its Max.Z the far side: since add-in
+//      0.15.1, as the first live run measured (2026-11-10; 0.15.0 handed it BasisZ toward the viewer, and
+//      both sections looked the opposite way, cut at the far face). A 3D view:
+//      View3D.CreateIsometric(document, a ThreeDimensional ViewFamilyType), "oriented in the same position as
+//      the default 3D view", with View3D.SetSectionBox the building's and the section box's own lines
+//      hidden. Each is named (View.Name) as planned.
 //   2. THE CROPS: each plan and elevation's View.CropBox, set in the view's own frame ("X ... right on
 //      screen; Y is up; and Z is towards the user"; "the Transform of the input BoundingBoxXYZ is ignored")
 //      to the building's corners as the view sees them and a margin, its near plane kept; CropBoxActive on,
 //      CropBoxVisible off, and its annotation crop on where Revit lets it be set
 //      (VIEWER_ANNOTATION_CROP_ACTIVE), so the elevation markers beyond a plan's crop do not show. Plans
 //      are cropped only after every elevation is made, so the markers are visible in them while they are.
+//   2b. THE FAR CLIPS (since add-in 0.15.1): setting a crop box moves "the crop region and far clip plane to
+//      the smallest values which will completely contain the 3D box", which the first live run's north
+//      elevation did not bear out (it printed no house), and nothing read it back. So once cropped, each
+//      elevation and section has its far clipping turned on and its far clip set, explicitly, to the depth
+//      it needs (DrawingSets.PlannedDepth, or from Revit's own View.Origin along the opposite of its
+//      View.ViewDirection where that is further: DrawingSets.DepthNeeded), through its parameters, which
+//      RevitAPI.xml names only by their labels: VIEWER_BOUND_ACTIVE_FAR "Far Clip Active" (set to 1),
+//      VIEWER_BOUND_FAR_CLIPPING "Far Clipping", whose values are BackClippingParam's ("The allowed values for
+//      the VIEW_BACK_CLIPPING and VIEWER_BOUND_FAR_CLIPPING parameters": NoClip "No clip", ClipWithLine "Clip
+//      with line", ClipNoLine "Clip without line"; one that reads NoClip is set to ClipWithLine, so the sheet
+//      shows where the view stops), and VIEWER_BOUND_OFFSET_FAR "Far Clip Offset" (the depth, in feet), each
+//      where the view holds it and Revit lets it be set.
 //   3. THE SHEETS: ViewSheet.Create(document, the title block's type id, or "invalid element ID" for none),
 //      numbered and named as planned (ViewSheet.SheetNumber, View.Name); the sheet's usable area from its
 //      title block's box on the sheet (Element.get_BoundingBox(sheet)), else the default sheet; the view's
@@ -38,10 +56,15 @@
 //      Viewport.Create(document, sheet, view, point), "centered on this point", at the usable area's
 //      middle, and Viewport.GetBoxOutline ("the outline of the viewport on the sheet, excluding the
 //      viewport label") read back to say whether it fits.
+//   4. HOW FAR EACH SEES, READ BACK (since add-in 0.15.1), once everything is set, cropped and placed: each
+//      elevation's and section's far clipping (either parameter on), its Far Clip Offset, its View.Origin and
+//      the depth it needs from it, and its View.CropBox taken into the model's axes through the box's own
+//      Transform; a far clip short of the depth, or not read, or a crop that leaves the building out across
+//      the view, says why (DrawingSets.ReachWhy, CropWhy), so it can no longer read as asked when it is not.
 //
 // The job's existing PDF export (Probe/Exports.cs) then prints every printable sheet, these among them,
-// into sheets.pdf, in sheet-number order. Nothing here is run in cloud Revit yet: the first live run is
-// what measures it.
+// into sheets.pdf, in sheet-number order. The first live run (2026-11-10, add-in 0.15.0) measured the
+// sections' convention; the far clips set and read back here are not yet run in cloud Revit.
 
 using System;
 using System.Collections.Generic;
@@ -192,6 +215,13 @@ namespace Flo2Rvt.Addin.Jobs
                         string failed = ChangeRunner.Part(d, () => CropTo(m.Value, building.Value));
                         if (failed != null) m.Key.Note = Join(m.Key.Note, "its crop could not be set (" + failed + "), so it shows all Revit draws in it");
                     }
+                    // Since add-in 0.15.1: each elevation and section, once cropped, sees past the building's far side, set explicitly.
+                    foreach (KeyValuePair<DrawingSheet, View> m in made.Where(x => SeesToADepth(x.Key)))
+                    {
+                        double depth = Depth(m.Key, m.Value, building.Value);
+                        string failed = ChangeRunner.Part(d, () => FarClipTo(m.Value, depth));
+                        if (failed != null) m.Key.Note = Join(m.Key.Note, "its far clip could not be set to " + Lengths.Round(depth) + " ft (" + failed + ")");
+                    }
                 }
                 n = 0;
                 foreach (KeyValuePair<DrawingSheet, View> m in made)
@@ -215,6 +245,22 @@ namespace Flo2Rvt.Addin.Jobs
                     }
                     s.Scale = m.Value.Scale;
                     s.ScaleText = DrawingSets.ScaleText(s.Scale, metric);
+                }
+                // Since add-in 0.15.1: how far each elevation and section sees, and its crop, read back once everything is set.
+                if (building.HasValue)
+                {
+                    d.Regenerate();
+                    foreach (KeyValuePair<DrawingSheet, View> m in made.Where(x => SeesToADepth(x.Key)))
+                    {
+                        try
+                        {
+                            ReadReach(m.Key, m.Value, building.Value);
+                        }
+                        catch (Exception ex)
+                        {
+                            m.Key.Why = Join(m.Key.Why, "how far it sees could not be read back (" + ex.GetType().Name + ": " + ex.Message + ")");
+                        }
+                    }
                 }
                 if (made.Count == 0)
                 {
@@ -398,6 +444,99 @@ namespace Flo2Rvt.Addin.Jobs
             view.CropBoxVisible = false;
             Parameter annotation = view.get_Parameter(BuiltInParameter.VIEWER_ANNOTATION_CROP_ACTIVE);
             if (annotation != null && !annotation.IsReadOnly) annotation.Set(1);
+        }
+
+        /// <summary>Since add-in 0.15.1: an elevation or section, whose far clip the set sets and reads back.</summary>
+        private static bool SeesToADepth(DrawingSheet s)
+        {
+            return s.ViewWas == DrawingSets.Made && (s.Kind == DrawingSetViewValues.Elevations || s.Kind == DrawingSetViewValues.Sections);
+        }
+
+        /// <summary>
+        /// The depth an elevation or section needs: as planned (from its marker, or its cut), or from Revit's own
+        /// View.Origin along the way it looks (the opposite of View.ViewDirection, "the direction towards the
+        /// viewer") where that is further, so a view plane Revit stood elsewhere than planned still sees the
+        /// building whole.
+        /// </summary>
+        private static double Depth(DrawingSheet s, View view, Box3 b)
+        {
+            double planned = DrawingSets.PlannedDepth(b, s);
+            XYZ o = view.Origin;
+            XYZ vd = view.ViewDirection;
+            if (o == null || vd == null) return planned;
+            return Math.Max(planned, DrawingSets.DepthNeeded(b, new[] { o.X, o.Y, o.Z }, new[] { -vd.X, -vd.Y, -vd.Z }));
+        }
+
+        /// <summary>
+        /// Far clipping on, and the far clip at the depth, by the view's own parameters, which Revit 2024's
+        /// RevitAPI.xml names only by their labels: VIEWER_BOUND_ACTIVE_FAR "Far Clip Active", set to 1 where
+        /// it reads 0; VIEWER_BOUND_FAR_CLIPPING "Far Clipping", whose values are BackClippingParam's ("The allowed
+        /// values for the VIEW_BACK_CLIPPING and VIEWER_BOUND_FAR_CLIPPING parameters": NoClip "No clip",
+        /// ClipWithLine "Clip with line", ClipNoLine "Clip without line"), set to ClipWithLine where it reads
+        /// NoClip, so the sheet shows where the view stops; and VIEWER_BOUND_OFFSET_FAR "Far Clip Offset", in
+        /// feet, from the view's plane. Each only where the view holds it and Revit lets it be set; what it
+        /// holds once set is read back (ReadReach). Throws, rolling its part back, when the offset cannot be set.
+        /// </summary>
+        private static void FarClipTo(View view, double depth)
+        {
+            Parameter active = view.get_Parameter(BuiltInParameter.VIEWER_BOUND_ACTIVE_FAR);
+            if (active != null && !active.IsReadOnly && active.StorageType == StorageType.Integer && active.AsInteger() == 0) active.Set(1);
+            Parameter clipping = view.get_Parameter(BuiltInParameter.VIEWER_BOUND_FAR_CLIPPING);
+            if (clipping != null && !clipping.IsReadOnly && clipping.StorageType == StorageType.Integer && clipping.AsInteger() == (int)BackClippingParam.NoClip) clipping.Set((int)BackClippingParam.ClipWithLine);
+            Parameter offset = view.get_Parameter(BuiltInParameter.VIEWER_BOUND_OFFSET_FAR);
+            if (offset == null || offset.IsReadOnly || offset.StorageType != StorageType.Double) throw new ChangeRefused("Revit holds no Far Clip Offset on it that it lets be set");
+            if (!offset.Set(depth)) throw new ChangeRefused("Revit would not take a Far Clip Offset of " + Lengths.Round(depth) + " ft");
+        }
+
+        /// <summary>Whether far clipping is on, read back: either parameter that says so (Far Clip Active not 0, Far Clipping other than No clip); null when the view holds neither.</summary>
+        private static bool? FarClipActive(View view)
+        {
+            bool? on = null;
+            Parameter active = view.get_Parameter(BuiltInParameter.VIEWER_BOUND_ACTIVE_FAR);
+            if (active != null && active.HasValue && active.StorageType == StorageType.Integer) on = active.AsInteger() != 0;
+            Parameter clipping = view.get_Parameter(BuiltInParameter.VIEWER_BOUND_FAR_CLIPPING);
+            if (clipping != null && clipping.HasValue && clipping.StorageType == StorageType.Integer) on = (on ?? false) || clipping.AsInteger() != (int)BackClippingParam.NoClip;
+            return on;
+        }
+
+        /// <summary>
+        /// How far an elevation or section sees, as Revit holds it once everything is set: whether far clipping
+        /// is on, its Far Clip Offset, the depth it needs, its View.Origin (an elevation's as a section's), and its
+        /// crop box (View.CropBox, "X ... right on screen; Y is up; and Z is towards the user", in the frame of
+        /// its own Transform) taken into the model's axes; a far clip short of the depth, or not read, or a crop
+        /// that leaves the building out across the view, says why.
+        /// </summary>
+        private static void ReadReach(DrawingSheet s, View view, Box3 b)
+        {
+            XYZ o = view.Origin;
+            if (o != null && s.OriginFt == null) s.OriginFt = Xyz(o.X, o.Y, o.Z);
+            s.FarClipActive = FarClipActive(view);
+            Parameter offset = view.get_Parameter(BuiltInParameter.VIEWER_BOUND_OFFSET_FAR);
+            s.FarClipFt = offset != null && offset.HasValue && offset.StorageType == StorageType.Double ? Lengths.Round(offset.AsDouble()) : (double?)null;
+            double needed = Depth(s, view, b);
+            s.DepthNeededFt = Lengths.Round(needed);
+            string why = DrawingSets.ReachWhy(s.FarClipActive, s.FarClipFt, needed, DrawingSets.Margin(b));
+            if (why != null) s.Why = Join(s.Why, why);
+            else if (s.FarClipActive == false) s.Note = Join(s.Note, "its far clipping reads off, so it shows all that stands beyond the building too");
+            BoundingBoxXYZ crop = view.CropBox;
+            if (crop == null) return;
+            Transform t = crop.Transform ?? Transform.Identity;
+            var corners = new List<XYZ>();
+            foreach (double x in new[] { crop.Min.X, crop.Max.X })
+                foreach (double y in new[] { crop.Min.Y, crop.Max.Y })
+                    foreach (double z in new[] { crop.Min.Z, crop.Max.Z })
+                        corners.Add(t.OfPoint(new XYZ(x, y, z)));
+            s.CropMinFt = Xyz(corners.Min(c => c.X), corners.Min(c => c.Y), corners.Min(c => c.Z));
+            s.CropMaxFt = Xyz(corners.Max(c => c.X), corners.Max(c => c.Y), corners.Max(c => c.Z));
+            if (!view.CropBoxActive) return;
+            Transform inverse = t.Inverse;
+            IEnumerable<double[]> seen = b.Corners().Select(c =>
+            {
+                XYZ p = inverse.OfPoint(new XYZ(c[0], c[1], c[2]));
+                return new[] { p.X, p.Y, p.Z };
+            });
+            string cropWhy = DrawingSets.CropWhy(new[] { crop.Min.X, crop.Min.Y, crop.Min.Z }, new[] { crop.Max.X, crop.Max.Y, crop.Max.Z }, seen);
+            if (cropWhy != null) s.Why = Join(s.Why, cropWhy);
         }
 
         /// <summary>The view's sheet, numbered and named, its scale fitted to the sheet's usable area and its viewport at its middle.</summary>

@@ -9,6 +9,14 @@
 // where a viewport goes on it, how the change is judged, and report.json's drawing_set (round-tripped
 // through the contract from the made-up report the server's tests and flo2 read,
 // server/test/fixtures/sample-edit-report-drawing-set.json) with the invariants it keeps.
+//
+// Since add-in 0.15.1, the two defects the first live run found (2026-11-10, add-in 0.15.0, Autodesk's
+// rac_basic_sample_project.rvt): its sections looked the opposite way and cut at the far face, because
+// CreateSection's BasisZ is the way a section LOOKS (View.ViewDirection, toward the viewer, is its
+// opposite), held here by CreateSection's documented convention (RevitMakes) and by the live run's own
+// numbers; and its north elevation showed no house, its far clip short of the building and never read
+// back, so each elevation's and section's depth is planned (ElevationDepth, SectionDepth), its far clip
+// and crop read back and judged (ReachWhy, CropWhy), and the report check holds them to each other.
 
 using System;
 using System.Collections.Generic;
@@ -163,32 +171,180 @@ namespace Flo2Rvt.Addin.Tests
                 Eq(3.0, DrawingSets.Margin(new Box3(0, 0, 0, 10, 10, 3)), "never less than 3 ft");
                 Eq(10.0, DrawingSets.Margin(new Box3(0, 0, 0, 200, 40, 24)), "5% of a long building");
             });
-            Test("a section is cut through the middle of the building, looking as named, its box a proper frame that holds the building's far half", () =>
+            Test("a section's box looks the way its cut says: CreateSection's BasisZ is the way it looks, north for an east-west cut and east for a north-south one; the cut is the box's Min.Z = 0 through the middle and its far side +depth, a proper frame", () =>
             {
                 var b = new Box3(0, 0, -2, 60, 40, 24);
                 double m = DrawingSets.Margin(b);
                 SectionSpec ew = DrawingSets.Section(b, DrawingSets.EastWest);
-                Eq("north", ew.Looking, "an east-west cut, looking north");
+                Is(Same(ew.BasisZ, new[] { 0.0, 1, 0 }, 1e-12), "an east-west cut's BasisZ points north, the way it looks: " + string.Join(", ", ew.BasisZ));
+                Eq("north", ew.Looking, "it looks north, the compass point its BasisZ points to");
+                Eq("north", DrawingSets.Toward(ew.BasisZ[0], ew.BasisZ[1]), "named by BasisZ itself, not its opposite");
                 Is(Near(ew.Origin[0], 30, 1e-9) && Near(ew.Origin[1], 20, 1e-9) && Near(ew.Origin[2], -2, 1e-9), "at the middle in plan, the building's foot");
-                Eq("north", DrawingSets.Opposite(DrawingSets.Toward(ew.BasisZ[0], ew.BasisZ[1])), "its view direction points back at the viewer, south");
                 Frame(ew);
-                Is(Near(ew.Max[2], 0, 1e-12), "the cut plane is the box's near face, through the middle");
-                Is(Near(ew.Min[2], -(20 + m), 1e-9), "the far clip holds the far half and a margin");
-                Is(Near(ew.Min[0], -(30 + m), 1e-9) && Near(ew.Max[0], 30 + m, 1e-9), "the building's width and a margin");
+                Is(Near(ew.Min[2], 0, 1e-12), "the cut is the box's Min.Z, the viewer's side, through the middle");
+                Is(Near(ew.Max[2], 20 + m, 1e-9), "its far side, +z, holds the far half and a margin");
+                Is(Near(ew.Min[0], -(30 + m), 1e-9) && Near(ew.Max[0], 30 + m, 1e-9), "the building's width and a margin, the same either side, so Revit's own right takes the same crop");
                 Is(Near(ew.Min[1], -m, 1e-9) && Near(ew.Max[1], 26 + m, 1e-9), "its height and a margin");
                 SectionSpec ns = DrawingSets.Section(b, DrawingSets.NorthSouth);
-                Eq("east", ns.Looking, "a north-south cut, looking east");
-                Eq("east", DrawingSets.Opposite(DrawingSets.Toward(ns.BasisZ[0], ns.BasisZ[1])), "its view direction points west, at the viewer");
+                Is(Same(ns.BasisZ, new[] { 1.0, 0, 0 }, 1e-12), "a north-south cut's BasisZ points east: " + string.Join(", ", ns.BasisZ));
+                Eq("east", ns.Looking, "it looks east");
                 Frame(ns);
-                Is(Near(ns.Min[0], -(20 + m), 1e-9) && Near(ns.Min[2], -(30 + m), 1e-9), "across the building's depth, the far half held");
-                Eq(0.0, DrawingSets.CutOffMiddle(ew.Origin, ew.BasisZ, b), "through the middle");
-                Is(Near(DrawingSets.CutOffMiddle(new[] { 30.0, 25.0, 0 }, ew.BasisZ, b), 5, 1e-9), "a cut 5 ft north of the middle says so");
+                Is(Near(ns.Min[2], 0, 1e-12) && Near(ns.Max[2], 30 + m, 1e-9), "cut at Min.Z, across the building's width to its far half");
+                Is(Near(ns.Min[0], -(20 + m), 1e-9) && Near(ns.Max[0], 20 + m, 1e-9), "across the building's depth");
+                Eq(20 + m, DrawingSets.SectionDepth(b, DrawingSets.EastWest), "an east-west section's depth: the far half and the margin, its box's");
+                Eq(30 + m, DrawingSets.SectionDepth(b, DrawingSets.NorthSouth), "a north-south section's");
+                double[][] made = RevitMakes(ew);
+                Eq(0.0, DrawingSets.CutOffMiddle(made[1], made[0], b), "Revit's View.Origin stands on the cut through the middle");
+                Is(Near(DrawingSets.CutOffMiddle(new[] { 30.0, 25.0, 0 }, made[0], b), 5, 1e-9), "a cut 5 ft north of the middle, beyond it as the section looks, says +5");
+                Is(Near(DrawingSets.CutOffMiddle(new[] { 30.0, 15.0, 0 }, made[0], b), -5, 1e-9), "and one 5 ft nearer the viewer -5");
+            });
+            Test("by CreateSection's documented convention, Revit's View.ViewDirection (the opposite of BasisZ, toward the viewer) looks the way the set asks, its View.Origin stands on the cut through the middle, and its far clip reaches the building's far side, whatever the building", () =>
+            {
+                var boxes = new[]
+                {
+                    new Box3(0, 0, 0, 60, 40, 24),
+                    new Box3(-38.149831, -60.379245, -23.300525, 82.965505, 72.222461, 30.179387),
+                    new Box3(-500, 120, 10, -470, 400, 12),
+                    new Box3(1000, -2000, -50, 1300, -1990, 300),
+                };
+                foreach (Box3 b in boxes)
+                {
+                    List<DrawingSheet> plan = DrawingSets.Plan(Input(new List<string> { DrawingSetViewValues.Sections }, false));
+                    foreach (DrawingSheet planned in plan)
+                    {
+                        SectionSpec spec = DrawingSets.Section(b, planned.Cut);
+                        Frame(spec);
+                        double[][] made = RevitMakes(spec);
+                        string at = planned.Cut + " of (" + b.MinX + ", " + b.MinY + ")-(" + b.MaxX + ", " + b.MaxY + ")";
+                        Is(Same(made[0], new[] { -spec.BasisZ[0], -spec.BasisZ[1], -spec.BasisZ[2] }, 1e-12), at + ": View.ViewDirection is -BasisZ");
+                        Eq(planned.Looking, DrawingSets.Looking(made[0][0], made[0][1]), at + ": Revit's view direction looks the way the set asks");
+                        Eq(planned.Looking, spec.Looking, at + ": the spec says so");
+                        Eq(0.0, DrawingSets.CutOffMiddle(made[1], made[0], b), at + ": its cut stands 0 ft from the middle");
+                        double[] look = { spec.BasisZ[0], spec.BasisZ[1], spec.BasisZ[2] };
+                        Is(Near(spec.Max[2] - spec.Min[2], DrawingSets.DepthNeeded(b, made[1], look), 1e-9), at + ": its far clip, Max.Z less Min.Z, is the depth it needs from its cut: " + (spec.Max[2] - spec.Min[2]) + " vs " + DrawingSets.DepthNeeded(b, made[1], look));
+                    }
+                }
+            });
+            Test("the first live run's sections (2026-11-10, add-in 0.15.0, Autodesk's rac_basic_sample_project.rvt): the convention gives what Revit reported of the box 0.15.0 asked for, and the box asked now cuts through the middle", () =>
+            {
+                Box3 b = LiveBuilding();
+                // What Revit reported: A-301 (east-west, asked to look north) and A-302 (north-south, asked to look east).
+                double[][] was = RevitMakes(AsAskedBy0150(b, DrawingSets.EastWest));
+                Is(Same(was[0], new[] { 0.0, 1, 0 }, 1e-12), "0.15.0's east-west box: view direction (0, 1, 0), as Revit reported: " + string.Join(", ", was[0]));
+                Eq("south", DrawingSets.Looking(was[0][0], was[0][1]), "so it looked south, as Revit reported");
+                Is(Same(was[1], new[] { 89.595591, 78.852546, -29.93061 }, 1e-3), "its View.Origin as Revit reported: " + string.Join(", ", was[1]));
+                Is(Near(DrawingSets.CutOffMiddle(was[1], was[0], b), -72.930938, 1e-6), "its cut -72.930938 ft off the middle, as Revit reported: " + DrawingSets.CutOffMiddle(was[1], was[0], b));
+                was = RevitMakes(AsAskedBy0150(b, DrawingSets.NorthSouth));
+                Is(Same(was[0], new[] { 1.0, 0, 0 }, 1e-12), "0.15.0's north-south box: view direction (1, 0, 0), as Revit reported: " + string.Join(", ", was[0]));
+                Eq("west", DrawingSets.Looking(was[0][0], was[0][1]), "so it looked west, as Revit reported");
+                Is(Same(was[1], new[] { 89.595591, -67.009331, -29.93061 }, 1e-3), "its View.Origin as Revit reported: " + string.Join(", ", was[1]));
+                Is(Near(DrawingSets.CutOffMiddle(was[1], was[0], b), -67.187753, 1e-6), "its cut -67.187753 ft off the middle, as Revit reported: " + DrawingSets.CutOffMiddle(was[1], was[0], b));
+                double[][] ew = RevitMakes(DrawingSets.Section(b, DrawingSets.EastWest));
+                Eq("north", DrawingSets.Looking(ew[0][0], ew[0][1]), "the east-west section now looks north");
+                Eq(0.0, DrawingSets.CutOffMiddle(ew[1], ew[0], b), "its cut stands 0 ft from the middle, not -72.930938");
+                double[][] ns = RevitMakes(DrawingSets.Section(b, DrawingSets.NorthSouth));
+                Eq("east", DrawingSets.Looking(ns[0][0], ns[0][1]), "the north-south section now looks east");
+                Eq(0.0, DrawingSets.CutOffMiddle(ns[1], ns[0], b), "its cut stands 0 ft from the middle, not -67.187753");
+                Is(Near(DrawingSets.SectionDepth(b, DrawingSets.EastWest), 66.300853 + 6.630085, 1e-5), "and sees the far half, 66.30 ft, and the margin, 6.63 ft");
             });
             Test("a view's crop holds every corner of the building as the view sees it, and a margin, its near plane kept", () =>
             {
                 var pts = new List<double[]> { new[] { -10.0, 0, -5 }, new[] { 20.0, 12, -45 }, new[] { 5.0, 30, -20 } };
                 double[] crop = DrawingSets.Crop(pts, 3, 0);
                 Is(crop.SequenceEqual(new[] { -13.0, -3, -48, 23, 33, 0 }), string.Join(", ", crop));
+            });
+
+            // ─── how far each elevation and section sees (since add-in 0.15.1)
+            Test("an elevation must see past the building's far side: from its marker's plane, the marker's offset, the building across and the margin; on the live box, the north elevation needs 18.26 + 132.60 + 6.63 ft", () =>
+            {
+                Box3 b = LiveBuilding();
+                double m = DrawingSets.Margin(b);
+                double off = DrawingSets.MarkerOffset(b);
+                Is(Near(m, 6.630085, 1e-6) && Near(off, 18.260171, 1e-6), "the live box's margin, 5% of its 132.60 ft depth, and its markers' offset: " + m + ", " + off);
+                Is(Near(DrawingSets.ElevationDepth(b, DrawingSets.North), off + 132.601706 + m, 1e-6), "the north elevation sees from its marker past the south side: " + DrawingSets.ElevationDepth(b, DrawingSets.North));
+                Is(Near(DrawingSets.ElevationDepth(b, DrawingSets.North), 157.491962, 1e-5), "157.49 ft");
+                Is(Near(DrawingSets.ElevationDepth(b, DrawingSets.South), 157.491962, 1e-5), "the south elevation across the same depth");
+                Is(Near(DrawingSets.ElevationDepth(b, DrawingSets.East), off + 121.115336 + m, 1e-6) && Near(DrawingSets.ElevationDepth(b, DrawingSets.East), 146.005592, 1e-5), "the east elevation across its 121.12 ft width: " + DrawingSets.ElevationDepth(b, DrawingSets.East));
+                Is(Near(DrawingSets.ElevationDepth(b, DrawingSets.West), 146.005592, 1e-5), "the west elevation too");
+                foreach (string face in DrawingSets.Faces)
+                {
+                    PlanXY at = DrawingSets.MarkerAt(b, face);
+                    double[] look = DrawingSets.Direction(DrawingSets.Opposite(face));
+                    Is(Near(DrawingSets.ElevationDepth(b, face), DrawingSets.DepthNeeded(b, new[] { at.X, at.Y, b.MinZ }, look), 1e-9), face + ": the depth it needs from its marker, looking at its face");
+                    Is(Near(DrawingSets.FarSide(b, new[] { at.X, at.Y, b.MinZ }, look) + m, DrawingSets.ElevationDepth(b, face), 1e-9), face + ": its far side and the margin");
+                }
+                Is(Same(DrawingSets.Direction(DrawingSets.North), new[] { 0.0, 1, 0 }, 0) && Same(DrawingSets.Direction(DrawingSets.East), new[] { 1.0, 0, 0 }, 0) && Same(DrawingSets.Direction(DrawingSets.South), new[] { 0.0, -1, 0 }, 0) && Same(DrawingSets.Direction(DrawingSets.West), new[] { -1.0, 0, 0 }, 0), "each compass point in the model's own axes");
+                Is(DrawingSets.Direction("up") == null, "no compass point");
+                Is(Near(DrawingSets.DepthNeeded(b, new[] { 0.0, 100, 0 }, new[] { 0.0, -1, 0 }), 100 + 60.379245 + m, 1e-6), "from any plane: the farthest corner along the look, and the margin");
+                var small = new Box3(0, 0, 0, 60, 40, 24);
+                Eq(54.0, DrawingSets.ElevationDepth(small, DrawingSets.North), "the made-up building: 11 + 40 + 3");
+                Eq(74.0, DrawingSets.ElevationDepth(small, DrawingSets.East), "11 + 60 + 3");
+                Eq(54.0, DrawingSets.PlannedDepth(small, new DrawingSheet { Kind = DrawingSetViewValues.Elevations, Facing = DrawingSets.South }), "an elevation's planned depth");
+                Eq(23.0, DrawingSets.PlannedDepth(small, new DrawingSheet { Kind = DrawingSetViewValues.Sections, Cut = DrawingSets.EastWest }), "a section's: its box's");
+                Eq(33.0, DrawingSets.PlannedDepth(small, new DrawingSheet { Kind = DrawingSetViewValues.Sections, Cut = DrawingSets.NorthSouth }), "the other's");
+                Eq(0.0, DrawingSets.PlannedDepth(small, new DrawingSheet { Kind = DrawingSetViewValues.Plans }), "a plan looks down, and needs none");
+            });
+            Test("a view's far clip read back is judged against the depth it needs: short of it gives a why in plain words, enough gives none, far clipping off sees without end, and a far clip that could not be read is never taken as enough", () =>
+            {
+                Box3 b = LiveBuilding();
+                double m = DrawingSets.Margin(b);
+                double needed = DrawingSets.ElevationDepth(b, DrawingSets.North);
+                string why = DrawingSets.ReachWhy(true, 20, needed, m);
+                Is(why != null && why.Contains("its far clip reaches 20 ft, short of the 157.49 ft it needs") && why.Contains("the building's far side at 150.86 ft"), why);
+                Is(DrawingSets.ReachWhy(true, Lengths.Round(needed), needed, m) == null, "as far as it needs: nothing to say");
+                Is(DrawingSets.ReachWhy(true, 200, needed, m) == null, "further: nothing to say");
+                Is(DrawingSets.ReachWhy(true, needed - 0.005, needed, m) == null, "within a hundredth of a foot");
+                Is(DrawingSets.ReachWhy(true, 155, needed, m) != null, "past the far side, short of the margin, is short of what it was set to");
+                Is(DrawingSets.ReachWhy(false, 20, needed, m) == null, "far clipping off: the view sees without end, the building with it");
+                string unknown = DrawingSets.ReachWhy(null, 20, needed, m);
+                Is(unknown != null && unknown.Contains("its far clip reaches 20 ft"), "whether it is on not read: taken as on: " + unknown);
+                string unread = DrawingSets.ReachWhy(true, null, needed, m);
+                Is(unread != null && unread.Contains("its far clip could not be read back") && unread.Contains("150.86 ft"), unread);
+            });
+            Test("a view's crop read back must hold the building across the view: one that leaves it out names the side, in the view's own frame", () =>
+            {
+                // A north elevation of the made-up building, its frame at its marker: x right on screen (west), y up, z toward the viewer.
+                var seen = new List<double[]> { new[] { -30.0, 0, -11 }, new[] { 30.0, 24, -51 }, new[] { 30.0, 0, -11 }, new[] { -30.0, 24, -51 } };
+                Is(DrawingSets.CropWhy(new[] { -33.0, -3, -54 }, new[] { 33.0, 27, 0 }, seen) == null, "a crop with the margin holds it");
+                Is(DrawingSets.CropWhy(new[] { -30.0, 0, -54 }, new[] { 30.0, 24, 0 }, seen) == null, "one to its edges holds it");
+                string right = DrawingSets.CropWhy(new[] { -33.0, -3, -54 }, new[] { 20.0, 27, 0 }, seen);
+                Is(right != null && right.Contains("its crop leaves part of the building out across the view, past its right") && !right.Contains("left"), right);
+                string two = DrawingSets.CropWhy(new[] { -10.0, 5, -54 }, new[] { 33.0, 27, 0 }, seen);
+                Is(two != null && two.Contains("past its left and bottom"), two);
+                Is(DrawingSets.CropWhy(new[] { -33.0, -3, -20 }, new[] { 33.0, 27, 0 }, seen) == null, "its depth is the far clip's to judge, not the crop's across the view");
+            });
+            Test("the drawing set's invariants name an elevation or section that reads as asked though its far clip is short of the depth it needs, or says not how far it reaches; a report of add-in 0.15.0, which says neither, keeps them all", () =>
+            {
+                DrawingSetReport r = Fixture(root).DrawingSet;
+                r.Sheets[3].FarClipFt = 20;
+                r.Sheets[8].FarClipFt = null;
+                List<string> p = DrawingSets.Problems(r, ChangeStatus.Applied);
+                Is(p.Any(x => x.Contains("A-201 North Elevation reads as asked, though its far clip reaches 20 ft, short of the 54 ft it needs")), string.Join("; ", p));
+                Is(p.Any(x => x.Contains("A-302 North-South Section reads as asked, though it says not how far its far clip reaches")), string.Join("; ", p));
+                DrawingSetReport said = Fixture(root).DrawingSet;
+                said.Sheets[3].FarClipFt = 20;
+                said.Sheets[3].Why = DrawingSets.ReachWhy(true, 20, 54, 3);
+                DrawingSets.Count(said);
+                Is(!DrawingSets.Problems(said, ChangeStatus.AppliedInPart).Any(x => x.Contains("far clip")), "a view that says why is no broken invariant: " + string.Join("; ", DrawingSets.Problems(said, ChangeStatus.AppliedInPart)));
+                string inPart;
+                Eq(ChangeStatus.AppliedInPart, DrawingSets.Judge(said, out inPart), "and the set is applied in part");
+                Is(inPart.Contains("A-201 North Elevation: its far clip reaches 20 ft"), inPart);
+                DrawingSetReport off = Fixture(root).DrawingSet;
+                off.Sheets[3].FarClipActive = false;
+                off.Sheets[3].FarClipFt = 20;
+                Is(DrawingSets.Problems(off, ChangeStatus.Applied).Count == 0, "far clipping off sees without end: " + string.Join("; ", DrawingSets.Problems(off, ChangeStatus.Applied)));
+                DrawingSetReport older = Fixture(root).DrawingSet;
+                foreach (DrawingSheet s in older.Sheets)
+                {
+                    s.FarClipActive = null;
+                    s.FarClipFt = null;
+                    s.DepthNeededFt = null;
+                    s.CropMinFt = null;
+                    s.CropMaxFt = null;
+                }
+                Is(DrawingSets.Problems(older, ChangeStatus.Applied).Count == 0, "an older report keeps every invariant: " + string.Join("; ", DrawingSets.Problems(older, ChangeStatus.Applied)));
+                string why;
+                Eq(ChangeStatus.Applied, DrawingSets.Judge(older, out why), "and is judged as it was");
             });
 
             // ─── the sheet, the scale, the viewport
@@ -341,6 +497,28 @@ namespace Flo2Rvt.Addin.Tests
                 Is(set.Sheets.All(s => s.Scale == 48 && s.ScaleText == DrawingSets.ScaleText(48, false)), "each at 1/4\" = 1'-0\"");
                 Is(set.Sheets.All(s => DrawingSets.Inside(s.ViewportMinFt, s.ViewportMaxFt, set.SheetArea)), "each inside the usable area");
                 Is(set.Sheets.Where(s => s.Kind == DrawingSetViewValues.Elevations).All(s => s.MarkerId != 0 && s.Looking == DrawingSets.Opposite(s.Facing)), "each elevation on its marker, looking at its face");
+                // Since add-in 0.15.1: each elevation and section sees past the building, read back.
+                var fb = new Box3(set.Building.MinFt[0], set.Building.MinFt[1], set.Building.MinFt[2], set.Building.MaxFt[0], set.Building.MaxFt[1], set.Building.MaxFt[2]);
+                foreach (DrawingSheet s in set.Sheets.Where(x => x.Kind == DrawingSetViewValues.Elevations || x.Kind == DrawingSetViewValues.Sections))
+                {
+                    string at = s.SheetNumber + " " + s.ViewName;
+                    Is(s.FarClipActive == true && s.FarClipFt.HasValue && s.DepthNeededFt.HasValue, at + " says its far clip is on, how far it reaches and how far it needs to");
+                    Is(Near(s.DepthNeededFt.Value, DrawingSets.PlannedDepth(fb, s), 1e-6), at + " needs the depth planned from the building: " + s.DepthNeededFt + " vs " + DrawingSets.PlannedDepth(fb, s));
+                    Is(s.FarClipFt.Value >= s.DepthNeededFt.Value, at + " reaches it");
+                    Is(s.CropMinFt != null && s.CropMaxFt != null && s.CropMinFt.Count == 3 && s.CropMaxFt.Count == 3, at + " gives its crop box in model terms");
+                    bool across = s.Kind == DrawingSetViewValues.Elevations ? s.Facing == DrawingSets.North || s.Facing == DrawingSets.South : s.Cut == DrawingSets.EastWest;
+                    int i = across ? 0 : 1;
+                    double lo = across ? fb.MinX : fb.MinY;
+                    double hi = across ? fb.MaxX : fb.MaxY;
+                    Is(s.CropMinFt[i] <= lo && s.CropMaxFt[i] >= hi && s.CropMinFt[2] <= fb.MinZ && s.CropMaxFt[2] >= fb.MaxZ, at + "'s crop holds the building across the view");
+                    Is(s.Why == null, at + " says nothing against itself");
+                }
+                foreach (DrawingSheet s in set.Sheets.Where(x => x.Kind == DrawingSetViewValues.Sections))
+                {
+                    double[][] made = RevitMakes(DrawingSets.Section(fb, s.Cut));
+                    Is(Same(s.ViewDirection.ToArray(), made[0], 1e-9) && Same(s.OriginFt.ToArray(), made[1], 1e-6), s.SheetNumber + " stands where CreateSection's convention puts the box asked: " + string.Join(", ", s.OriginFt) + " vs " + string.Join(", ", made[1]));
+                }
+                Is(set.Sheets.Where(x => x.Kind == DrawingSetViewValues.Plans || x.Kind == DrawingSetViewValues.Isometric).All(x => x.FarClipFt == null && x.DepthNeededFt == null && x.CropMinFt == null), "a plan and the 3D view say no far clip");
                 Eq(10, read.Totals.SheetsAdded, "sheets added");
                 Eq(10, read.Totals.ViewsAdded, "views added");
                 Eq(0, read.Totals.ElementsAdded, "no building content");
@@ -394,6 +572,69 @@ namespace Flo2Rvt.Addin.Tests
             Is(Near(dot(cross, s.BasisX), 1, 1e-12), "right-handed: x is y cross z");
             Is(s.BasisY.SequenceEqual(new[] { 0.0, 0, 1 }), "up is up");
             Is(s.Min[0] < s.Max[0] && s.Min[1] < s.Max[1] && s.Min[2] < s.Max[2], "a box with room in it");
+        }
+
+        private static double Dot(double[] a, double[] b)
+        {
+            return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+        }
+
+        private static double[] Cross(double[] a, double[] b)
+        {
+            return new[] { a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0] };
+        }
+
+        private static bool Same(double[] a, double[] b, double tol)
+        {
+            return a != null && b != null && a.Length == b.Length && a.Zip(b, (x, y) => Math.Abs(x - y) <= tol).All(x => x);
+        }
+
+        /// <summary>
+        /// What Revit makes of a section's box, by ViewSection.CreateSection's own words (Revit 2024's
+        /// RevitAPI.xml, 2024.3.60): "The view direction of the resulting section will be
+        /// sectionBox.Transform.BasisZ and the up direction will be sectionBox.Transform.BasisY. The right hand
+        /// direction will be computed so that (right, up, view direction) form a left handed coordinate system",
+        /// and "The far clip distance will be equal to the difference of the z-coordinates of BoundingBoxXYZ.Min
+        /// and BoundingBoxXYZ.Max". That "view direction" is the way the section LOOKS, away from the viewer:
+        /// View.ViewDirection is "The direction towards the viewer", its opposite, so the screen's right is
+        /// look x up, the viewer and the cut stand at Min.Z and the far clip at Max.Z, and View.Origin is the cut
+        /// face's lower-left corner as the viewer sees it. The first live run's two sections read so, to 0.001 ft
+        /// (2026-11-10). Returns { View.ViewDirection, View.Origin }.
+        /// </summary>
+        private static double[][] RevitMakes(SectionSpec s)
+        {
+            double[] look = s.BasisZ;
+            double[] right = Cross(look, s.BasisY);
+            double left = Dot(right, s.BasisX) > 0 ? s.Min[0] : s.Max[0];
+            var origin = new double[3];
+            for (int i = 0; i < 3; i++) origin[i] = s.Origin[i] + left * s.BasisX[i] + s.Min[1] * s.BasisY[i] + s.Min[2] * s.BasisZ[i];
+            return new[] { new[] { -look[0], -look[1], -look[2] }, origin };
+        }
+
+        /// <summary>The box add-in 0.15.0 handed CreateSection: BasisZ toward the viewer (south for an east-west cut, west for a north-south one), the cut at Max.Z = 0, the far half at negative z.</summary>
+        private static SectionSpec AsAskedBy0150(Box3 b, string cut)
+        {
+            double m = DrawingSets.Margin(b);
+            bool ew = cut == DrawingSets.EastWest;
+            double[] z = ew ? new[] { 0.0, -1, 0 } : new[] { -1.0, 0, 0 };
+            double[] y = { 0.0, 0, 1 };
+            double halfWidth = (ew ? b.Width : b.Depth) / 2;
+            double halfDepth = (ew ? b.Depth : b.Width) / 2;
+            return new SectionSpec
+            {
+                Origin = new[] { b.CenterX, b.CenterY, b.MinZ },
+                BasisX = Cross(y, z),
+                BasisY = y,
+                BasisZ = z,
+                Min = new[] { -(halfWidth + m), -m, -(halfDepth + m) },
+                Max = new[] { halfWidth + m, b.Height + m, 0.0 },
+            };
+        }
+
+        /// <summary>The building of the first live run (2026-11-10, Autodesk's rac_basic_sample_project.rvt) as its report gives it, internal feet.</summary>
+        private static Box3 LiveBuilding()
+        {
+            return new Box3(-38.149831, -60.379245, -23.300525, 82.965505, 72.222461, 30.179387);
         }
 
         /// <summary>The drawing set change of the made-up report, read through the contract.</summary>

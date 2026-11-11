@@ -38,7 +38,8 @@
 //     not made names nothing made of it and says why, each sheet number once, a view placed names its
 //     viewport and one that fits lies within the sheet's usable area, an elevation looks at its face and a
 //     section as its cut says, its counts add up, nothing reads made of a change not kept, and its status
-//     is the one its views earn.
+//     is the one its views earn; (since 0.15.1) an elevation or section read as asked whose report says
+//     the depth it needs says how far its far clip reaches, and it reaches that depth.
 //
 // The lists are read as the report lists them: past ElementTally.Cap a set is truncated, and
 // only its listed elements are checked.

@@ -536,7 +536,7 @@ describe("an edit's report summary", () => {
 
   // Since add-in 0.15.0 a list may make a drawing set (change-list version 7); the made-up report flo2
   // reads names, per view, the sheet it is on, its scale and where its viewport sits on the sheet.
-  test('from a report of add-in 0.15.0, counts the sheets a drawing set added, and each view says its sheet, its scale and that it fits', () => {
+  test('from a report of add-in 0.15.1, counts the sheets a drawing set added, and each view says its sheet, its scale and that it fits', () => {
     const f = fixture('sample-edit-report-drawing-set.json');
     const report = f.report as { edit: { addin_version: string }; exports: { sheets_pdf: { sheets: number } }; changes: Array<{ kind: string; status: string; drawing_set?: Record<string, unknown> }> };
     const s = editSummary(report as unknown as Record<string, unknown>);
@@ -544,7 +544,7 @@ describe("an edit's report summary", () => {
     assert.equal(s.elements_added, 0, 'a drawing set adds no building content');
     assert.equal(s.outcome, 'all_applied');
     assert.ok(EditSummary.safeParse(s).success, 'in the contract');
-    assert.equal(report.edit.addin_version, '0.15.0');
+    assert.equal(report.edit.addin_version, '0.15.1');
     assert.equal(report.exports.sheets_pdf.sheets, 10, "the job's sheets.pdf prints them");
     const set = report.changes[0]?.drawing_set as { sheets: Array<Record<string, unknown>>; sheet_area: { usable_min_ft: number[]; usable_max_ft: number[] } };
     assert.deepEqual(set.sheets.map((x) => x.sheet_number), ['A-101', 'A-102', 'A-103', 'A-201', 'A-202', 'A-203', 'A-204', 'A-301', 'A-302', 'A-401']);
@@ -556,6 +556,42 @@ describe("an edit's report summary", () => {
       assert.equal(x.fits, true);
       const [a, b] = [x.viewport_min_ft as number[], x.viewport_max_ft as number[]];
       assert.ok(a[0]! >= lo[0]! && a[1]! >= lo[1]! && b[0]! <= hi[0]! && b[1]! <= hi[1]!, `${String(x.sheet_number)} sits inside the sheet's usable area`);
+    }
+  });
+
+  // Since add-in 0.15.1: the first live drawing set (2026-11-10, add-in 0.15.0, Autodesk's
+  // rac_basic_sample_project.rvt) printed its north elevation with no house in it, its far clip short of the
+  // building, and its sections looking the opposite way, and the report said each was made, placed and fit.
+  // Now each elevation and section says how far it sees (its far clip, read back) beside how far it needs to
+  // (from its plane to the building's far side, and the margin), and its crop box in model terms; one that
+  // falls short says why, which flo2's check reads as not met.
+  test('from a report of add-in 0.15.1, each elevation and section says its far clip reaches the building, and each section looks the way its cut says', () => {
+    const f = fixture('sample-edit-report-drawing-set.json');
+    const report = f.report as { changes: Array<{ drawing_set?: { building: { min_ft: number[]; max_ft: number[] }; sheets: Array<Record<string, unknown>> } }> };
+    const set = report.changes[0]!.drawing_set!;
+    const deep = set.sheets.filter((x) => x.kind === 'elevations' || x.kind === 'sections');
+    assert.equal(deep.length, 6);
+    // The made-up building, 60 x 40 x 24 ft: a 3 ft margin; each elevation's marker 11 ft beyond its side.
+    assert.deepEqual(
+      deep.map((x) => [x.sheet_number, x.depth_needed_ft]),
+      [['A-201', 54], ['A-202', 74], ['A-203', 54], ['A-204', 74], ['A-301', 23], ['A-302', 33]],
+      'the north and south elevations see across the depth, the east and west across the width, each section its far half',
+    );
+    for (const x of deep) {
+      assert.equal(x.far_clip_active, true, `${String(x.sheet_number)} clips at its far side`);
+      assert.ok(Number(x.far_clip_ft) >= Number(x.depth_needed_ft), `${String(x.sheet_number)} sees as far as it needs`);
+      const [cmin, cmax] = [x.crop_min_ft as number[], x.crop_max_ft as number[]];
+      assert.equal(cmin.length, 3, `${String(x.sheet_number)}'s crop in model terms`);
+      assert.ok(cmin[2]! <= set.building.min_ft[2]! && cmax[2]! >= set.building.max_ft[2]!, `${String(x.sheet_number)}'s crop holds the building's height`);
+      assert.equal(x.why, undefined, `${String(x.sheet_number)} says nothing against itself`);
+    }
+    assert.deepEqual(
+      deep.filter((x) => x.kind === 'sections').map((x) => [x.cut, x.looking, x.view_direction, x.cut_off_middle_ft]),
+      [['east_west', 'north', [0, -1, 0], 0], ['north_south', 'east', [-1, 0, 0], 0]],
+      "each section looks the way its cut says, Revit's view direction toward the viewer, its cut through the middle",
+    );
+    for (const x of set.sheets.filter((s) => s.kind === 'plans' || s.kind === 'isometric')) {
+      assert.equal(x.far_clip_ft, undefined, `${String(x.sheet_number)} looks down or around, and says no far clip`);
     }
   });
 
