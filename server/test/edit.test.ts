@@ -536,7 +536,7 @@ describe("an edit's report summary", () => {
 
   // Since add-in 0.15.0 a list may make a drawing set (change-list version 7); the made-up report flo2
   // reads names, per view, the sheet it is on, its scale and where its viewport sits on the sheet.
-  test('from a report of add-in 0.15.1, counts the sheets a drawing set added, and each view says its sheet, its scale and that it fits', () => {
+  test('from a report of add-in 0.15.2, counts the sheets a drawing set added, and each view says its sheet, its scale and that it fits', () => {
     const f = fixture('sample-edit-report-drawing-set.json');
     const report = f.report as { edit: { addin_version: string }; exports: { sheets_pdf: { sheets: number } }; changes: Array<{ kind: string; status: string; drawing_set?: Record<string, unknown> }> };
     const s = editSummary(report as unknown as Record<string, unknown>);
@@ -544,7 +544,7 @@ describe("an edit's report summary", () => {
     assert.equal(s.elements_added, 0, 'a drawing set adds no building content');
     assert.equal(s.outcome, 'all_applied');
     assert.ok(EditSummary.safeParse(s).success, 'in the contract');
-    assert.equal(report.edit.addin_version, '0.15.1');
+    assert.equal(report.edit.addin_version, '0.15.2');
     assert.equal(report.exports.sheets_pdf.sheets, 10, "the job's sheets.pdf prints them");
     const set = report.changes[0]?.drawing_set as { sheets: Array<Record<string, unknown>>; sheet_area: { usable_min_ft: number[]; usable_max_ft: number[] } };
     assert.deepEqual(set.sheets.map((x) => x.sheet_number), ['A-101', 'A-102', 'A-103', 'A-201', 'A-202', 'A-203', 'A-204', 'A-301', 'A-302', 'A-401']);
@@ -559,31 +559,50 @@ describe("an edit's report summary", () => {
     }
   });
 
-  // Since add-in 0.15.1: the first live drawing set (2026-11-10, add-in 0.15.0, Autodesk's
-  // rac_basic_sample_project.rvt) printed its north elevation with no house in it, its far clip short of the
-  // building, and its sections looking the opposite way, and the report said each was made, placed and fit.
-  // Now each elevation and section says how far it sees (its far clip, read back) beside how far it needs to
-  // (from its plane to the building's far side, and the margin), and its crop box in model terms; one that
-  // falls short says why, which flo2's check reads as not met.
-  test('from a report of add-in 0.15.1, each elevation and section says its far clip reaches the building, and each section looks the way its cut says', () => {
+  // Since add-in 0.15.1 each elevation and section says its far clip and crop as Revit reads them back. The
+  // second live drawing set (2026-11-11, add-in 0.15.1, the same Autodesk sample) showed those readings are not
+  // the depth set: its far clip read back is measured from View.Origin's plane, so the readback passed a north
+  // elevation that printed no house and failed the east, south and west elevations, which show it. Since add-in
+  // 0.15.2 each elevation and section is judged by how many of the building's elements Revit shows in it
+  // (`building_elements_seen`, which flo2 reads); its far clip and crop are raw readings, and each elevation
+  // gives the view plane its crop and depth were set from, its crop region read back, and Revit's readings of
+  // it as made, cropped, far clipped and placed.
+  test("from a report of add-in 0.15.2, each elevation and section says how many of the building's elements Revit shows in it, its far clip and crop as raw readings, and each section looks the way its cut says", () => {
     const f = fixture('sample-edit-report-drawing-set.json');
-    const report = f.report as { changes: Array<{ drawing_set?: { building: { min_ft: number[]; max_ft: number[] }; sheets: Array<Record<string, unknown>> } }> };
+    const report = f.report as { changes: Array<{ drawing_set?: { building: { min_ft: number[]; max_ft: number[]; elements: number }; sheets: Array<Record<string, unknown>> } }> };
     const set = report.changes[0]!.drawing_set!;
     const deep = set.sheets.filter((x) => x.kind === 'elevations' || x.kind === 'sections');
     assert.equal(deep.length, 6);
-    // The made-up building, 60 x 40 x 24 ft: a 3 ft margin; each elevation's marker 11 ft beyond its side.
+    // The made-up building, 60 x 40 x 24 ft: a 3 ft margin; each elevation's plane on its marker, 11 ft beyond its side.
     assert.deepEqual(
       deep.map((x) => [x.sheet_number, x.depth_needed_ft]),
       [['A-201', 54], ['A-202', 74], ['A-203', 54], ['A-204', 74], ['A-301', 23], ['A-302', 33]],
-      'the north and south elevations see across the depth, the east and west across the width, each section its far half',
+      'the depth set: the north and south elevations across the depth, the east and west across the width, each section its far half',
     );
     for (const x of deep) {
-      assert.equal(x.far_clip_active, true, `${String(x.sheet_number)} clips at its far side`);
-      assert.ok(Number(x.far_clip_ft) >= Number(x.depth_needed_ft), `${String(x.sheet_number)} sees as far as it needs`);
+      const at = String(x.sheet_number);
+      const seen = x.building_elements_seen as number;
+      assert.ok(Number.isInteger(seen) && seen > 0 && seen <= set.building.elements, `${at} says Revit shows some of the building's ${set.building.elements} elements in it`);
+      assert.equal(x.far_clip_active, true, `${at} reads its far clipping on`);
+      assert.equal(typeof x.far_clip_ft, 'number', `${at} gives its far clip as read`);
       const [cmin, cmax] = [x.crop_min_ft as number[], x.crop_max_ft as number[]];
-      assert.equal(cmin.length, 3, `${String(x.sheet_number)}'s crop in model terms`);
-      assert.ok(cmin[2]! <= set.building.min_ft[2]! && cmax[2]! >= set.building.max_ft[2]!, `${String(x.sheet_number)}'s crop holds the building's height`);
-      assert.equal(x.why, undefined, `${String(x.sheet_number)} says nothing against itself`);
+      assert.ok(cmin.length === 3 && cmax.length === 3, `${at}'s crop as read, in model terms`);
+      assert.equal(x.why, undefined, `${at} says nothing against itself`);
+    }
+    const south = deep.find((x) => x.sheet_number === 'A-203')!;
+    assert.ok(Number(south.far_clip_ft) < Number(south.depth_needed_ft), 'a far clip read back short of the depth set is a raw reading, and says nothing against the view');
+    for (const x of deep.filter((s) => s.kind === 'elevations')) {
+      const at = String(x.sheet_number);
+      const [plane, vd, loop] = [x.view_plane_ft as number[], x.view_direction as number[], x.crop_loop_ft as number[][]];
+      assert.equal(plane.length, 3, `${at} gives its view plane`);
+      assert.equal(loop.length, 4, `${at}'s crop region read back, a rectangle`);
+      for (const p of loop) {
+        const along = (p[0]! - plane[0]!) * vd[0]! + (p[1]! - plane[1]!) * vd[1]! + (p[2]! - plane[2]!) * vd[2]!;
+        assert.ok(Math.abs(along) < 1e-6, `${at}'s crop region lies on its view plane, square to its view direction`);
+      }
+      const zs = loop.map((p) => p[2]!);
+      assert.ok(Math.min(...zs) <= set.building.min_ft[2]! && Math.max(...zs) >= set.building.max_ft[2]!, `${at}'s crop region holds the building's height`);
+      assert.deepEqual((x.readings as Array<{ at: string }>).map((r) => r.at), ['made', 'cropped', 'far_clipped', 'placed'], `${at} reads Revit at each stage`);
     }
     assert.deepEqual(
       deep.filter((x) => x.kind === 'sections').map((x) => [x.cut, x.looking, x.view_direction, x.cut_off_middle_ft]),
@@ -591,7 +610,8 @@ describe("an edit's report summary", () => {
       "each section looks the way its cut says, Revit's view direction toward the viewer, its cut through the middle",
     );
     for (const x of set.sheets.filter((s) => s.kind === 'plans' || s.kind === 'isometric')) {
-      assert.equal(x.far_clip_ft, undefined, `${String(x.sheet_number)} looks down or around, and says no far clip`);
+      const at = String(x.sheet_number);
+      assert.ok(x.far_clip_ft === undefined && x.building_elements_seen === undefined && x.readings === undefined, `${at} looks down or around, and says no far clip, count or readings`);
     }
   });
 

@@ -1,5 +1,5 @@
 {
-  "_note": "A made-up report of add-in 0.15.1 (report version 2, fields added), shaped as flo2's own fixtures of a list and its report, for change_list, a version-7 list on a made-up model (no person's, no building's): one add_drawing_set that says nothing, so every view is made. The model holds three levels (Level 1, Level 2, and Roof, which nothing stands on and still gets its plan, as empty_levels include says), one title block type (E1 30 x 42 Horizontal, a 42 x 30 in sheet), and a building 60 x 40 ft in plan, 24 ft high, in the model's internal axes. Ten views, each on a sheet of its own: three floor plans (A-101 to A-103, lowest level first), the four elevations (A-201 to A-204: north, east, south, west, each named by the face it shows, looking at it from outside), two sections through the middle (A-301 east-west, looking north; A-302 north-south, looking east) and a 3D view (A-401). Each viewport sits at the middle of the sheet's usable area (the title block's box inset by 4% of its shorter side, its right 18% kept for the title strip) at 1/4\" = 1'-0\", the largest standard scale at which it fits there. The job's sheets.pdf holds the ten sheets. Since add-in 0.15.1 each elevation and section says its far clip is on and reaches as far as it needs (far_clip_ft, depth_needed_ft: from its plane to the building's far side, and the 3 ft margin; an elevation's plane is its marker's, 11 ft beyond the side it shows), and gives its crop box in model terms (crop_min_ft, crop_max_ft); each section's view_direction and origin_ft are where CreateSection's documented convention puts the box asked (it looks along the box's BasisZ, its View.Origin the cut face's lower-left corner as the viewer sees it). Made-up ids; every value consistent with the add-in's invariants (ReportCheck, DrawingSets.Problems).",
+  "_note": "A made-up report of add-in 0.15.2 (report version 2, fields added), shaped as flo2's own fixtures of a list and its report, for change_list, a version-7 list on a made-up model (no person's, no building's): one add_drawing_set that says nothing, so every view is made. The model holds three levels (Level 1, Level 2, and Roof, which nothing stands on and still gets its plan, as empty_levels include says), one title block type (E1 30 x 42 Horizontal, a 42 x 30 in sheet), and a building 60 x 40 ft in plan, 24 ft high, of 14 elements, in the model's internal axes. Ten views, each on a sheet of its own: three floor plans (A-101 to A-103, lowest level first), the four elevations (A-201 to A-204: north, east, south, west, each named by the face it shows, looking at it from outside), two sections through the middle (A-301 east-west, looking north; A-302 north-south, looking east) and a 3D view (A-401). Each viewport sits at the middle of the sheet's usable area (the title block's box inset by 4% of its shorter side, its right 18% kept for the title strip) at 1/4\" = 1'-0\", the largest standard scale at which it fits there. The job's sheets.pdf holds the ten sheets. Since add-in 0.15.2 each elevation and section is judged by what Revit says it shows: how many of the building's 14 elements Revit passes in it (building_elements_seen). Its far clip and crop box as Revit reads them back once everything is set (far_clip_active, far_clip_ft, crop_min_ft and crop_max_ft in model terms, origin_ft) are raw readings and not judged: the south elevation's Far Clip Offset reads 46 ft beside the 54 ft set, as the second live run's read 108.78 ft beside 157.49. depth_needed_ft is the depth the add-in set, from the view's plane to the building's far side, and the 3 ft margin. Each elevation gives its view plane (view_plane_ft: the middle of the crop region Revit made, read in model coordinates, on its marker's plane 11 ft beyond the side it shows), its crop region read back once set (crop_loop_ft: a rectangle on that plane along its right and up directions holding the building and the margin), and Revit's readings of it as made, cropped, far clipped and placed (readings: its View.CropBox and that box's frame, View.Origin, its right, up and view directions, its Far Clip Offset and its crop region). Each section's view_direction and origin_ft are where CreateSection's documented convention puts the box asked (it looks along the box's BasisZ, its View.Origin the cut face's lower-left corner as the viewer sees it). Made-up ids; every value consistent with the add-in's invariants (ReportCheck, DrawingSets.Problems).",
   "change_list": {
     "version": 7,
     "list_id": "drawing-set-1",
@@ -15,7 +15,7 @@
     "schema": "flo2-rvt/edit-report",
     "version": 2,
     "edit": {
-      "addin_version": "0.15.1",
+      "addin_version": "0.15.2",
       "started_at": "2026-11-09T12:00:00.0000000Z",
       "finished_at": "2026-11-09T12:02:10.0000000Z",
       "transactions_committed": 1,
@@ -231,6 +231,11 @@
                 1,
                 0
               ],
+              "origin_ft": [
+                63,
+                51,
+                -3
+              ],
               "far_clip_active": true,
               "far_clip_ft": 54,
               "depth_needed_ft": 54,
@@ -243,6 +248,18 @@
                 63,
                 51,
                 27
+              ],
+              "building_elements_seen": 12,
+              "view_plane_ft": [
+                30,
+                51,
+                12
+              ],
+              "crop_loop_ft": [
+                [63, 51, -3],
+                [-3, 51, -3],
+                [-3, 51, 27],
+                [63, 51, 27]
               ],
               "marker_id": 990900,
               "scale": 48,
@@ -261,6 +278,84 @@
               "viewport_max_ft": [
                 2.1225,
                 1.5625
+              ],
+              "readings": [
+                {
+                  "at": "made",
+                  "crop_min_ft": [-40, -8, -40],
+                  "crop_max_ft": [40, 32, 0],
+                  "crop_origin_ft": [30, 51, 0],
+                  "crop_basis_x": [-1, 0, 0],
+                  "crop_basis_z": [0, 1, 0],
+                  "origin_ft": [70, 51, -8],
+                  "right_direction": [-1, 0, 0],
+                  "up_direction": [0, 0, 1],
+                  "view_direction": [0, 1, 0],
+                  "far_clip_ft": 40,
+                  "crop_loop_ft": [
+                    [70, 51, -8],
+                    [-10, 51, -8],
+                    [-10, 51, 32],
+                    [70, 51, 32]
+                  ]
+                },
+                {
+                  "at": "cropped",
+                  "crop_min_ft": [-33, -3, -40],
+                  "crop_max_ft": [33, 27, 0],
+                  "crop_origin_ft": [30, 51, 0],
+                  "crop_basis_x": [-1, 0, 0],
+                  "crop_basis_z": [0, 1, 0],
+                  "origin_ft": [63, 51, -3],
+                  "right_direction": [-1, 0, 0],
+                  "up_direction": [0, 0, 1],
+                  "view_direction": [0, 1, 0],
+                  "far_clip_ft": 40,
+                  "crop_loop_ft": [
+                    [63, 51, -3],
+                    [-3, 51, -3],
+                    [-3, 51, 27],
+                    [63, 51, 27]
+                  ]
+                },
+                {
+                  "at": "far_clipped",
+                  "crop_min_ft": [-33, -3, -54],
+                  "crop_max_ft": [33, 27, 0],
+                  "crop_origin_ft": [30, 51, 0],
+                  "crop_basis_x": [-1, 0, 0],
+                  "crop_basis_z": [0, 1, 0],
+                  "origin_ft": [63, 51, -3],
+                  "right_direction": [-1, 0, 0],
+                  "up_direction": [0, 0, 1],
+                  "view_direction": [0, 1, 0],
+                  "far_clip_ft": 54,
+                  "crop_loop_ft": [
+                    [63, 51, -3],
+                    [-3, 51, -3],
+                    [-3, 51, 27],
+                    [63, 51, 27]
+                  ]
+                },
+                {
+                  "at": "placed",
+                  "crop_min_ft": [-33, -3, -54],
+                  "crop_max_ft": [33, 27, 0],
+                  "crop_origin_ft": [30, 51, 0],
+                  "crop_basis_x": [-1, 0, 0],
+                  "crop_basis_z": [0, 1, 0],
+                  "origin_ft": [63, 51, -3],
+                  "right_direction": [-1, 0, 0],
+                  "up_direction": [0, 0, 1],
+                  "view_direction": [0, 1, 0],
+                  "far_clip_ft": 54,
+                  "crop_loop_ft": [
+                    [63, 51, -3],
+                    [-3, 51, -3],
+                    [-3, 51, 27],
+                    [63, 51, 27]
+                  ]
+                }
               ]
             },
             {
@@ -276,6 +371,11 @@
                 0,
                 0
               ],
+              "origin_ft": [
+                71,
+                -3,
+                -3
+              ],
               "far_clip_active": true,
               "far_clip_ft": 74,
               "depth_needed_ft": 74,
@@ -288,6 +388,18 @@
                 71,
                 43,
                 27
+              ],
+              "building_elements_seen": 11,
+              "view_plane_ft": [
+                71,
+                20,
+                12
+              ],
+              "crop_loop_ft": [
+                [71, -3, -3],
+                [71, 43, -3],
+                [71, 43, 27],
+                [71, -3, 27]
               ],
               "marker_id": 990901,
               "scale": 48,
@@ -306,6 +418,84 @@
               "viewport_max_ft": [
                 1.914167,
                 1.5625
+              ],
+              "readings": [
+                {
+                  "at": "made",
+                  "crop_min_ft": [-40, -8, -40],
+                  "crop_max_ft": [40, 32, 0],
+                  "crop_origin_ft": [71, 20, 0],
+                  "crop_basis_x": [0, 1, 0],
+                  "crop_basis_z": [1, 0, 0],
+                  "origin_ft": [71, -20, -8],
+                  "right_direction": [0, 1, 0],
+                  "up_direction": [0, 0, 1],
+                  "view_direction": [1, 0, 0],
+                  "far_clip_ft": 40,
+                  "crop_loop_ft": [
+                    [71, -20, -8],
+                    [71, 60, -8],
+                    [71, 60, 32],
+                    [71, -20, 32]
+                  ]
+                },
+                {
+                  "at": "cropped",
+                  "crop_min_ft": [-23, -3, -40],
+                  "crop_max_ft": [23, 27, 0],
+                  "crop_origin_ft": [71, 20, 0],
+                  "crop_basis_x": [0, 1, 0],
+                  "crop_basis_z": [1, 0, 0],
+                  "origin_ft": [71, -3, -3],
+                  "right_direction": [0, 1, 0],
+                  "up_direction": [0, 0, 1],
+                  "view_direction": [1, 0, 0],
+                  "far_clip_ft": 40,
+                  "crop_loop_ft": [
+                    [71, -3, -3],
+                    [71, 43, -3],
+                    [71, 43, 27],
+                    [71, -3, 27]
+                  ]
+                },
+                {
+                  "at": "far_clipped",
+                  "crop_min_ft": [-23, -3, -74],
+                  "crop_max_ft": [23, 27, 0],
+                  "crop_origin_ft": [71, 20, 0],
+                  "crop_basis_x": [0, 1, 0],
+                  "crop_basis_z": [1, 0, 0],
+                  "origin_ft": [71, -3, -3],
+                  "right_direction": [0, 1, 0],
+                  "up_direction": [0, 0, 1],
+                  "view_direction": [1, 0, 0],
+                  "far_clip_ft": 74,
+                  "crop_loop_ft": [
+                    [71, -3, -3],
+                    [71, 43, -3],
+                    [71, 43, 27],
+                    [71, -3, 27]
+                  ]
+                },
+                {
+                  "at": "placed",
+                  "crop_min_ft": [-23, -3, -74],
+                  "crop_max_ft": [23, 27, 0],
+                  "crop_origin_ft": [71, 20, 0],
+                  "crop_basis_x": [0, 1, 0],
+                  "crop_basis_z": [1, 0, 0],
+                  "origin_ft": [71, -3, -3],
+                  "right_direction": [0, 1, 0],
+                  "up_direction": [0, 0, 1],
+                  "view_direction": [1, 0, 0],
+                  "far_clip_ft": 74,
+                  "crop_loop_ft": [
+                    [71, -3, -3],
+                    [71, 43, -3],
+                    [71, 43, 27],
+                    [71, -3, 27]
+                  ]
+                }
               ]
             },
             {
@@ -321,8 +511,13 @@
                 -1,
                 0
               ],
+              "origin_ft": [
+                -3,
+                -11,
+                -3
+              ],
               "far_clip_active": true,
-              "far_clip_ft": 54,
+              "far_clip_ft": 46,
               "depth_needed_ft": 54,
               "crop_min_ft": [
                 -3,
@@ -333,6 +528,18 @@
                 63,
                 43,
                 27
+              ],
+              "building_elements_seen": 12,
+              "view_plane_ft": [
+                30,
+                -11,
+                12
+              ],
+              "crop_loop_ft": [
+                [-3, -11, -3],
+                [63, -11, -3],
+                [63, -11, 27],
+                [-3, -11, 27]
               ],
               "marker_id": 990902,
               "scale": 48,
@@ -351,6 +558,84 @@
               "viewport_max_ft": [
                 2.1225,
                 1.5625
+              ],
+              "readings": [
+                {
+                  "at": "made",
+                  "crop_min_ft": [-40, -8, -40],
+                  "crop_max_ft": [40, 32, 0],
+                  "crop_origin_ft": [30, -11, 0],
+                  "crop_basis_x": [1, 0, 0],
+                  "crop_basis_z": [0, -1, 0],
+                  "origin_ft": [-10, -11, -8],
+                  "right_direction": [1, 0, 0],
+                  "up_direction": [0, 0, 1],
+                  "view_direction": [0, -1, 0],
+                  "far_clip_ft": 40,
+                  "crop_loop_ft": [
+                    [-10, -11, -8],
+                    [70, -11, -8],
+                    [70, -11, 32],
+                    [-10, -11, 32]
+                  ]
+                },
+                {
+                  "at": "cropped",
+                  "crop_min_ft": [-33, -3, -40],
+                  "crop_max_ft": [33, 27, 0],
+                  "crop_origin_ft": [30, -11, 0],
+                  "crop_basis_x": [1, 0, 0],
+                  "crop_basis_z": [0, -1, 0],
+                  "origin_ft": [-3, -11, -3],
+                  "right_direction": [1, 0, 0],
+                  "up_direction": [0, 0, 1],
+                  "view_direction": [0, -1, 0],
+                  "far_clip_ft": 40,
+                  "crop_loop_ft": [
+                    [-3, -11, -3],
+                    [63, -11, -3],
+                    [63, -11, 27],
+                    [-3, -11, 27]
+                  ]
+                },
+                {
+                  "at": "far_clipped",
+                  "crop_min_ft": [-33, -3, -54],
+                  "crop_max_ft": [33, 27, 0],
+                  "crop_origin_ft": [30, -11, 0],
+                  "crop_basis_x": [1, 0, 0],
+                  "crop_basis_z": [0, -1, 0],
+                  "origin_ft": [-3, -11, -3],
+                  "right_direction": [1, 0, 0],
+                  "up_direction": [0, 0, 1],
+                  "view_direction": [0, -1, 0],
+                  "far_clip_ft": 46,
+                  "crop_loop_ft": [
+                    [-3, -11, -3],
+                    [63, -11, -3],
+                    [63, -11, 27],
+                    [-3, -11, 27]
+                  ]
+                },
+                {
+                  "at": "placed",
+                  "crop_min_ft": [-33, -3, -54],
+                  "crop_max_ft": [33, 27, 0],
+                  "crop_origin_ft": [30, -11, 0],
+                  "crop_basis_x": [1, 0, 0],
+                  "crop_basis_z": [0, -1, 0],
+                  "origin_ft": [-3, -11, -3],
+                  "right_direction": [1, 0, 0],
+                  "up_direction": [0, 0, 1],
+                  "view_direction": [0, -1, 0],
+                  "far_clip_ft": 46,
+                  "crop_loop_ft": [
+                    [-3, -11, -3],
+                    [63, -11, -3],
+                    [63, -11, 27],
+                    [-3, -11, 27]
+                  ]
+                }
               ]
             },
             {
@@ -366,6 +651,11 @@
                 0,
                 0
               ],
+              "origin_ft": [
+                -11,
+                43,
+                -3
+              ],
               "far_clip_active": true,
               "far_clip_ft": 74,
               "depth_needed_ft": 74,
@@ -378,6 +668,18 @@
                 63,
                 43,
                 27
+              ],
+              "building_elements_seen": 11,
+              "view_plane_ft": [
+                -11,
+                20,
+                12
+              ],
+              "crop_loop_ft": [
+                [-11, 43, -3],
+                [-11, -3, -3],
+                [-11, -3, 27],
+                [-11, 43, 27]
               ],
               "marker_id": 990903,
               "scale": 48,
@@ -396,6 +698,84 @@
               "viewport_max_ft": [
                 1.914167,
                 1.5625
+              ],
+              "readings": [
+                {
+                  "at": "made",
+                  "crop_min_ft": [-40, -8, -40],
+                  "crop_max_ft": [40, 32, 0],
+                  "crop_origin_ft": [-11, 20, 0],
+                  "crop_basis_x": [0, -1, 0],
+                  "crop_basis_z": [-1, 0, 0],
+                  "origin_ft": [-11, 60, -8],
+                  "right_direction": [0, -1, 0],
+                  "up_direction": [0, 0, 1],
+                  "view_direction": [-1, 0, 0],
+                  "far_clip_ft": 40,
+                  "crop_loop_ft": [
+                    [-11, 60, -8],
+                    [-11, -20, -8],
+                    [-11, -20, 32],
+                    [-11, 60, 32]
+                  ]
+                },
+                {
+                  "at": "cropped",
+                  "crop_min_ft": [-23, -3, -40],
+                  "crop_max_ft": [23, 27, 0],
+                  "crop_origin_ft": [-11, 20, 0],
+                  "crop_basis_x": [0, -1, 0],
+                  "crop_basis_z": [-1, 0, 0],
+                  "origin_ft": [-11, 43, -3],
+                  "right_direction": [0, -1, 0],
+                  "up_direction": [0, 0, 1],
+                  "view_direction": [-1, 0, 0],
+                  "far_clip_ft": 40,
+                  "crop_loop_ft": [
+                    [-11, 43, -3],
+                    [-11, -3, -3],
+                    [-11, -3, 27],
+                    [-11, 43, 27]
+                  ]
+                },
+                {
+                  "at": "far_clipped",
+                  "crop_min_ft": [-23, -3, -74],
+                  "crop_max_ft": [23, 27, 0],
+                  "crop_origin_ft": [-11, 20, 0],
+                  "crop_basis_x": [0, -1, 0],
+                  "crop_basis_z": [-1, 0, 0],
+                  "origin_ft": [-11, 43, -3],
+                  "right_direction": [0, -1, 0],
+                  "up_direction": [0, 0, 1],
+                  "view_direction": [-1, 0, 0],
+                  "far_clip_ft": 74,
+                  "crop_loop_ft": [
+                    [-11, 43, -3],
+                    [-11, -3, -3],
+                    [-11, -3, 27],
+                    [-11, 43, 27]
+                  ]
+                },
+                {
+                  "at": "placed",
+                  "crop_min_ft": [-23, -3, -74],
+                  "crop_max_ft": [23, 27, 0],
+                  "crop_origin_ft": [-11, 20, 0],
+                  "crop_basis_x": [0, -1, 0],
+                  "crop_basis_z": [-1, 0, 0],
+                  "origin_ft": [-11, 43, -3],
+                  "right_direction": [0, -1, 0],
+                  "up_direction": [0, 0, 1],
+                  "view_direction": [-1, 0, 0],
+                  "far_clip_ft": 74,
+                  "crop_loop_ft": [
+                    [-11, 43, -3],
+                    [-11, -3, -3],
+                    [-11, -3, 27],
+                    [-11, 43, 27]
+                  ]
+                }
               ]
             },
             {
@@ -430,6 +810,7 @@
                 43,
                 27
               ],
+              "building_elements_seen": 9,
               "scale": 48,
               "scale_text": "1/4\" = 1'-0\"",
               "sheet_number": "A-301",
@@ -480,6 +861,7 @@
                 43,
                 27
               ],
+              "building_elements_seen": 8,
               "scale": 48,
               "scale_text": "1/4\" = 1'-0\"",
               "sheet_number": "A-302",

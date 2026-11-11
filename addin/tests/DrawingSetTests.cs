@@ -17,6 +17,19 @@
 // numbers; and its north elevation showed no house, its far clip short of the building and never read
 // back, so each elevation's and section's depth is planned (ElevationDepth, SectionDepth), its far clip
 // and crop read back and judged (ReachWhy, CropWhy), and the report check holds them to each other.
+//
+// Since add-in 0.15.2, what the second live run found (2026-11-11, add-in 0.15.1, the same Autodesk
+// sample): the plans, the 3D view and both sections right, the north elevation still blank (a tree and the
+// ground), its region wholly south of the building, and the readback judging the four elevations
+// backwards: it passed the blank north view and failed the east, south and west views, whose sheets show
+// the house. Its far clip read back is measured from View.Origin's plane, not from the view plane the
+// depth was set from (unlike quantities), and east's and west's View.CropBox frames read turned 45 degrees
+// in plan though each is drawn square-on. So an elevation or section is judged by what Revit says it shows
+// (SeenWhy: none of the building's elements passed in it); an elevation is cropped across only, on its
+// view plane, a point of Revit's own crop region in model coordinates (PlanePoint), across its right and
+// up (ScreenAxes, CropRectangle), never through View.CropBox's Transform; its depth is set from that plane
+// (ElevationDepthFrom), and the building must stand in front of it (BehindWhy); the far clip and crop read
+// back are kept as raw readings and no longer judged.
 
 using System;
 using System.Collections.Generic;
@@ -284,55 +297,119 @@ namespace Flo2Rvt.Addin.Tests
                 Eq(33.0, DrawingSets.PlannedDepth(small, new DrawingSheet { Kind = DrawingSetViewValues.Sections, Cut = DrawingSets.NorthSouth }), "the other's");
                 Eq(0.0, DrawingSets.PlannedDepth(small, new DrawingSheet { Kind = DrawingSetViewValues.Plans }), "a plan looks down, and needs none");
             });
-            Test("a view's far clip read back is judged against the depth it needs: short of it gives a why in plain words, enough gives none, far clipping off sees without end, and a far clip that could not be read is never taken as enough", () =>
+            // ─── what each elevation and section shows, and where an elevation stands (since add-in 0.15.2)
+            Test("an elevation or section is judged by what Revit says it shows: none of the building's elements passed in it gives a why in plain words, some gives none, and a count not read is never taken as some", () =>
+            {
+                Eq("Revit shows none of the building's 165 elements in it", DrawingSets.SeenWhy(0, 165), "the second live run's north elevation, a tree and the ground");
+                Is(DrawingSets.SeenWhy(1, 165) == null, "one is some: the view is not empty (which proves it shows some of the building, not all of it: Revit may pass an element its crop hides)");
+                Is(DrawingSets.SeenWhy(165, 165) == null, "all of them");
+                string unread = DrawingSets.SeenWhy(null, 165);
+                Is(unread != null && unread.Contains("could not be read back") && unread.Contains("165 elements"), unread);
+                Eq("Revit does not show the building's one element in it", DrawingSets.SeenWhy(0, 1), "a building of one element");
+                Is(DrawingSets.SeenWhy(0, 0) == null, "no building, nothing to see: such a set makes no elevation or section");
+            });
+            Test("an elevation's view plane is a point of Revit's own crop region in model coordinates: its points' middle when they lie in one plane square to the view direction; none, saying why, when they do not, or when there are none", () =>
+            {
+                // The made-up north elevation's crop region as Revit makes it: a rectangle on the plane y = 51, its marker's.
+                var north = new List<double[]> { new[] { 70.0, 51, -8 }, new[] { -10.0, 51, -8 }, new[] { -10.0, 51, 32 }, new[] { 70.0, 51, 32 } };
+                string why;
+                double[] p = DrawingSets.PlanePoint(north, new[] { 0.0, 1, 0 }, out why);
+                Is(p != null && Same(p, new[] { 30.0, 51, 12 }, 1e-12) && why == null, "its middle, on the plane: " + (p == null ? why : string.Join(", ", p)));
+                var nearly = north.Select(c => new[] { c[0], c[1] + (c[0] > 0 ? 0.004 : 0), c[2] }).ToList();
+                Is(DrawingSets.PlanePoint(nearly, new[] { 0.0, 1, 0 }, out why) != null, "within a hundredth of a foot: " + why);
+                // The same rectangle in the view's own frame (x right, y up, z toward the viewer) would read its z the same and its y apart.
+                var local = new List<double[]> { new[] { -40.0, -8, 0 }, new[] { 40.0, -8, 0 }, new[] { 40.0, 32, 0 }, new[] { -40.0, 32, 0 } };
+                Is(DrawingSets.PlanePoint(local, new[] { 0.0, 1, 0 }, out why) == null && why.Contains("in no plane square to its view direction") && why.Contains("up to 40 ft apart"), "points not in model coordinates give no plane: " + why);
+                Is(DrawingSets.PlanePoint(new List<double[]>(), new[] { 0.0, 1, 0 }, out why) == null && why.Contains("no crop region"), why);
+                Is(DrawingSets.PlanePoint(null, new[] { 0.0, 1, 0 }, out why) == null && why.Contains("no crop region"), why);
+                Is(DrawingSets.PlanePoint(north, new[] { 0.0, 0, 0 }, out why) == null && why.Contains("no view direction"), why);
+            });
+            Test("an elevation is cropped across only, on its view plane: a rectangle along its RightDirection and UpDirection holding the building's corners and the margin; on the live box the east elevation's is 145.86 ft across, not the 206 ft the CropBox frame gave", () =>
             {
                 Box3 b = LiveBuilding();
                 double m = DrawingSets.Margin(b);
-                double needed = DrawingSets.ElevationDepth(b, DrawingSets.North);
-                string why = DrawingSets.ReachWhy(true, 20, needed, m);
-                Is(why != null && why.Contains("its far clip reaches 20 ft, short of the 157.49 ft it needs") && why.Contains("the building's far side at 150.86 ft"), why);
-                Is(DrawingSets.ReachWhy(true, Lengths.Round(needed), needed, m) == null, "as far as it needs: nothing to say");
-                Is(DrawingSets.ReachWhy(true, 200, needed, m) == null, "further: nothing to say");
-                Is(DrawingSets.ReachWhy(true, needed - 0.005, needed, m) == null, "within a hundredth of a foot");
-                Is(DrawingSets.ReachWhy(true, 155, needed, m) != null, "past the far side, short of the margin, is short of what it was set to");
-                Is(DrawingSets.ReachWhy(false, 20, needed, m) == null, "far clipping off: the view sees without end, the building with it");
-                string unknown = DrawingSets.ReachWhy(null, 20, needed, m);
-                Is(unknown != null && unknown.Contains("its far clip reaches 20 ft"), "whether it is on not read: taken as on: " + unknown);
-                string unread = DrawingSets.ReachWhy(true, null, needed, m);
-                Is(unread != null && unread.Contains("its far clip could not be read back") && unread.Contains("150.86 ft"), unread);
+                double[] r, u;
+                string said;
+                // East: looking west, View.ViewDirection (1, 0, 0) toward the viewer, the screen's right north, its top up.
+                Is(DrawingSets.ScreenAxes(new[] { 0.0, 1, 0 }, new[] { 0.0, 0, 1 }, new[] { 1.0, 0, 0 }, out r, out u, out said) && said == null, "square axes: " + said);
+                Is(Same(r, new[] { 0.0, 1, 0 }, 1e-12) && Same(u, new[] { 0.0, 0, 1 }, 1e-12), "kept as Revit gives them");
+                PlanXY at = DrawingSets.MarkerAt(b, DrawingSets.East);
+                double[] plane = { at.X, at.Y, 3.4 };
+                List<double[]> rect = DrawingSets.CropRectangle(b, plane, r, u, m);
+                Eq(4, rect.Count, "four corners");
+                double across = Dot(Sub(rect[1], rect[0]), r);
+                double high = Dot(Sub(rect[2], rect[1]), u);
+                Is(Near(across, 132.601706 + 2 * m, 1e-6) && Near(across, 145.86, 0.01), "across the building's 132.60 ft depth and the margin each side, about 146 ft: " + across);
+                Is(Near(high, 53.479912 + 2 * m, 1e-6), "its height and the margin: " + high);
+                Is(rect.All(c => Near(Dot(Sub(c, plane), new[] { 1.0, 0, 0 }), 0, 1e-9)), "every corner on the view plane, in a plane square to the view direction, as SetCropShape takes it");
+                Is(Near(Dot(Sub(rect[1], rect[0]), Sub(rect[3], rect[0])), 0, 1e-9) && Same(Sub(rect[2], rect[1]), Sub(rect[3], rect[0]), 1e-9), "a rectangle, its sides square");
+                foreach (double[] c in b.Corners())
+                {
+                    double cu = Dot(Sub(c, rect[0]), r), cv = Dot(Sub(c, rect[0]), u);
+                    Is(cu >= m - 1e-9 && cu <= across - m + 1e-9 && cv >= m - 1e-9 && cv <= high - m + 1e-9, "each corner of the building within it, the margin from its edges: " + cu + ", " + cv);
+                }
+                // North: looking south, the screen's right west; across the building's 121.12 ft width.
+                Is(DrawingSets.ScreenAxes(new[] { -1.0, 0, 0 }, new[] { 0.0, 0, 1 }, new[] { 0.0, 1, 0 }, out r, out u, out said) && said == null, said);
+                PlanXY n = DrawingSets.MarkerAt(b, DrawingSets.North);
+                rect = DrawingSets.CropRectangle(b, new[] { n.X, n.Y, 0 }, r, u, m);
+                Is(Near(Dot(Sub(rect[1], rect[0]), r), 121.115336 + 2 * m, 1e-6), "the north elevation across the width");
+                // East's CropBox frame read turned 45 degrees in plan in the second live run, though it looks square-on: a RightDirection so turned is squared to the view direction, saying so.
+                double h = Math.Sqrt(0.5);
+                Is(DrawingSets.ScreenAxes(new[] { h, h, 0 }, new[] { 0.0, 0, 1 }, new[] { 1.0, 0, 0 }, out r, out u, out said), "squared");
+                Is(Same(r, new[] { 0.0, 1, 0 }, 1e-12) && Same(u, new[] { 0.0, 0, 1 }, 1e-12), "the screen's right square to the view direction: " + string.Join(", ", r));
+                Is(said != null && said.Contains("not square to its ViewDirection"), said);
+                Is(!DrawingSets.ScreenAxes(new[] { 1.0, 0, 0 }, new[] { 0.0, 0, 1 }, new[] { 1.0, 0, 0 }, out r, out u, out said) && said.Contains("along its ViewDirection"), "a right along the view direction gives no screen: " + said);
+                Is(!DrawingSets.ScreenAxes(new[] { 0.0, 1, 0 }, new[] { 1.0, 0, 0 }, new[] { 1.0, 0, 0 }, out r, out u, out said) && said.Contains("UpDirection"), "nor an up along it: " + said);
             });
-            Test("a view's crop read back must hold the building across the view: one that leaves it out names the side, in the view's own frame", () =>
+            Test("an elevation's far clip is set from its view plane along the way it looks, to the building's far side and the margin (157.49 ft from the north marker's plane on the live box, as the second live run set it, measured from the near face), from its marker when no plane was read; and the building must stand in front of the plane", () =>
             {
-                // A north elevation of the made-up building, its frame at its marker: x right on screen (west), y up, z toward the viewer.
-                var seen = new List<double[]> { new[] { -30.0, 0, -11 }, new[] { 30.0, 24, -51 }, new[] { 30.0, 0, -11 }, new[] { -30.0, 24, -51 } };
-                Is(DrawingSets.CropWhy(new[] { -33.0, -3, -54 }, new[] { 33.0, 27, 0 }, seen) == null, "a crop with the margin holds it");
-                Is(DrawingSets.CropWhy(new[] { -30.0, 0, -54 }, new[] { 30.0, 24, 0 }, seen) == null, "one to its edges holds it");
-                string right = DrawingSets.CropWhy(new[] { -33.0, -3, -54 }, new[] { 20.0, 27, 0 }, seen);
-                Is(right != null && right.Contains("its crop leaves part of the building out across the view, past its right") && !right.Contains("left"), right);
-                string two = DrawingSets.CropWhy(new[] { -10.0, 5, -54 }, new[] { 33.0, 27, 0 }, seen);
-                Is(two != null && two.Contains("past its left and bottom"), two);
-                Is(DrawingSets.CropWhy(new[] { -33.0, -3, -20 }, new[] { 33.0, 27, 0 }, seen) == null, "its depth is the far clip's to judge, not the crop's across the view");
+                Box3 b = LiveBuilding();
+                double m = DrawingSets.Margin(b);
+                PlanXY n = DrawingSets.MarkerAt(b, DrawingSets.North);
+                double[] plane = { n.X, n.Y, 3.4 };
+                double[] vd = { 0.0, 1, 0 };
+                Is(Same(DrawingSets.Look(vd), new[] { 0.0, -1, 0 }, 0), "it looks the opposite of its view direction");
+                Is(Near(DrawingSets.ElevationDepthFrom(b, DrawingSets.North, plane, vd), 157.491962, 1e-5), "157.49 ft from the plane: " + DrawingSets.ElevationDepthFrom(b, DrawingSets.North, plane, vd));
+                Is(Near(DrawingSets.ElevationDepthFrom(b, DrawingSets.North, new[] { 0.0, 100, 0 }, vd), 100 + 60.379245 + m, 1e-6), "from wherever its plane stands");
+                Is(Near(DrawingSets.ElevationDepthFrom(b, DrawingSets.North, null, vd), DrawingSets.ElevationDepth(b, DrawingSets.North), 1e-12), "no plane read: from its marker");
+                Is(Near(DrawingSets.ElevationDepthFrom(b, DrawingSets.East, plane, null), DrawingSets.ElevationDepth(b, DrawingSets.East), 1e-12), "no view direction read: from its marker");
+                Is(DrawingSets.BehindWhy(b, plane, DrawingSets.Look(vd)) == null, "the building in front of the north marker's plane");
+                // The second live run's north elevation: its region y -307.84 to -150.34, its near face the marker's y (90.48) mirrored through View.Origin's y (about -29.93), looking south.
+                double mirrored = 2 * -29.93061 - n.Y;
+                Is(Near(mirrored, -150.34, 0.01), "the near face the second live run measured: " + mirrored);
+                string behind = DrawingSets.BehindWhy(b, new[] { n.X, mirrored, 0 }, DrawingSets.Look(vd));
+                Is(behind != null && behind.StartsWith("the building stands behind its view plane") && behind.Contains("89.96 to 222.57 ft behind it"), behind);
+                string through = DrawingSets.BehindWhy(b, new[] { b.CenterX, b.CenterY, 0 }, DrawingSets.Look(vd));
+                Is(through != null && through.StartsWith("part of the building stands behind its view plane, up to 66.3 ft"), through);
+                Is(DrawingSets.BehindWhy(b, new[] { n.X, b.MaxY - 0.005, 0 }, DrawingSets.Look(vd)) == null, "a corner within a hundredth of a foot behind the plane is taken as on it");
+                Is(DrawingSets.BehindWhy(b, new[] { n.X, b.MaxY - 0.5, 0 }, DrawingSets.Look(vd)) != null, "half a foot is not");
             });
-            Test("the drawing set's invariants name an elevation or section that reads as asked though its far clip is short of the depth it needs, or says not how far it reaches; a report of add-in 0.15.0, which says neither, keeps them all", () =>
+            Test("the drawing set's invariants no longer hold a far clip read back to the depth set, which are unlike quantities (the second live run read its south elevation's back as 108.78 ft beside the 157.49 set, and its sheet shows the house); they name an elevation or section read as asked that Revit shows none of the building in, or an elevation whose building stands behind its view plane", () =>
             {
                 DrawingSetReport r = Fixture(root).DrawingSet;
-                r.Sheets[3].FarClipFt = 20;
+                r.Sheets[5].FarClipFt = 20;
                 r.Sheets[8].FarClipFt = null;
-                List<string> p = DrawingSets.Problems(r, ChangeStatus.Applied);
-                Is(p.Any(x => x.Contains("A-201 North Elevation reads as asked, though its far clip reaches 20 ft, short of the 54 ft it needs")), string.Join("; ", p));
-                Is(p.Any(x => x.Contains("A-302 North-South Section reads as asked, though it says not how far its far clip reaches")), string.Join("; ", p));
+                r.Sheets[4].FarClipActive = null;
+                Is(DrawingSets.Problems(r, ChangeStatus.Applied).Count == 0, "a far clip read back short of the depth set, or not read, is a reading, not a shortfall: " + string.Join("; ", DrawingSets.Problems(r, ChangeStatus.Applied)));
+                string why;
+                Eq(ChangeStatus.Applied, DrawingSets.Judge(r, out why), "and the set is applied: " + why);
+                DrawingSetReport blank = Fixture(root).DrawingSet;
+                blank.Sheets[3].BuildingElementsSeen = 0;
+                blank.Sheets[7].BuildingElementsSeen = 0;
+                List<string> p = DrawingSets.Problems(blank, ChangeStatus.Applied);
+                Is(p.Any(x => x.Contains("A-201 North Elevation reads as asked, though Revit shows none of the building's elements in it")), string.Join("; ", p));
+                Is(p.Any(x => x.Contains("A-301 East-West Section reads as asked, though Revit shows none of the building's elements in it")), string.Join("; ", p));
+                DrawingSetReport behind = Fixture(root).DrawingSet;
+                behind.Sheets[3].ViewPlaneFt = new List<double> { 30, -60, 12 };
+                p = DrawingSets.Problems(behind, ChangeStatus.Applied);
+                Is(p.Any(x => x.Contains("A-201 North Elevation reads as asked, though the building stands behind its view plane")), string.Join("; ", p));
                 DrawingSetReport said = Fixture(root).DrawingSet;
-                said.Sheets[3].FarClipFt = 20;
-                said.Sheets[3].Why = DrawingSets.ReachWhy(true, 20, 54, 3);
+                said.Sheets[3].BuildingElementsSeen = 0;
+                said.Sheets[3].Why = DrawingSets.SeenWhy(0, said.Building.Elements);
                 DrawingSets.Count(said);
-                Is(!DrawingSets.Problems(said, ChangeStatus.AppliedInPart).Any(x => x.Contains("far clip")), "a view that says why is no broken invariant: " + string.Join("; ", DrawingSets.Problems(said, ChangeStatus.AppliedInPart)));
-                string inPart;
-                Eq(ChangeStatus.AppliedInPart, DrawingSets.Judge(said, out inPart), "and the set is applied in part");
-                Is(inPart.Contains("A-201 North Elevation: its far clip reaches 20 ft"), inPart);
-                DrawingSetReport off = Fixture(root).DrawingSet;
-                off.Sheets[3].FarClipActive = false;
-                off.Sheets[3].FarClipFt = 20;
-                Is(DrawingSets.Problems(off, ChangeStatus.Applied).Count == 0, "far clipping off sees without end: " + string.Join("; ", DrawingSets.Problems(off, ChangeStatus.Applied)));
+                Is(DrawingSets.Problems(said, ChangeStatus.AppliedInPart).Count == 0, "a view that says why is no broken invariant: " + string.Join("; ", DrawingSets.Problems(said, ChangeStatus.AppliedInPart)));
+                Eq(ChangeStatus.AppliedInPart, DrawingSets.Judge(said, out why), "and the set is applied in part");
+                Is(why.Contains("A-201 North Elevation: Revit shows none of the building's 14 elements in it"), why);
                 DrawingSetReport older = Fixture(root).DrawingSet;
                 foreach (DrawingSheet s in older.Sheets)
                 {
@@ -341,9 +418,12 @@ namespace Flo2Rvt.Addin.Tests
                     s.DepthNeededFt = null;
                     s.CropMinFt = null;
                     s.CropMaxFt = null;
+                    s.BuildingElementsSeen = null;
+                    s.ViewPlaneFt = null;
+                    s.CropLoopFt = null;
+                    s.Readings = null;
                 }
-                Is(DrawingSets.Problems(older, ChangeStatus.Applied).Count == 0, "an older report keeps every invariant: " + string.Join("; ", DrawingSets.Problems(older, ChangeStatus.Applied)));
-                string why;
+                Is(DrawingSets.Problems(older, ChangeStatus.Applied).Count == 0, "a report of add-in 0.15.0 or 0.15.1 keeps every invariant: " + string.Join("; ", DrawingSets.Problems(older, ChangeStatus.Applied)));
                 Eq(ChangeStatus.Applied, DrawingSets.Judge(older, out why), "and is judged as it was");
             });
 
@@ -439,6 +519,7 @@ namespace Flo2Rvt.Addin.Tests
                 DrawingSetReport back = Fixture(root).DrawingSet;
                 DrawingSets.RolledBack(back, "Revit raised an error: made up");
                 Is(back.Sheets.All(s => s.ViewWas == DrawingSets.NotMade && s.ViewId == 0 && s.SheetId == 0 && s.ViewportId == 0 && s.MarkerId == 0 && s.SheetNumber == null && !s.Placed && !s.Fits && s.Why.Contains("rolled back with the change")), "a set rolled back made nothing");
+                Is(back.Sheets.All(s => s.FarClipFt == null && s.CropMinFt == null && s.BuildingElementsSeen == null && s.ViewPlaneFt == null && s.CropLoopFt == null && s.Readings == null), "and reads back nothing of a view");
                 Eq(0, back.ViewsMade, "nothing counted");
                 Is(DrawingSets.Problems(back, ChangeStatus.RolledBack).Count == 0, string.Join("; ", DrawingSets.Problems(back, ChangeStatus.RolledBack)));
                 Eq(ChangeStatus.NotApplied, DrawingSets.Judge(back, out why), "none made");
@@ -497,21 +578,46 @@ namespace Flo2Rvt.Addin.Tests
                 Is(set.Sheets.All(s => s.Scale == 48 && s.ScaleText == DrawingSets.ScaleText(48, false)), "each at 1/4\" = 1'-0\"");
                 Is(set.Sheets.All(s => DrawingSets.Inside(s.ViewportMinFt, s.ViewportMaxFt, set.SheetArea)), "each inside the usable area");
                 Is(set.Sheets.Where(s => s.Kind == DrawingSetViewValues.Elevations).All(s => s.MarkerId != 0 && s.Looking == DrawingSets.Opposite(s.Facing)), "each elevation on its marker, looking at its face");
-                // Since add-in 0.15.1: each elevation and section sees past the building, read back.
+                // Since add-in 0.15.1 each elevation and section says its far clip and crop as Revit reads them back; since
+                // 0.15.2 these are readings, not judged, and each is judged by how many of the building's elements Revit shows in it.
                 var fb = new Box3(set.Building.MinFt[0], set.Building.MinFt[1], set.Building.MinFt[2], set.Building.MaxFt[0], set.Building.MaxFt[1], set.Building.MaxFt[2]);
+                double fm = DrawingSets.Margin(fb);
                 foreach (DrawingSheet s in set.Sheets.Where(x => x.Kind == DrawingSetViewValues.Elevations || x.Kind == DrawingSetViewValues.Sections))
                 {
                     string at = s.SheetNumber + " " + s.ViewName;
-                    Is(s.FarClipActive == true && s.FarClipFt.HasValue && s.DepthNeededFt.HasValue, at + " says its far clip is on, how far it reaches and how far it needs to");
-                    Is(Near(s.DepthNeededFt.Value, DrawingSets.PlannedDepth(fb, s), 1e-6), at + " needs the depth planned from the building: " + s.DepthNeededFt + " vs " + DrawingSets.PlannedDepth(fb, s));
-                    Is(s.FarClipFt.Value >= s.DepthNeededFt.Value, at + " reaches it");
-                    Is(s.CropMinFt != null && s.CropMaxFt != null && s.CropMinFt.Count == 3 && s.CropMaxFt.Count == 3, at + " gives its crop box in model terms");
-                    bool across = s.Kind == DrawingSetViewValues.Elevations ? s.Facing == DrawingSets.North || s.Facing == DrawingSets.South : s.Cut == DrawingSets.EastWest;
-                    int i = across ? 0 : 1;
-                    double lo = across ? fb.MinX : fb.MinY;
-                    double hi = across ? fb.MaxX : fb.MaxY;
-                    Is(s.CropMinFt[i] <= lo && s.CropMaxFt[i] >= hi && s.CropMinFt[2] <= fb.MinZ && s.CropMaxFt[2] >= fb.MaxZ, at + "'s crop holds the building across the view");
+                    Is(s.FarClipActive == true && s.FarClipFt.HasValue && s.DepthNeededFt.HasValue, at + " says its far clip is on, how far it reads and the depth set");
+                    Is(s.CropMinFt != null && s.CropMaxFt != null && s.CropMinFt.Count == 3 && s.CropMaxFt.Count == 3, at + " gives its crop box as read, in model terms");
+                    Is(s.BuildingElementsSeen.HasValue && s.BuildingElementsSeen.Value > 0 && s.BuildingElementsSeen.Value <= set.Building.Elements, at + " says how many of the building's " + set.Building.Elements + " elements Revit shows in it: " + s.BuildingElementsSeen);
+                    Is(DrawingSets.SeenWhy(s.BuildingElementsSeen, set.Building.Elements) == null, at + ": Revit shows some of the building in it");
                     Is(s.Why == null, at + " says nothing against itself");
+                }
+                Is(set.Sheets.Any(s => s.FarClipFt.HasValue && s.DepthNeededFt.HasValue && s.FarClipFt.Value < s.DepthNeededFt.Value), "a far clip read back short of the depth set, as the second live run's south elevation read, is a reading and says nothing against the view");
+                foreach (DrawingSheet s in set.Sheets.Where(x => x.Kind == DrawingSetViewValues.Sections))
+                {
+                    Is(Near(s.DepthNeededFt.Value, DrawingSets.PlannedDepth(fb, s), 1e-6), s.SheetNumber + " is set to the depth planned from its cut: " + s.DepthNeededFt + " vs " + DrawingSets.PlannedDepth(fb, s));
+                    Is(s.ViewPlaneFt == null && s.CropLoopFt == null && s.Readings == null, s.SheetNumber + ": a section keeps CreateSection's box, and says no view plane of the set's");
+                }
+                // Since add-in 0.15.2: each elevation cropped across only, on its view plane, a point of Revit's own crop region.
+                foreach (DrawingSheet s in set.Sheets.Where(x => x.Kind == DrawingSetViewValues.Elevations))
+                {
+                    string at = s.SheetNumber + " " + s.ViewName;
+                    Is(s.Readings != null && s.Readings.Select(x => x.At).SequenceEqual(DrawingSets.ReadingStages), at + " reads Revit at each stage: " + (s.Readings == null ? "none" : string.Join(", ", s.Readings.Select(x => x.At))));
+                    ViewReading made = s.Readings[0], placed = s.Readings[3];
+                    Is(s.Readings.All(x => x.Error == null && x.CropMinFt.Count == 3 && x.CropOriginFt.Count == 3 && x.CropBasisX.Count == 3 && x.CropBasisZ.Count == 3 && x.OriginFt.Count == 3 && x.RightDirection.Count == 3 && x.UpDirection.Count == 3 && x.ViewDirection.Count == 3 && x.FarClipFt.HasValue && x.CropLoopFt.Count == 4), at + "'s readings each whole");
+                    double[] vd = s.ViewDirection.ToArray();
+                    Is(Same(placed.ViewDirection.ToArray(), vd, 1e-9), at + ": its view direction as read");
+                    string why;
+                    double[] plane = DrawingSets.PlanePoint(made.CropLoopFt.Select(p => p.ToArray()).ToList(), vd, out why);
+                    Is(plane != null && Same(s.ViewPlaneFt.ToArray(), plane, 1e-6), at + "'s view plane is the middle of the crop region Revit made: " + (plane == null ? why : string.Join(", ", plane)));
+                    double[] r, u;
+                    string said;
+                    Is(DrawingSets.ScreenAxes(made.RightDirection.ToArray(), made.UpDirection.ToArray(), vd, out r, out u, out said) && said == null, at + ": its screen square to its view direction");
+                    List<double[]> rect = DrawingSets.CropRectangle(fb, plane, r, u, fm);
+                    Is(s.CropLoopFt.Count == 4 && s.CropLoopFt.Zip(rect, (a, b) => Same(a.ToArray(), b, 1e-6)).All(x => x), at + "'s crop region read back is the rectangle asked: " + string.Join(" ", s.CropLoopFt.Select(p => "(" + string.Join(", ", p) + ")")));
+                    Is(s.CropLoopFt.Zip(placed.CropLoopFt, (a, b) => Same(a.ToArray(), b.ToArray(), 1e-9)).All(x => x), at + ": as its last reading has it");
+                    Is(Near(s.DepthNeededFt.Value, DrawingSets.ElevationDepthFrom(fb, s.Facing, plane, vd), 1e-6) && Near(s.DepthNeededFt.Value, DrawingSets.PlannedDepth(fb, s), 1e-6), at + " is set to the depth from its plane, which here stands at its marker: " + s.DepthNeededFt);
+                    Is(DrawingSets.BehindWhy(fb, plane, DrawingSets.Look(vd)) == null, at + ": the building stands in front of its plane");
+                    Is(s.OriginFt != null && s.OriginFt.Count == 3, at + " gives its View.Origin as read");
                 }
                 foreach (DrawingSheet s in set.Sheets.Where(x => x.Kind == DrawingSetViewValues.Sections))
                 {
@@ -577,6 +683,11 @@ namespace Flo2Rvt.Addin.Tests
         private static double Dot(double[] a, double[] b)
         {
             return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+        }
+
+        private static double[] Sub(double[] a, double[] b)
+        {
+            return new[] { a[0] - b[0], a[1] - b[1], a[2] - b[2] };
         }
 
         private static double[] Cross(double[] a, double[] b)
