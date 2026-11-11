@@ -29,19 +29,43 @@
 //      View3D.CreateIsometric(document, a ThreeDimensional ViewFamilyType), "oriented in the same position as
 //      the default 3D view", with View3D.SetSectionBox the building's and the section box's own lines
 //      hidden. Each is named (View.Name) as planned.
-//   2. THE CROPS: each plan and elevation's View.CropBox, set in the view's own frame ("X ... right on
-//      screen; Y is up; and Z is towards the user"; "the Transform of the input BoundingBoxXYZ is ignored")
-//      to the building's corners as the view sees them and a margin, its near plane kept; CropBoxActive on,
-//      CropBoxVisible off, and its annotation crop on where Revit lets it be set
-//      (VIEWER_ANNOTATION_CROP_ACTIVE), so the elevation markers beyond a plan's crop do not show. Plans
-//      are cropped only after every elevation is made, so the markers are visible in them while they are.
+//   2. THE CROPS: each plan's View.CropBox, set in the view's own frame ("X ... right on screen; Y is up;
+//      and Z is towards the user"; "the Transform of the input BoundingBoxXYZ is ignored") to the building's
+//      corners as the view sees them and a margin, its near plane kept. Since add-in 0.15.2 each elevation's
+//      crop is set across only, in model coordinates, never through View.CropBox's Transform: the second live
+//      run (2026-11-11, add-in 0.15.1) read east's and west's Transform turned 45 degrees in plan, though their
+//      View.ViewDirection reads (+-1, 0, 0) and the sheets draw them square-on (0.15.1 cropped them 206 ft wide
+//      through it, where about 146 was needed), and north's region wholly south of the building. Its view plane
+//      is a point of Revit's own crop region: View.GetCropRegionShapeManager ("Returns an object for managing
+//      view crop region shape"), GetCropShape ("Gets the crop boundaries that are curently active ... If the
+//      crop is not split, this returns a single rectangle representing the crop"), the middle of its first
+//      loop's corners (each Curve.GetEndPoint(0), "the 3D point at the start"). GetCropShape also says "All
+//      coordinates are in the coordinate frame of the view", which does not say whose axes; the add-in takes
+//      them as model coordinates, as IsCropRegionShapeValid's are ("Curves in boundary use model
+//      coordinates"), only when they lie in one plane square to View.ViewDirection, as points in the view's own
+//      frame would not (DrawingSets.PlanePoint), and refuses the crop otherwise. On that plane a rectangle
+//      along View.RightDirection ("The direction towards the right side of the screen") and View.UpDirection
+//      ("The direction towards the top of the screen"), squared to the view direction (DrawingSets.ScreenAxes),
+//      holds the building's corners and the margin (CropRectangle); its four sides (Line.CreateBound, one
+//      CurveLoop.Create) are checked (IsCropRegionShapeValid: "one closed curve loop without self-intersections,
+//      consisting of non-zero length straight lines in a plane parallel to the view plane") and set
+//      (SetCropShape, "Sets the boundary of the view's crop to the specified shape"; "reserved for setting crop
+//      shape in views that allow non-rectangular crop shapes - see property CanHaveShape", "Verifies that the
+//      crop of the associated view is permitted to have a non-rectangular shape"), only where CanHaveShape says
+//      so. An elevation's crop box Z is not set at all. Each crop: CropBoxActive on, CropBoxVisible off, and its
+//      annotation crop on where Revit lets it be set (VIEWER_ANNOTATION_CROP_ACTIVE), so the elevation markers
+//      beyond a plan's crop do not show. Plans are cropped only after every elevation is made, so the markers
+//      are visible in them while they are.
 //   2b. THE FAR CLIPS (since add-in 0.15.1): setting a crop box moves "the crop region and far clip plane to
 //      the smallest values which will completely contain the 3D box", which the first live run's north
 //      elevation did not bear out (it printed no house), and nothing read it back. So once cropped, each
 //      elevation and section has its far clipping turned on and its far clip set, explicitly, to the depth
-//      it needs (DrawingSets.PlannedDepth, or from Revit's own View.Origin along the opposite of its
-//      View.ViewDirection where that is further: DrawingSets.DepthNeeded), through its parameters, which
-//      RevitAPI.xml names only by their labels: VIEWER_BOUND_ACTIVE_FAR "Far Clip Active" (set to 1),
+//      it needs: since add-in 0.15.2 an elevation's from its view plane along the way it looks (the opposite
+//      of View.ViewDirection, "the direction towards the viewer") to the building's far side and the margin
+//      (DrawingSets.ElevationDepthFrom; from its marker when no plane was read), which the second live run's
+//      north and south elevations bore out, measured from their near faces; a section's as planned from its
+//      cut, or from Revit's own View.Origin where that is further (DrawingSets.PlannedDepth, DepthNeeded),
+//      as 0.15.1 set it. Each through its parameters, which RevitAPI.xml names only by their labels: VIEWER_BOUND_ACTIVE_FAR "Far Clip Active" (set to 1),
 //      VIEWER_BOUND_FAR_CLIPPING "Far Clipping", whose values are BackClippingParam's ("The allowed values for
 //      the VIEW_BACK_CLIPPING and VIEWER_BOUND_FAR_CLIPPING parameters": NoClip "No clip", ClipWithLine "Clip
 //      with line", ClipNoLine "Clip without line"; one that reads NoClip is set to ClipWithLine, so the sheet
@@ -56,15 +80,25 @@
 //      Viewport.Create(document, sheet, view, point), "centered on this point", at the usable area's
 //      middle, and Viewport.GetBoxOutline ("the outline of the viewport on the sheet, excluding the
 //      viewport label") read back to say whether it fits.
-//   4. HOW FAR EACH SEES, READ BACK (since add-in 0.15.1), once everything is set, cropped and placed: each
-//      elevation's and section's far clipping (either parameter on), its Far Clip Offset, its View.Origin and
-//      the depth it needs from it, and its View.CropBox taken into the model's axes through the box's own
-//      Transform; a far clip short of the depth, or not read, or a crop that leaves the building out across
-//      the view, says why (DrawingSets.ReachWhy, CropWhy), so it can no longer read as asked when it is not.
+//   4. WHAT EACH SHOWS, READ BACK (since add-in 0.15.2), once everything is set, cropped and placed: how
+//      many of the building's elements Revit passes in each elevation and section, through
+//      FilteredElementCollector(document, viewId) ("search and filter the visible elements in a view"), the
+//      building's categories, no element type and no view-specific element; none says why
+//      (DrawingSets.SeenWhy), as does an elevation whose building stands behind its view plane (BehindWhy).
+//      Beside it, as Revit's readings and not judged: its far clipping (either parameter on), its Far Clip
+//      Offset, its View.Origin, its View.CropBox taken into the model's axes through the box's own Transform,
+//      and an elevation's crop region. 0.15.1 judged the far clip read back against the depth set and the crop
+//      through that Transform (ReachWhy, CropWhy), and the second live run showed both unlike what they were
+//      held to: the Far Clip Offset read back is the distance from View.Origin's plane to the far face (north
+//      277.91 ft, south 108.78), not the 157.49 set from the view plane, so it passed a north elevation that
+//      printed no house and failed three that print it. Each elevation is also read as made, cropped, far
+//      clipped and placed (DrawingSheet.Readings), the instrument the second live run lacked.
 //
 // The job's existing PDF export (Probe/Exports.cs) then prints every printable sheet, these among them,
 // into sheets.pdf, in sheet-number order. The first live run (2026-11-10, add-in 0.15.0) measured the
-// sections' convention; the far clips set and read back here are not yet run in cloud Revit.
+// sections' convention, and the second (2026-11-11, add-in 0.15.1) the plans, the 3D view and both sections
+// right; the elevations' crops on their view planes and the count of what each view shows are not yet run
+// in cloud Revit.
 
 using System;
 using System.Collections.Generic;
@@ -141,12 +175,12 @@ namespace Flo2Rvt.Addin.Jobs
             foreach (Level l in chosen) levels.Add(new SetLevel { Id = l.Id.Value, Name = l.Name, ElevationFt = l.ProjectElevation, Empty = LevelRules.OnLevel(doc, l.Id).Count == 0 });
 
             // The building, and the view types.
-            int elements;
-            Box3? building = BuildingBox(doc, out elements);
+            HashSet<long> buildingIds;
+            Box3? building = BuildingBox(doc, out buildingIds);
             if (building.HasValue)
             {
                 Box3 b = building.Value;
-                set.Building = new BuildingExtent { MinFt = Xyz(b.MinX, b.MinY, b.MinZ), MaxFt = Xyz(b.MaxX, b.MaxY, b.MaxZ), Elements = elements };
+                set.Building = new BuildingExtent { MinFt = Xyz(b.MinX, b.MinY, b.MinZ), MaxFt = Xyz(b.MaxX, b.MaxY, b.MaxZ), Elements = buildingIds.Count };
             }
             else set.BuildingWhy = "the model holds no wall, floor, roof, ceiling, column, framing, foundation, stair, railing, door, window or generic model to face, cut or show";
             var types = new SetViewTypes { Plan = FirstViewType(doc, ViewFamily.FloorPlan), Elevation = FirstViewType(doc, ViewFamily.Elevation), Section = FirstViewType(doc, ViewFamily.Section), ThreeD = FirstViewType(doc, ViewFamily.ThreeDimensional) };
@@ -210,18 +244,39 @@ namespace Flo2Rvt.Addin.Jobs
                 // Each plan and elevation cropped to the building, once every elevation hangs on its marker.
                 if (building.HasValue)
                 {
+                    Box3 b = building.Value;
+                    // Since add-in 0.15.2: each elevation read as Revit made it, before the add-in sets anything of it.
+                    Read(d, made, DrawingSets.AtMade);
                     foreach (KeyValuePair<DrawingSheet, View> m in made.Where(x => x.Key.Kind == DrawingSetViewValues.Plans || x.Key.Kind == DrawingSetViewValues.Elevations))
                     {
-                        string failed = ChangeRunner.Part(d, () => CropTo(m.Value, building.Value));
-                        if (failed != null) m.Key.Note = Join(m.Key.Note, "its crop could not be set (" + failed + "), so it shows all Revit draws in it");
+                        DrawingSheet s = m.Key;
+                        View view = m.Value;
+                        bool elevation = s.Kind == DrawingSetViewValues.Elevations;
+                        string failed = ChangeRunner.Part(d, () =>
+                        {
+                            if (elevation) CropElevation(view, s, b);
+                            else CropTo(view, b);
+                        });
+                        if (failed != null) s.Note = Join(s.Note, "its crop could not be set (" + failed + "), so it " + (elevation ? "keeps the crop Revit made" : "shows all Revit draws in it"));
                     }
-                    // Since add-in 0.15.1: each elevation and section, once cropped, sees past the building's far side, set explicitly.
+                    Read(d, made, DrawingSets.AtCropped);
+                    // Since add-in 0.15.1: each elevation and section, once cropped, sees past the building's far side, set explicitly;
+                    // since 0.15.2 an elevation's from its view plane.
                     foreach (KeyValuePair<DrawingSheet, View> m in made.Where(x => SeesToADepth(x.Key)))
                     {
-                        double depth = Depth(m.Key, m.Value, building.Value);
+                        DrawingSheet s = m.Key;
+                        double depth = Depth(s, m.Value, b);
+                        s.DepthNeededFt = Lengths.Round(depth);
+                        if (s.Kind == DrawingSetViewValues.Elevations && s.ViewPlaneFt == null) s.Note = Join(s.Note, "its view plane could not be read from its crop region, so its far clip is set from its marker");
+                        if (!(depth > 0))
+                        {
+                            s.Note = Join(s.Note, "its far clip is not set: the building's far side stands behind its view plane");
+                            continue;
+                        }
                         string failed = ChangeRunner.Part(d, () => FarClipTo(m.Value, depth));
-                        if (failed != null) m.Key.Note = Join(m.Key.Note, "its far clip could not be set to " + Lengths.Round(depth) + " ft (" + failed + ")");
+                        if (failed != null) s.Note = Join(s.Note, "its far clip could not be set to " + Lengths.Round(depth) + " ft (" + failed + ")");
                     }
+                    Read(d, made, DrawingSets.AtFarClipped);
                 }
                 n = 0;
                 foreach (KeyValuePair<DrawingSheet, View> m in made)
@@ -246,19 +301,19 @@ namespace Flo2Rvt.Addin.Jobs
                     s.Scale = m.Value.Scale;
                     s.ScaleText = DrawingSets.ScaleText(s.Scale, metric);
                 }
-                // Since add-in 0.15.1: how far each elevation and section sees, and its crop, read back once everything is set.
+                // Since add-in 0.15.2: what each elevation and section shows, judged once everything is set and placed, its far clip and crop read beside it.
                 if (building.HasValue)
                 {
-                    d.Regenerate();
+                    Read(d, made, DrawingSets.AtPlaced);
                     foreach (KeyValuePair<DrawingSheet, View> m in made.Where(x => SeesToADepth(x.Key)))
                     {
                         try
                         {
-                            ReadReach(m.Key, m.Value, building.Value);
+                            ReadReach(d, m.Key, m.Value, building.Value, buildingIds);
                         }
                         catch (Exception ex)
                         {
-                            m.Key.Why = Join(m.Key.Why, "how far it sees could not be read back (" + ex.GetType().Name + ": " + ex.Message + ")");
+                            m.Key.Why = Join(m.Key.Why, "what Revit shows in it could not be read back (" + ex.GetType().Name + ": " + ex.Message + ")");
                         }
                     }
                 }
@@ -289,9 +344,19 @@ namespace Flo2Rvt.Addin.Jobs
             return new List<double> { Lengths.Round(x), Lengths.Round(y), Lengths.Round(z) };
         }
 
+        private static List<double> Xyz(XYZ p)
+        {
+            return p == null ? null : Xyz(p.X, p.Y, p.Z);
+        }
+
         private static XYZ Point(double[] p)
         {
             return new XYZ(p[0], p[1], p[2]);
+        }
+
+        private static double[] V(XYZ p)
+        {
+            return p == null ? null : new[] { p.X, p.Y, p.Z };
         }
 
         private static string Join(string a, string b)
@@ -304,12 +369,18 @@ namespace Flo2Rvt.Addin.Jobs
             return new FilteredElementCollector(doc).OfClass(typeof(ViewFamilyType)).Cast<ViewFamilyType>().Where(t => t.ViewFamily == family).OrderBy(t => t.Name, StringComparer.Ordinal).FirstOrDefault();
         }
 
-        /// <summary>The building's extent: the union of its elements' boxes (each box's corners taken through its own transform), in internal feet.</summary>
-        private static Box3? BuildingBox(Document doc, out int elements)
+        /// <summary>The building's categories, as one filter: what BuildingBox takes the building's extent of, and Seen counts in a view.</summary>
+        private static ElementMulticategoryFilter BuildingFilter()
+        {
+            return new ElementMulticategoryFilter(BuildingCategories.ToList());
+        }
+
+        /// <summary>The building's extent: the union of its elements' boxes (each box's corners taken through its own transform), in internal feet; ids, the elements it is the extent of.</summary>
+        private static Box3? BuildingBox(Document doc, out HashSet<long> ids)
         {
             var boxes = new List<Box3>();
-            var filter = new ElementMulticategoryFilter(BuildingCategories.ToList());
-            foreach (Element e in new FilteredElementCollector(doc).WhereElementIsNotElementType().WherePasses(filter))
+            ids = new HashSet<long>();
+            foreach (Element e in new FilteredElementCollector(doc).WhereElementIsNotElementType().WherePasses(BuildingFilter()))
             {
                 if (e.ViewSpecific) continue;
                 BoundingBoxXYZ box = e.get_BoundingBox(null);
@@ -321,8 +392,8 @@ namespace Flo2Rvt.Addin.Jobs
                         foreach (double z in new[] { box.Min.Z, box.Max.Z })
                             corners.Add(t.OfPoint(new XYZ(x, y, z)));
                 boxes.Add(new Box3(corners.Min(c => c.X), corners.Min(c => c.Y), corners.Min(c => c.Z), corners.Max(c => c.X), corners.Max(c => c.Y), corners.Max(c => c.Z)));
+                ids.Add(e.Id.Value);
             }
-            elements = boxes.Count;
             return Box3.Union(boxes);
         }
 
@@ -428,7 +499,7 @@ namespace Flo2Rvt.Addin.Jobs
             }
         }
 
-        /// <summary>A plan's or elevation's crop, in its own frame, to the building's corners as it sees them and the margin, its near plane kept; its crop region hidden, its annotation cropped where Revit lets it be.</summary>
+        /// <summary>A plan's crop, in its own frame, to the building's corners as it sees them and the margin, its near plane kept; its crop region hidden, its annotation cropped where Revit lets it be. (An elevation's, since add-in 0.15.2: CropElevation.)</summary>
         private static void CropTo(View view, Box3 b)
         {
             BoundingBoxXYZ crop = view.CropBox;
@@ -446,6 +517,152 @@ namespace Flo2Rvt.Addin.Jobs
             if (annotation != null && !annotation.IsReadOnly) annotation.Set(1);
         }
 
+        /// <summary>
+        /// Since add-in 0.15.2: the corners of the crop region Revit holds for a view, model feet: the first loop
+        /// ViewCropRegionShapeManager.GetCropShape gives ("Gets the crop boundaries that are curently active ...
+        /// If the crop is not split, this returns a single rectangle representing the crop"), each curve's start
+        /// (Curve.GetEndPoint(0), "the 3D point at the start"; a CurveLoop "may be directly iterated, as the class
+        /// implements IEnumerable&lt;Curve&gt;"). Empty when Revit gives none. Whether these are model coordinates
+        /// is judged by DrawingSets.PlanePoint before they are used as such.
+        /// </summary>
+        private static List<double[]> CropLoop(ViewCropRegionShapeManager shape)
+        {
+            var points = new List<double[]>();
+            if (shape == null) return points;
+            IList<CurveLoop> loops = shape.GetCropShape();
+            if (loops == null || loops.Count == 0 || loops[0] == null) return points;
+            foreach (Curve c in loops[0]) points.Add(V(c.GetEndPoint(0)));
+            return points;
+        }
+
+        private static List<List<double>> Rounded(List<double[]> points)
+        {
+            return points.Count == 0 ? null : points.Select(p => Xyz(p[0], p[1], p[2])).ToList();
+        }
+
+        /// <summary>
+        /// Since add-in 0.15.2: an elevation's crop, across only, in model coordinates, never through View.CropBox's
+        /// Transform. Its view plane is the middle of the crop region Revit made (CropLoop), taken only when its
+        /// points lie in one plane square to View.ViewDirection (DrawingSets.PlanePoint), and kept on the sheet's
+        /// report (view_plane_ft) so its far clip is set from it. On it, a rectangle along View.RightDirection and
+        /// View.UpDirection, squared to the view direction (DrawingSets.ScreenAxes; a note says so when Revit's
+        /// were not square), holding the building's corners and the margin (CropRectangle), is checked
+        /// (IsCropRegionShapeValid) and set (SetCropShape) where the view's crop may take a shape (CanHaveShape).
+        /// Its crop box Z is not set. Throws, rolling its part back, when any of it cannot be done.
+        /// </summary>
+        private static void CropElevation(View view, DrawingSheet s, Box3 b)
+        {
+            view.CropBoxActive = true;
+            ViewCropRegionShapeManager shape = view.GetCropRegionShapeManager();
+            if (shape == null) throw new ChangeRefused("Revit gives it no crop region to set (View.GetCropRegionShapeManager)");
+            double[] vd = V(view.ViewDirection);
+            string why;
+            double[] plane = DrawingSets.PlanePoint(CropLoop(shape), vd, out why);
+            if (plane == null) throw new ChangeRefused(why);
+            s.ViewPlaneFt = Xyz(plane[0], plane[1], plane[2]);
+            double[] right, up;
+            string said;
+            if (!DrawingSets.ScreenAxes(V(view.RightDirection), V(view.UpDirection), vd, out right, out up, out said)) throw new ChangeRefused(said);
+            if (said != null) s.Note = Join(s.Note, said);
+            if (!shape.CanHaveShape) throw new ChangeRefused("Revit says its crop may not take a shape set by the add-in (ViewCropRegionShapeManager.CanHaveShape is false)");
+            List<double[]> corners = DrawingSets.CropRectangle(b, plane, right, up, DrawingSets.Margin(b));
+            var sides = new List<Curve>();
+            for (int i = 0; i < corners.Count; i++) sides.Add(Line.CreateBound(Point(corners[i]), Point(corners[(i + 1) % corners.Count])));
+            CurveLoop rectangle = CurveLoop.Create(sides);
+            if (!shape.IsCropRegionShapeValid(rectangle)) throw new ChangeRefused("Revit says the rectangle asked is no crop it takes: not one closed loop of straight lines in a plane parallel to the view plane (IsCropRegionShapeValid)");
+            shape.SetCropShape(rectangle);
+            view.CropBoxVisible = false;
+            Parameter annotation = view.get_Parameter(BuiltInParameter.VIEWER_ANNOTATION_CROP_ACTIVE);
+            if (annotation != null && !annotation.IsReadOnly) annotation.Set(1);
+        }
+
+        /// <summary>
+        /// Since add-in 0.15.2: once Revit has regenerated, Revit's reading of each elevation made, at this stage
+        /// (DrawingSets.ReadingStages), added to its sheet's readings: the instrument the second live run lacked to
+        /// tell whether an elevation's frame is turned or mirrored as Revit makes it or only once the add-in sets it.
+        /// </summary>
+        private static void Read(Document d, List<KeyValuePair<DrawingSheet, View>> made, string at)
+        {
+            string regenerated = null;
+            try
+            {
+                d.Regenerate();
+            }
+            catch (Exception ex)
+            {
+                regenerated = "Revit would not regenerate before it was read (" + ex.GetType().Name + ": " + ex.Message + ")";
+            }
+            foreach (KeyValuePair<DrawingSheet, View> m in made.Where(x => x.Key.ViewWas == DrawingSets.Made && x.Key.Kind == DrawingSetViewValues.Elevations))
+            {
+                ViewReading r = Reading(m.Value, at);
+                if (regenerated != null) r.Error = Join(regenerated, r.Error);
+                if (m.Key.Readings == null) m.Key.Readings = new List<ViewReading>();
+                m.Key.Readings.Add(r);
+            }
+        }
+
+        /// <summary>
+        /// One reading of a view, each part apart, so one Revit will not give leaves the others: its View.CropBox
+        /// (Min and Max, "The X direction of the box is right on screen; Y is up; and Z is towards the user") and the
+        /// box's Transform (Origin, BasisX, BasisZ); View.Origin ("the origin of the screen"), RightDirection,
+        /// UpDirection and ViewDirection; its Far Clip Offset; its crop region (CropLoop).
+        /// </summary>
+        private static ViewReading Reading(View view, string at)
+        {
+            var r = new ViewReading { At = at };
+            var failed = new List<string>();
+            Try(failed, "its crop box", () =>
+            {
+                BoundingBoxXYZ crop = view.CropBox;
+                if (crop == null) return;
+                r.CropMinFt = Xyz(crop.Min);
+                r.CropMaxFt = Xyz(crop.Max);
+                Transform t = crop.Transform;
+                if (t == null) return;
+                r.CropOriginFt = Xyz(t.Origin);
+                r.CropBasisX = Xyz(t.BasisX);
+                r.CropBasisZ = Xyz(t.BasisZ);
+            });
+            Try(failed, "its origin and directions", () =>
+            {
+                r.OriginFt = Xyz(view.Origin);
+                r.RightDirection = Xyz(view.RightDirection);
+                r.UpDirection = Xyz(view.UpDirection);
+                r.ViewDirection = Xyz(view.ViewDirection);
+            });
+            Try(failed, "its Far Clip Offset", () => r.FarClipFt = FarClipOffset(view));
+            Try(failed, "its crop region", () => r.CropLoopFt = Rounded(CropLoop(view.GetCropRegionShapeManager())));
+            if (failed.Count > 0) r.Error = string.Join("; ", failed);
+            return r;
+        }
+
+        private static void Try(List<string> failed, string what, Action read)
+        {
+            try
+            {
+                read();
+            }
+            catch (Exception ex)
+            {
+                failed.Add(what + " could not be read (" + ex.GetType().Name + ": " + ex.Message + ")");
+            }
+        }
+
+        /// <summary>
+        /// Since add-in 0.15.2: how many of the building's elements (ids, BuildingBox's) Revit passes in a view:
+        /// FilteredElementCollector(document, viewId), which "will search and filter the visible elements in a
+        /// view" ("Elements that will be passed by the collector have graphics that may be visible in the input
+        /// view"), the building's categories (BuildingFilter, as BuildingBox), no element type, no view-specific
+        /// element. Revit 2024's RevitAPI.xml also says "For elements which are outside of a crop region, they may
+        /// still be passed by the collector because Revit relies on later processing to eliminate the elements
+        /// hidden by the crop", so none proves the view shows none of the building, and some does not prove it
+        /// shows all of it, nor that the crop holds it.
+        /// </summary>
+        private static int Seen(Document d, View view, HashSet<long> building)
+        {
+            return new FilteredElementCollector(d, view.Id).WhereElementIsNotElementType().WherePasses(BuildingFilter()).Count(e => !e.ViewSpecific && building.Contains(e.Id.Value));
+        }
+
         /// <summary>Since add-in 0.15.1: an elevation or section, whose far clip the set sets and reads back.</summary>
         private static bool SeesToADepth(DrawingSheet s)
         {
@@ -453,16 +670,19 @@ namespace Flo2Rvt.Addin.Jobs
         }
 
         /// <summary>
-        /// The depth an elevation or section needs: as planned (from its marker, or its cut), or from Revit's own
-        /// View.Origin along the way it looks (the opposite of View.ViewDirection, "the direction towards the
-        /// viewer") where that is further, so a view plane Revit stood elsewhere than planned still sees the
-        /// building whole.
+        /// The depth an elevation or section's far clip is set to. Since add-in 0.15.2 an elevation's from its view
+        /// plane (view_plane_ft, CropElevation's) along the way it looks (the opposite of View.ViewDirection, "the
+        /// direction towards the viewer"), to the building's far side and the margin, or from its marker when no
+        /// plane was read (DrawingSets.ElevationDepthFrom): the second live run read its View.Origin off its view
+        /// plane. A section's as 0.15.1 set it: as planned from its cut, or from Revit's own View.Origin along the
+        /// way it looks where that is further.
         /// </summary>
         private static double Depth(DrawingSheet s, View view, Box3 b)
         {
+            XYZ vd = view.ViewDirection;
+            if (s.Kind == DrawingSetViewValues.Elevations) return DrawingSets.ElevationDepthFrom(b, s.Facing, s.ViewPlaneFt != null ? s.ViewPlaneFt.ToArray() : null, V(vd));
             double planned = DrawingSets.PlannedDepth(b, s);
             XYZ o = view.Origin;
-            XYZ vd = view.ViewDirection;
             if (o == null || vd == null) return planned;
             return Math.Max(planned, DrawingSets.DepthNeeded(b, new[] { o.X, o.Y, o.Z }, new[] { -vd.X, -vd.Y, -vd.Z }));
         }
@@ -488,6 +708,13 @@ namespace Flo2Rvt.Addin.Jobs
             if (!offset.Set(depth)) throw new ChangeRefused("Revit would not take a Far Clip Offset of " + Lengths.Round(depth) + " ft");
         }
 
+        /// <summary>Its Far Clip Offset (VIEWER_BOUND_OFFSET_FAR) as Revit holds it, feet, rounded; null where the view holds none.</summary>
+        private static double? FarClipOffset(View view)
+        {
+            Parameter offset = view.get_Parameter(BuiltInParameter.VIEWER_BOUND_OFFSET_FAR);
+            return offset != null && offset.HasValue && offset.StorageType == StorageType.Double ? Lengths.Round(offset.AsDouble()) : (double?)null;
+        }
+
         /// <summary>Whether far clipping is on, read back: either parameter that says so (Far Clip Active not 0, Far Clipping other than No clip); null when the view holds neither.</summary>
         private static bool? FarClipActive(View view)
         {
@@ -500,43 +727,61 @@ namespace Flo2Rvt.Addin.Jobs
         }
 
         /// <summary>
-        /// How far an elevation or section sees, as Revit holds it once everything is set: whether far clipping
-        /// is on, its Far Clip Offset, the depth it needs, its View.Origin (an elevation's as a section's), and its
-        /// crop box (View.CropBox, "X ... right on screen; Y is up; and Z is towards the user", in the frame of
-        /// its own Transform) taken into the model's axes; a far clip short of the depth, or not read, or a crop
-        /// that leaves the building out across the view, says why.
+        /// Since add-in 0.15.2: an elevation or section, judged by what Revit says it shows once everything is set
+        /// and placed: how many of the building's elements Revit passes in it (Seen), none of which says why
+        /// (DrawingSets.SeenWhy), and for an elevation whether the building stands in front of its view plane
+        /// (BehindWhy, frame-free). Read beside it, as Revit's readings and not judged: whether far clipping is
+        /// on, its Far Clip Offset, its View.Origin, its crop box (View.CropBox, "X ... right on screen; Y is up;
+        /// and Z is towards the user", in the frame of its own Transform) taken into the model's axes, and an
+        /// elevation's crop region. 0.15.1 judged the far clip read back against the depth set, and the crop
+        /// through that Transform (ReachWhy, CropWhy); the second live run showed both unlike what they were held to.
         /// </summary>
-        private static void ReadReach(DrawingSheet s, View view, Box3 b)
+        private static void ReadReach(Document d, DrawingSheet s, View view, Box3 b, HashSet<long> building)
         {
-            XYZ o = view.Origin;
-            if (o != null && s.OriginFt == null) s.OriginFt = Xyz(o.X, o.Y, o.Z);
-            s.FarClipActive = FarClipActive(view);
-            Parameter offset = view.get_Parameter(BuiltInParameter.VIEWER_BOUND_OFFSET_FAR);
-            s.FarClipFt = offset != null && offset.HasValue && offset.StorageType == StorageType.Double ? Lengths.Round(offset.AsDouble()) : (double?)null;
-            double needed = Depth(s, view, b);
-            s.DepthNeededFt = Lengths.Round(needed);
-            string why = DrawingSets.ReachWhy(s.FarClipActive, s.FarClipFt, needed, DrawingSets.Margin(b));
-            if (why != null) s.Why = Join(s.Why, why);
-            else if (s.FarClipActive == false) s.Note = Join(s.Note, "its far clipping reads off, so it shows all that stands beyond the building too");
-            BoundingBoxXYZ crop = view.CropBox;
-            if (crop == null) return;
-            Transform t = crop.Transform ?? Transform.Identity;
-            var corners = new List<XYZ>();
-            foreach (double x in new[] { crop.Min.X, crop.Max.X })
-                foreach (double y in new[] { crop.Min.Y, crop.Max.Y })
-                    foreach (double z in new[] { crop.Min.Z, crop.Max.Z })
-                        corners.Add(t.OfPoint(new XYZ(x, y, z)));
-            s.CropMinFt = Xyz(corners.Min(c => c.X), corners.Min(c => c.Y), corners.Min(c => c.Z));
-            s.CropMaxFt = Xyz(corners.Max(c => c.X), corners.Max(c => c.Y), corners.Max(c => c.Z));
-            if (!view.CropBoxActive) return;
-            Transform inverse = t.Inverse;
-            IEnumerable<double[]> seen = b.Corners().Select(c =>
+            int? seen = null;
+            string counted = null;
+            try
             {
-                XYZ p = inverse.OfPoint(new XYZ(c[0], c[1], c[2]));
-                return new[] { p.X, p.Y, p.Z };
+                seen = Seen(d, view, building);
+            }
+            catch (Exception ex)
+            {
+                counted = ex.GetType().Name + ": " + ex.Message;
+            }
+            s.BuildingElementsSeen = seen;
+            string seenWhy = DrawingSets.SeenWhy(seen, building.Count);
+            if (seenWhy != null) s.Why = Join(s.Why, seenWhy + (counted != null ? " (" + counted + ")" : ""));
+            double[] vd = V(view.ViewDirection);
+            if (s.Kind == DrawingSetViewValues.Elevations && s.ViewPlaneFt != null && vd != null)
+            {
+                string behind = DrawingSets.BehindWhy(b, s.ViewPlaneFt.ToArray(), DrawingSets.Look(vd));
+                if (behind != null) s.Why = Join(s.Why, behind);
+            }
+            var failed = new List<string>();
+            Try(failed, "its View.Origin", () =>
+            {
+                if (s.OriginFt == null) s.OriginFt = Xyz(view.Origin);
             });
-            string cropWhy = DrawingSets.CropWhy(new[] { crop.Min.X, crop.Min.Y, crop.Min.Z }, new[] { crop.Max.X, crop.Max.Y, crop.Max.Z }, seen);
-            if (cropWhy != null) s.Why = Join(s.Why, cropWhy);
+            Try(failed, "its far clip", () =>
+            {
+                s.FarClipActive = FarClipActive(view);
+                s.FarClipFt = FarClipOffset(view);
+            });
+            Try(failed, "its crop box", () =>
+            {
+                BoundingBoxXYZ crop = view.CropBox;
+                if (crop == null) return;
+                Transform t = crop.Transform ?? Transform.Identity;
+                var corners = new List<XYZ>();
+                foreach (double x in new[] { crop.Min.X, crop.Max.X })
+                    foreach (double y in new[] { crop.Min.Y, crop.Max.Y })
+                        foreach (double z in new[] { crop.Min.Z, crop.Max.Z })
+                            corners.Add(t.OfPoint(new XYZ(x, y, z)));
+                s.CropMinFt = Xyz(corners.Min(c => c.X), corners.Min(c => c.Y), corners.Min(c => c.Z));
+                s.CropMaxFt = Xyz(corners.Max(c => c.X), corners.Max(c => c.Y), corners.Max(c => c.Z));
+            });
+            if (s.Kind == DrawingSetViewValues.Elevations) Try(failed, "its crop region", () => s.CropLoopFt = Rounded(CropLoop(view.GetCropRegionShapeManager())));
+            if (failed.Count > 0) s.Note = Join(s.Note, string.Join("; ", failed));
         }
 
         /// <summary>The view's sheet, numbered and named, its scale fitted to the sheet's usable area and its viewport at its middle.</summary>
