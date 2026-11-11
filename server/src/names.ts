@@ -42,12 +42,14 @@ export const BUNDLE_FILE = 'Flo2RvtProbe.bundle.zip';
  * the design keeps, sized as a new type copied from the named one, 0.15.0 a drawing set: a floor plan of
  * every level, the four elevations, two sections and a 3D view, each on a numbered sheet, 0.15.1 a
  * drawing set's sections looking the way asked and each elevation and section seeing past the
- * building's far side, read back), and it is what a person's app must carry
+ * building's far side, read back, 0.15.2 each elevation and section judged by how many of the
+ * building's elements Revit shows in it, and each elevation cropped across only, on its view plane),
+ * and it is what a person's app must carry
  * for a job to run there: a setup writes it into the AppBundle's and each Activity's
  * description, and a job's check reads it back (server/src/setup.ts). It is not the bundle's
  * sha256, which changes with every CI build of the same add-in.
  */
-export const ADDIN_VERSION = '0.15.1';
+export const ADDIN_VERSION = '0.15.2';
 
 /** What a setup ends each description with, so a check can read which add-in an Activity runs. */
 export function setupMark(addinVersion = ADDIN_VERSION): string {

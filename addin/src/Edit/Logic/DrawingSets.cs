@@ -30,11 +30,25 @@
 //     determined by the index"), so the job tries each slot and keeps the one whose view looks at the face
 //     asked (EditJob.DrawingSet.cs), and each view says which way Revit made it look (`looking`).
 //   · HOW FAR AN ELEVATION OR SECTION SEES (since add-in 0.15.1): the depth it needs, from its plane along
-//     the way it looks to the building's far side, and the margin (DepthNeeded; ElevationDepth from its
-//     marker, SectionDepth from its cut, PlannedDepth for either), which the job sets as its far clip, then
-//     reads back with its crop and judges (ReachWhy: a far clip short of the depth, or not read, says why;
-//     CropWhy: a crop that leaves the building out across the view says why). The first live run's north
-//     elevation saw short of the building and printed no house, and nothing read it back.
+//     the way it looks to the building's far side, and the margin (DepthNeeded; SectionDepth from a section's
+//     cut, PlannedDepth), which the job sets as its far clip. The first live run's north elevation saw short of
+//     the building and printed no house, and nothing read it back.
+//   · WHERE AN ELEVATION STANDS, AND ITS CROP (since add-in 0.15.2): its view plane is a point of Revit's own
+//     crop region read in model coordinates (PlanePoint: the region's middle, when its points lie in one plane
+//     square to the view direction); its crop is a rectangle on that plane along the screen's right and up
+//     (ScreenAxes, CropRectangle) holding the building's corners and the margin, across only; its depth is set
+//     from that plane (ElevationDepthFrom; from its marker, ElevationDepth, when no plane was read), and the
+//     building must stand in front of it (BehindWhy). Never through View.CropBox's Transform: the second live
+//     run (2026-11-11, add-in 0.15.1) read east's and west's turned 45 degrees in plan though each is drawn
+//     square-on, and north's region wholly south of the building, so 0.15.1's crops through it were 206 ft wide
+//     where about 146 was needed, and north's view stood behind its own plane.
+//   · WHAT EACH ELEVATION AND SECTION SHOWS (since add-in 0.15.2): the job counts the building's elements Revit
+//     passes in the view once everything is placed, and one that shows none says why (SeenWhy). That proves a
+//     view empty, never whole: Revit may pass an element its crop hides. The far clip and crop read back are
+//     raw readings, no longer judged: the second live run read the Far Clip Offset back as the distance from
+//     View.Origin's plane to the far face (north 277.91 ft, south 108.78), not the depth set from the view plane
+//     (157.49), and 0.15.1's ReachWhy, comparing the two, passed the blank north elevation and failed the three
+//     that show the house.
 //   · THE SCALE AND THE VIEWPORT: the sheet's usable area is the title block's box less a margin (4% of
 //     its shorter side) and, for a title block, its right 18% for the title strip; a sheet of no title block
 //     is ARCH D (36 x 24 in), or A1 (841 x 594 mm) in a metric model (Area, DefaultSheet). The scale is the
@@ -45,8 +59,11 @@
 //   · HOW IT IS JUDGED (Judge, Count, RolledBack, Problems): applied when every view asked (but a plan left
 //     out on the list's word) was made, placed on its sheet and fits, and says nothing against itself;
 //     applied in part when some view was made; none made, not kept. The invariants the report keeps are
-//     Problems', which ReportCheck runs on every drawing set change; since add-in 0.15.1 among them, an
-//     elevation or section read as asked reaches the depth it needs, and says how far it reaches.
+//     Problems', which ReportCheck runs on every drawing set change; since add-in 0.15.2 among them, an
+//     elevation or section read as asked that says how many of the building's elements Revit shows in it
+//     shows some, and an elevation read as asked that says its view plane has the building in front of it.
+//     (0.15.1's, that it reaches the depth it needs by its far clip read back, compared unlike quantities and
+//     is gone.)
 //
 // The margins, the title strip, the default sheet and the scales are this add-in's own choices, not
 // Revit's or any standard's: a live run on a real title block is what tells whether they suit it.
@@ -188,8 +205,15 @@ namespace Flo2Rvt.Addin.Edit.Logic
         public const double CompassCos = 0.99;
         /// <summary>How far a section's cut may stand from the middle and still be through it, in feet.</summary>
         public const double CutToleranceFt = 0.01;
-        /// <summary>How far short of the depth it needs a view's far clip, or of the building its crop, may stand and still reach it, in feet.</summary>
+        /// <summary>How far a point of an elevation's crop region may stand off its plane, or a corner of the building behind it, and still be taken as on it, in feet.</summary>
         public const double DepthToleranceFt = 0.01;
+        /// <summary>How far from square to each other a view's right, up and view directions may be and still be taken as square (a dot product).</summary>
+        public const double SquareTolerance = 1e-6;
+        /// <summary>Since add-in 0.15.2: when the job reads each elevation, in order: as Revit made it, once cropped, once far clipped, and once every view is placed.</summary>
+        public const string AtMade = "made";
+        public const string AtCropped = "cropped";
+        public const string AtFarClipped = "far_clipped";
+        public const string AtPlaced = "placed";
         /// <summary>What a viewport may overrun its area by and still fit, sheet feet (Lengths.Round's millionth, and some).</summary>
         public const double SheetToleranceFt = 1e-5;
         public const double MmPerFoot = 304.8;
@@ -201,6 +225,8 @@ namespace Flo2Rvt.Addin.Edit.Logic
         /// <summary>From the largest drawing to the smallest: 1/4" = 1'-0" (48) to 1/64" = 1'-0" (768).</summary>
         public static readonly int[] ImperialScales = { 48, 64, 96, 128, 192, 384, 768 };
         public static readonly int[] MetricScales = { 50, 100, 200, 500, 1000, 2000, 5000 };
+        /// <summary>Since add-in 0.15.2: the stages at which the job reads an elevation, in order.</summary>
+        public static readonly string[] ReadingStages = { AtMade, AtCropped, AtFarClipped, AtPlaced };
         /// <summary>What Revit forbids in a view's or sheet's name.</summary>
         public static readonly char[] Forbidden = { '\\', ':', '{', '}', '[', ']', '|', ';', '<', '>', '?', '`', '~' };
 
@@ -475,40 +501,175 @@ namespace Flo2Rvt.Addin.Edit.Logic
             return Lengths.Round(v).ToString("0.##", CultureInfo.InvariantCulture);
         }
 
-        /// <summary>
-        /// Why an elevation's or section's far clip, as Revit holds it once set and cropped, does not reach the
-        /// depth it needs, in plain words; null when it does, or when far clipping reads off (the view then sees
-        /// without end, the building with it). Far clipping not read (active null) is taken as on, and a far
-        /// clip not read is never taken as enough.
-        /// </summary>
-        public static string ReachWhy(bool? farClipActive, double? farClipFt, double depthNeededFt, double marginFt)
+        private static double Dot(double[] a, double[] b)
         {
-            if (farClipActive == false) return null;
-            string side = "the building's far side at " + Ft(depthNeededFt - marginFt) + " ft";
-            if (!farClipFt.HasValue) return "its far clip could not be read back, so whether it reaches " + side + " (" + Ft(depthNeededFt) + " ft with the margin) is not known";
-            if (farClipFt.Value >= depthNeededFt - DepthToleranceFt) return null;
-            return "its far clip reaches " + Ft(farClipFt.Value) + " ft, short of the " + Ft(depthNeededFt) + " ft it needs to hold " + side + " and the margin";
+            return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+        }
+
+        private static double[] Minus(double[] a, double[] b)
+        {
+            return new[] { a[0] - b[0], a[1] - b[1], a[2] - b[2] };
+        }
+
+        private static double[] Scaled(double[] a, double k)
+        {
+            return new[] { a[0] * k, a[1] * k, a[2] * k };
+        }
+
+        private static double[] Unit(double[] a)
+        {
+            double len = a == null || a.Length < 3 ? 0 : Math.Sqrt(Dot(a, a));
+            return len > 1e-9 ? Scaled(a, 1 / len) : null;
+        }
+
+        private static string Vec(double[] a)
+        {
+            return "(" + string.Join(", ", a.Take(3).Select(x => Math.Round(x, 4).ToString("0.####", CultureInfo.InvariantCulture))) + ")";
+        }
+
+        /// <summary>The way a view looks: the opposite of its View.ViewDirection, "the direction towards the viewer".</summary>
+        public static double[] Look(double[] viewDirection)
+        {
+            return Scaled(viewDirection, -1);
         }
 
         /// <summary>
-        /// Why a view's crop, as Revit holds it (View.CropBox: x right on screen, y up, in its own frame), leaves
-        /// part of the building out across the view, naming each side it runs past; null when it holds it. Seen
-        /// is the building's corners in the crop's frame. Its depth is the far clip's to judge (ReachWhy).
+        /// Since add-in 0.15.2: why an elevation or section is not as asked by what Revit says it shows, in plain
+        /// words; null when Revit shows some of the building in it. Seen is how many of the building's total
+        /// elements Revit passes in the view (FilteredElementCollector over the view, EditJob.DrawingSet.cs), null
+        /// when that could not be read, which is never taken as some. None proves the view shows none of the
+        /// building; some does not prove it shows all of it, since Revit may pass an element its crop hides.
         /// </summary>
-        public static string CropWhy(double[] cropMin, double[] cropMax, IEnumerable<double[]> seen)
+        public static string SeenWhy(int? seen, int total)
         {
-            List<double[]> p = seen.ToList();
-            double minX = p.Min(v => v[0]), maxX = p.Max(v => v[0]), minY = p.Min(v => v[1]), maxY = p.Max(v => v[1]);
-            double t = DepthToleranceFt;
-            var past = new List<string>();
-            if (minX < cropMin[0] - t) past.Add("left");
-            if (maxX > cropMax[0] + t) past.Add("right");
-            if (minY < cropMin[1] - t) past.Add("bottom");
-            if (maxY > cropMax[1] + t) past.Add("top");
-            if (past.Count == 0) return null;
-            string sides = past.Count == 1 ? past[0] : string.Join(", ", past.Take(past.Count - 1)) + " and " + past.Last();
-            return "its crop leaves part of the building out across the view, past its " + sides + " (the crop spans x " + Ft(cropMin[0]) + " to " + Ft(cropMax[0]) + " and y " + Ft(cropMin[1]) + " to " + Ft(cropMax[1]) +
-                   " ft in the view's frame, the building x " + Ft(minX) + " to " + Ft(maxX) + " and y " + Ft(minY) + " to " + Ft(maxY) + ")";
+            if (total <= 0) return null;
+            string all = total == 1 ? "the building's one element" : "the building's " + total.ToString(CultureInfo.InvariantCulture) + " elements";
+            if (!seen.HasValue) return "how many of " + all + " Revit shows in it could not be read back, so whether it shows the building is not known";
+            if (seen.Value > 0) return null;
+            return total == 1 ? "Revit does not show the building's one element in it" : "Revit shows none of " + all + " in it";
+        }
+
+        /// <summary>
+        /// Since add-in 0.15.2: an elevation's view plane, a point of Revit's own crop region (its points, model
+        /// feet, as ViewCropRegionShapeManager.GetCropShape gives them): their middle, when they lie in one plane
+        /// square to the view direction within DepthToleranceFt; null with why when there are none, or when they
+        /// do not, as they would not were they in the view's own frame rather than the model's.
+        /// </summary>
+        public static double[] PlanePoint(IList<double[]> loop, double[] viewDirection, out string why)
+        {
+            why = null;
+            double[] n = Unit(viewDirection);
+            if (loop == null || loop.Count == 0)
+            {
+                why = "Revit gives no crop region for it to take its view plane from";
+                return null;
+            }
+            if (n == null)
+            {
+                why = "Revit gives it no view direction to take its view plane square to";
+                return null;
+            }
+            double apart = loop.Max(p => Math.Abs(Dot(Minus(p, loop[0]), n)));
+            if (apart > DepthToleranceFt)
+            {
+                why = "Revit's crop region for it reads in no plane square to its view direction: its points stand up to " + Ft(apart) + " ft apart along it, so they are not in model coordinates as read, and give no view plane";
+                return null;
+            }
+            return new[] { loop.Average(p => p[0]), loop.Average(p => p[1]), loop.Average(p => p[2]) };
+        }
+
+        /// <summary>
+        /// Since add-in 0.15.2: the screen's right and up on which an elevation's crop is laid, from Revit's
+        /// View.RightDirection ("The direction towards the right side of the screen") and View.UpDirection ("The
+        /// direction towards the top of the screen"), each made square to View.ViewDirection and to each other and
+        /// of unit length, so the crop lies in a plane parallel to the view plane, as SetCropShape takes it. Note
+        /// says so when Revit's were not square already; false, with note why, when either lies along the view
+        /// direction (or the right along the up), so gives no screen.
+        /// </summary>
+        public static bool ScreenAxes(double[] right, double[] up, double[] viewDirection, out double[] screenRight, out double[] screenUp, out string note)
+        {
+            screenRight = null;
+            screenUp = null;
+            note = null;
+            double[] n = Unit(viewDirection);
+            double[] r = Unit(right);
+            double[] u = Unit(up);
+            if (n == null || r == null || u == null)
+            {
+                note = "Revit gives it no " + (n == null ? "ViewDirection" : r == null ? "RightDirection" : "UpDirection") + " to lay its crop on";
+                return false;
+            }
+            double[] r2 = Unit(Minus(r, Scaled(n, Dot(r, n))));
+            if (r2 == null)
+            {
+                note = "Revit's RightDirection " + Vec(right) + " lies along its ViewDirection " + Vec(viewDirection) + ", so it gives no screen to lay its crop on";
+                return false;
+            }
+            double[] u2 = Unit(Minus(Minus(u, Scaled(n, Dot(u, n))), Scaled(r2, Dot(u, r2))));
+            if (u2 == null)
+            {
+                note = "Revit's UpDirection " + Vec(up) + " lies along its ViewDirection " + Vec(viewDirection) + " or its RightDirection " + Vec(right) + ", so it gives no screen to lay its crop on";
+                return false;
+            }
+            screenRight = r2;
+            screenUp = u2;
+            bool square = Math.Abs(Dot(r, n)) <= SquareTolerance && Math.Abs(Dot(u, n)) <= SquareTolerance && Math.Abs(Dot(r, u)) <= SquareTolerance
+                          && Math.Abs(Dot(right, right) - 1) <= SquareTolerance && Math.Abs(Dot(up, up) - 1) <= SquareTolerance;
+            if (!square) note = "Revit's RightDirection " + Vec(right) + " and UpDirection " + Vec(up) + " are not square to its ViewDirection " + Vec(viewDirection) + " and each other, so its crop was laid square to its view direction, along " + Vec(r2) + " and " + Vec(u2);
+            return true;
+        }
+
+        /// <summary>
+        /// Since add-in 0.15.2: an elevation's crop, a rectangle on its view plane (through plane) along the
+        /// screen's right and up (unit, square: ScreenAxes'), holding every corner of the building as the view
+        /// sees it and the margin, across only. Its four corners in model feet, in order around it: lower left,
+        /// lower right, upper right, upper left, as the viewer sees it.
+        /// </summary>
+        public static List<double[]> CropRectangle(Box3 b, double[] plane, double[] right, double[] up, double margin)
+        {
+            List<double[]> corners = b.Corners().ToList();
+            double u0 = corners.Min(c => Dot(Minus(c, plane), right)) - margin;
+            double u1 = corners.Max(c => Dot(Minus(c, plane), right)) + margin;
+            double v0 = corners.Min(c => Dot(Minus(c, plane), up)) - margin;
+            double v1 = corners.Max(c => Dot(Minus(c, plane), up)) + margin;
+            Func<double, double, double[]> at = (u, v) => new[] { plane[0] + u * right[0] + v * up[0], plane[1] + u * right[1] + v * up[1], plane[2] + u * right[2] + v * up[2] };
+            return new List<double[]> { at(u0, v0), at(u1, v0), at(u1, v1), at(u0, v1) };
+        }
+
+        /// <summary>
+        /// Since add-in 0.15.2: the depth an elevation's far clip is set to, from its view plane (through plane)
+        /// along the way it looks (the opposite of its view direction) to the building's far side, and the margin;
+        /// from its marker (ElevationDepth) when no plane or view direction was read.
+        /// </summary>
+        public static double ElevationDepthFrom(Box3 b, string face, double[] plane, double[] viewDirection)
+        {
+            double[] n = Unit(viewDirection);
+            if (plane == null || plane.Length < 3 || n == null) return ElevationDepth(b, face);
+            return DepthNeeded(b, plane, Look(n));
+        }
+
+        /// <summary>
+        /// Since add-in 0.15.2: why the building does not stand in front of a view's plane (through plane, looking
+        /// along look), frame-free: each corner's distance along the way it looks, (c - p) . look, must be no less
+        /// than -DepthToleranceFt. Null when every corner stands in front; otherwise whether all of it stands
+        /// behind, or the plane cuts through it.
+        /// </summary>
+        public static string BehindWhy(Box3 b, double[] plane, double[] look)
+        {
+            double[] n = Unit(look);
+            if (plane == null || plane.Length < 3 || n == null) return null;
+            List<double> along = b.Corners().Select(c => Dot(Minus(c, plane), n)).ToList();
+            double near = along.Min(), far = along.Max();
+            if (near >= -DepthToleranceFt) return null;
+            if (far < -DepthToleranceFt) return "the building stands behind its view plane, " + Ft(-far) + " to " + Ft(-near) + " ft behind it as the view looks, so the view looks away from it";
+            return "part of the building stands behind its view plane, up to " + Ft(-near) + " ft behind it as the view looks, so the plane cuts through the building";
+        }
+
+        /// <summary>Since add-in 0.15.2: the building's extent as the report gives it, as a box; null when it gives none whole.</summary>
+        public static Box3? BoxOf(BuildingExtent e)
+        {
+            if (e == null || e.MinFt == null || e.MaxFt == null || e.MinFt.Count < 3 || e.MaxFt.Count < 3) return null;
+            return new Box3(e.MinFt[0], e.MinFt[1], e.MinFt[2], e.MaxFt[0], e.MaxFt[1], e.MaxFt[2]);
         }
 
         /// <summary>A view's crop box, in its own frame: every point given (the building's corners as the view sees them) and the margin, its near plane kept where it is. Min x y z, max x y z.</summary>
@@ -716,6 +877,10 @@ namespace Flo2Rvt.Addin.Edit.Logic
                 s.DepthNeededFt = null;
                 s.CropMinFt = null;
                 s.CropMaxFt = null;
+                s.BuildingElementsSeen = null;
+                s.ViewPlaneFt = null;
+                s.CropLoopFt = null;
+                s.Readings = null;
                 s.Why = was || s.Why == null ? "rolled back with the change: " + because : s.Why;
             }
             Count(r);
@@ -763,11 +928,18 @@ namespace Flo2Rvt.Addin.Edit.Logic
                     else if (s.Looking != want) found.Add(at + " is cut " + s.Cut + " but reads looking " + (s.Looking ?? "nowhere") + ", not " + want);
                     if (s.CutOffMiddleFt.HasValue && Math.Abs(s.CutOffMiddleFt.Value) > CutToleranceFt) found.Add(at + " reads as asked, though its cut stands " + s.CutOffMiddleFt.Value.ToString("0.######", CultureInfo.InvariantCulture) + " ft from the middle");
                 }
-                // Since add-in 0.15.1: an elevation or section that says how far it needs to see says how far it does, and reaches it, or says why.
-                if ((s.Kind == DrawingSetViewValues.Elevations || s.Kind == DrawingSetViewValues.Sections) && s.ViewWas == Made && s.Why == null && s.DepthNeededFt.HasValue && s.FarClipActive != false)
+                // Since add-in 0.15.2: an elevation or section read as asked that says how many of the building's elements Revit shows in it
+                // shows some, and an elevation read as asked that says its view plane has the building in front of it. Its far clip and crop
+                // read back are Revit's readings, not judged: 0.15.1 held the far clip read back to the depth set, unlike quantities.
+                if ((s.Kind == DrawingSetViewValues.Elevations || s.Kind == DrawingSetViewValues.Sections) && s.ViewWas == Made && s.Why == null)
                 {
-                    if (!s.FarClipFt.HasValue) found.Add(at + " reads as asked, though it says not how far its far clip reaches");
-                    else if (s.FarClipFt.Value < s.DepthNeededFt.Value - DepthToleranceFt) found.Add(at + " reads as asked, though its far clip reaches " + Ft(s.FarClipFt.Value) + " ft, short of the " + Ft(s.DepthNeededFt.Value) + " ft it needs");
+                    if (s.BuildingElementsSeen == 0) found.Add(at + " reads as asked, though Revit shows none of the building's elements in it");
+                    Box3? box = BoxOf(r.Building);
+                    if (s.Kind == DrawingSetViewValues.Elevations && box.HasValue && s.ViewPlaneFt != null && s.ViewPlaneFt.Count == 3 && s.ViewDirection != null && s.ViewDirection.Count == 3)
+                    {
+                        string behind = BehindWhy(box.Value, s.ViewPlaneFt.ToArray(), Look(s.ViewDirection.ToArray()));
+                        if (behind != null) found.Add(at + " reads as asked, though " + behind);
+                    }
                 }
             }
             int made = r.Sheets.Count(s => s.ViewWas == Made);

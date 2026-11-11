@@ -169,17 +169,28 @@ describe('the tools, as the contract names them', () => {
     assert.ok(editSchema.includes('schema/change-list.schema.json, version 7'), 'the change list the agent sees says version 7');
   });
 
-  // Since flo2-rvt 0.16.1 (add-in 0.15.1): the first live drawing set's sections looked the opposite way and
-  // its north elevation saw short of the house, and its report said each was as asked. A chat is told which
-  // way each section looks, that each elevation and section is made to see past the building's far side and
-  // read back, and that the report says how far each sees beside how far it needs to.
-  test("the edit text says which way each section looks, that each elevation and section sees past the building's far side, read back, and that the report says how far", async () => {
+  // Since flo2-rvt 0.16.1 (add-in 0.15.1): the first live drawing set's sections looked the opposite way, and
+  // its report said each was as asked. A chat is told which way each section looks. (How each elevation and
+  // section is judged is said since 0.16.2, below.)
+  test('the edit text says which way each section looks', async () => {
     const r = await rpc(h.url, { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} });
     const tools = (r.json as Rpc).result?.tools ?? [];
     const said = String(tools.find((t) => t.name === 'rvt_edit_start')?.description ?? '');
     assert.match(said, /A-301 and A-302 the east-west section, looking north, and the north-south section, looking east/);
-    assert.match(said, /each elevation and section made to see past the building's far side, its far clip set and read back \(since add-in 0\.15\.1\)/);
-    assert.match(said, /for an elevation or section how far its far clip reaches beside how far it needs to/);
+  });
+
+  // Since flo2-rvt 0.16.2 (add-in 0.15.2): the second live drawing set's readback passed a north elevation that printed
+  // no house and failed three that show it, judging a far clip read back from another plane than the one it was set
+  // from. A chat is told each elevation and section is judged by how many of the building's elements Revit shows in it,
+  // and that the report gives that count beside its far clip and crop as Revit reads them back, no longer how far it
+  // reaches beside how far it needs to.
+  test("the edit text says each elevation and section is judged by how many of the building's elements Revit shows in it, and the report gives that count beside its far clip and crop as read", async () => {
+    const r = await rpc(h.url, { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} });
+    const tools = (r.json as Rpc).result?.tools ?? [];
+    const said = String(tools.find((t) => t.name === 'rvt_edit_start')?.description ?? '');
+    assert.match(said, /each elevation and section made to see past the building's far side, its far clip set \(since add-in 0\.15\.1\), and judged by how many of the building's elements Revit shows in it \(since add-in 0\.15\.2\)/);
+    assert.match(said, /for an elevation or section how many of the building's elements Revit shows in it \(building_elements_seen\), and its far clip and crop as Revit reads them back/);
+    assert.doesNotMatch(said, /how far its far clip reaches beside how far it needs to/);
   });
 
   test('both tools refuse a call without the hidden job context', async () => {

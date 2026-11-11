@@ -62,7 +62,12 @@
 // is set and cropped, whether its far clipping is on (`far_clip_active`), how far it sees (`far_clip_ft`)
 // beside how far it needs to (`depth_needed_ft`), its crop box in model terms (`crop_min_ft`,
 // `crop_max_ft`), and an elevation its View.Origin (`origin_ft`) as a section did; one short of the
-// building says why. A report of 0.15.0, which says none of it, reads as it did.
+// building says why. A report of 0.15.0, which says none of it, reads as it did. Add-in 0.15.2 writes
+// version 2 still, with fields added and none changed: each elevation and section says how many of the
+// building's elements Revit shows in it (`building_elements_seen`), by which it is judged, and each
+// elevation the view plane its crop and depth were set from (`view_plane_ft`), its crop region read back
+// (`crop_loop_ft`) and Revit's readings of it as made, cropped, far clipped and placed (`readings`); the far
+// clip and crop read back are Revit's readings and no longer judged. A report of 0.15.1 reads as it did.
 
 using System.Collections.Generic;
 using System.Linq;
@@ -1211,39 +1216,84 @@ namespace Flo2Rvt.Addin.Edit
         [DataMember(Name = "view_type", Order = 9, EmitDefaultValue = false)] public string ViewType;
         /// <summary>Revit's ViewDirection for it, toward the viewer, x y z.</summary>
         [DataMember(Name = "view_direction", Order = 10, EmitDefaultValue = false)] public List<double> ViewDirection;
-        /// <summary>Its View.Origin as Revit holds it ("the origin of the screen"), internal feet: a section's is its cut face's lower-left corner as the viewer sees it, which the first live run measured (2026-11-10); since add-in 0.15.1 an elevation's too, a point of the plane its depth is measured from.</summary>
+        /// <summary>Its View.Origin as Revit holds it ("the origin of the screen"), internal feet: a section's is its cut face's lower-left corner as the viewer sees it, which the first live run measured (2026-11-10); since add-in 0.15.1 an elevation's too. A raw reading, not judged: the second live run (2026-11-11) read an elevation's off its view plane, and its Far Clip Offset back from this point's plane.</summary>
         [DataMember(Name = "origin_ft", Order = 11, EmitDefaultValue = false)] public List<double> OriginFt;
         /// <summary>A section: how far its cut plane stands from the middle of the building, toward the viewer, in feet.</summary>
         [DataMember(Name = "cut_off_middle_ft", Order = 12, EmitDefaultValue = false)] public double? CutOffMiddleFt;
-        /// <summary>Since add-in 0.15.1, an elevation or section: whether Revit's far clipping is on for it, read back once it is set and cropped (Far Clip Active, VIEWER_BOUND_ACTIVE_FAR, not 0, or Far Clipping, VIEWER_BOUND_FAR_CLIPPING, other than No clip); absent when neither could be read.</summary>
+        /// <summary>Since add-in 0.15.1, an elevation or section: whether Revit's far clipping is on for it, read back once everything is set and placed (Far Clip Active, VIEWER_BOUND_ACTIVE_FAR, not 0, or Far Clipping, VIEWER_BOUND_FAR_CLIPPING, other than No clip); absent when neither could be read. Revit's reading, not judged.</summary>
         [DataMember(Name = "far_clip_active", Order = 13, EmitDefaultValue = false)] public bool? FarClipActive;
-        /// <summary>Since add-in 0.15.1, an elevation or section: how far it sees from its plane along the way it looks, its Far Clip Offset (VIEWER_BOUND_OFFSET_FAR) as Revit holds it once set and cropped, in feet; absent when it could not be read.</summary>
+        /// <summary>Since add-in 0.15.1, an elevation or section: its Far Clip Offset (VIEWER_BOUND_OFFSET_FAR) as Revit reads it back once everything is set and placed, in feet; absent when it could not be read. Revit's reading, not judged (since add-in 0.15.2): the second live run read it back as the distance from View.Origin's plane to the far face, not the depth set from the view plane (depth_needed_ft), so the two are unlike quantities.</summary>
         [DataMember(Name = "far_clip_ft", Order = 14, EmitDefaultValue = false)] public double? FarClipFt;
-        /// <summary>Since add-in 0.15.1, an elevation or section: how far it must see to hold the building, from its plane to the building's far side, and the margin (DrawingSets.DepthNeeded), in feet; a far clip short of it says why.</summary>
+        /// <summary>Since add-in 0.15.1, an elevation or section: the depth the add-in set as its Far Clip Offset, how far it must see to hold the building, from its plane to the building's far side, and the margin, in feet: since add-in 0.15.2 an elevation's from its view plane (view_plane_ft; DrawingSets.ElevationDepthFrom), a section's from its cut (or its View.Origin where that is further). Not judged against far_clip_ft.</summary>
         [DataMember(Name = "depth_needed_ft", Order = 15, EmitDefaultValue = false)] public double? DepthNeededFt;
-        /// <summary>Since add-in 0.15.1, an elevation or section: its crop box as Revit holds it once set (View.CropBox), its corners taken into the model's internal axes, their least x y z and greatest, internal feet.</summary>
+        /// <summary>Since add-in 0.15.1, an elevation or section: its crop box as Revit reads it back once everything is set and placed (View.CropBox), its corners taken into the model's internal axes through the box's own Transform, their least x y z and greatest, internal feet. Revit's reading, not judged (since add-in 0.15.2): the second live run read east's and west's frames turned 45 degrees in plan, though each view is drawn square-on.</summary>
         [DataMember(Name = "crop_min_ft", Order = 16, EmitDefaultValue = false)] public List<double> CropMinFt;
         [DataMember(Name = "crop_max_ft", Order = 17, EmitDefaultValue = false)] public List<double> CropMaxFt;
+        /// <summary>Since add-in 0.15.2, an elevation or section: how many of the building's elements (building.elements) Revit passes in the view once everything is placed (FilteredElementCollector over the view, the building's categories, no view-specific element or element type); absent when it could not be counted, which says why. None makes it not as asked ("Revit shows none of the building's N elements in it"); some proves it not empty, not whole, since Revit may pass an element its crop hides.</summary>
+        [DataMember(Name = "building_elements_seen", Order = 18, EmitDefaultValue = false)] public int? BuildingElementsSeen;
+        /// <summary>Since add-in 0.15.2, an elevation: the point of its view plane its crop and depth were set from, x y z internal feet: the middle of the crop region Revit made (ViewCropRegionShapeManager.GetCropShape), read in model coordinates; absent when it could not be read, and then its depth is set from its marker. The building must stand in front of it.</summary>
+        [DataMember(Name = "view_plane_ft", Order = 19, EmitDefaultValue = false)] public List<double> ViewPlaneFt;
+        /// <summary>Since add-in 0.15.2, an elevation: its crop region as Revit reads it back once everything is set and placed (GetCropShape), each corner x y z internal feet, in order around it. Revit's reading.</summary>
+        [DataMember(Name = "crop_loop_ft", Order = 20, EmitDefaultValue = false)] public List<List<double>> CropLoopFt;
         /// <summary>An elevation: the ElevationMarker it hangs on.</summary>
-        [DataMember(Name = "marker_id", Order = 18, EmitDefaultValue = false)] public long MarkerId;
+        [DataMember(Name = "marker_id", Order = 21, EmitDefaultValue = false)] public long MarkerId;
         /// <summary>Its scale, the ratio of true size to paper (View.Scale): 48 is 1/4" = 1'-0", 100 is 1 : 100.</summary>
-        [DataMember(Name = "scale", Order = 19, EmitDefaultValue = false)] public int Scale;
-        [DataMember(Name = "scale_text", Order = 20, EmitDefaultValue = false)] public string ScaleText;
-        [DataMember(Name = "sheet_number", Order = 21, EmitDefaultValue = false)] public string SheetNumber;
-        [DataMember(Name = "sheet_name", Order = 22, EmitDefaultValue = false)] public string SheetName;
-        [DataMember(Name = "sheet_id", Order = 23, EmitDefaultValue = false)] public long SheetId;
+        [DataMember(Name = "scale", Order = 22, EmitDefaultValue = false)] public int Scale;
+        [DataMember(Name = "scale_text", Order = 23, EmitDefaultValue = false)] public string ScaleText;
+        [DataMember(Name = "sheet_number", Order = 24, EmitDefaultValue = false)] public string SheetNumber;
+        [DataMember(Name = "sheet_name", Order = 25, EmitDefaultValue = false)] public string SheetName;
+        [DataMember(Name = "sheet_id", Order = 26, EmitDefaultValue = false)] public long SheetId;
         /// <summary>The title block ViewSheet.Create placed on the sheet.</summary>
-        [DataMember(Name = "title_block_instance_id", Order = 24, EmitDefaultValue = false)] public long TitleBlockInstanceId;
-        [DataMember(Name = "viewport_id", Order = 25, EmitDefaultValue = false)] public long ViewportId;
-        [DataMember(Name = "placed", Order = 26)] public bool Placed;
+        [DataMember(Name = "title_block_instance_id", Order = 27, EmitDefaultValue = false)] public long TitleBlockInstanceId;
+        [DataMember(Name = "viewport_id", Order = 28, EmitDefaultValue = false)] public long ViewportId;
+        [DataMember(Name = "placed", Order = 29)] public bool Placed;
         /// <summary>Its viewport lies within the sheet's usable area.</summary>
-        [DataMember(Name = "fits", Order = 27)] public bool Fits;
+        [DataMember(Name = "fits", Order = 30)] public bool Fits;
         /// <summary>Its viewport's box on the sheet (Viewport.GetBoxOutline, the label left out), sheet feet.</summary>
-        [DataMember(Name = "viewport_min_ft", Order = 28, EmitDefaultValue = false)] public List<double> ViewportMinFt;
-        [DataMember(Name = "viewport_max_ft", Order = 29, EmitDefaultValue = false)] public List<double> ViewportMaxFt;
+        [DataMember(Name = "viewport_min_ft", Order = 31, EmitDefaultValue = false)] public List<double> ViewportMinFt;
+        [DataMember(Name = "viewport_max_ft", Order = 32, EmitDefaultValue = false)] public List<double> ViewportMaxFt;
         /// <summary>Why it was not made, placed or fitted, or is not as asked; absent when it is.</summary>
-        [DataMember(Name = "why", Order = 30, EmitDefaultValue = false)] public string Why;
+        [DataMember(Name = "why", Order = 33, EmitDefaultValue = false)] public string Why;
         /// <summary>What a person should know of it that is no shortfall.</summary>
-        [DataMember(Name = "note", Order = 31, EmitDefaultValue = false)] public string Note;
+        [DataMember(Name = "note", Order = 34, EmitDefaultValue = false)] public string Note;
+        /// <summary>
+        /// Since add-in 0.15.2, an elevation: Revit's readings of it at each stage (DrawingSets.ReadingStages: as
+        /// made, once cropped, once far clipped, once every view is placed), each after a regeneration, so the next
+        /// live run can tell where its frame stands: whether a frame Revit returns is turned or mirrored when it
+        /// makes the view or only after the add-in sets it. Diagnostic: nothing is judged by them.
+        /// </summary>
+        [DataMember(Name = "readings", Order = 35, EmitDefaultValue = false)] public List<ViewReading> Readings;
+    }
+
+    /// <summary>
+    /// Since add-in 0.15.2: Revit's reading of an elevation at one stage, rounded to a millionth of a foot (Lengths.Round):
+    /// its View.CropBox ("The X direction of the box is right on screen; Y is up; and Z is towards the user") and that
+    /// box's frame, its View.Origin ("the origin of the screen"), its RightDirection, UpDirection and ViewDirection, its
+    /// Far Clip Offset (VIEWER_BOUND_OFFSET_FAR) and its crop region (ViewCropRegionShapeManager.GetCropShape). Each
+    /// absent that could not be read, error saying why.
+    /// </summary>
+    [DataContract]
+    public sealed class ViewReading
+    {
+        /// <summary>made, cropped, far_clipped or placed (DrawingSets.ReadingStages).</summary>
+        [DataMember(Name = "at", Order = 0)] public string At;
+        /// <summary>View.CropBox's Min and Max, in the box's own frame.</summary>
+        [DataMember(Name = "crop_min_ft", Order = 1, EmitDefaultValue = false)] public List<double> CropMinFt;
+        [DataMember(Name = "crop_max_ft", Order = 2, EmitDefaultValue = false)] public List<double> CropMaxFt;
+        /// <summary>View.CropBox's Transform: its Origin, internal feet, and its BasisX and BasisZ.</summary>
+        [DataMember(Name = "crop_origin_ft", Order = 3, EmitDefaultValue = false)] public List<double> CropOriginFt;
+        [DataMember(Name = "crop_basis_x", Order = 4, EmitDefaultValue = false)] public List<double> CropBasisX;
+        [DataMember(Name = "crop_basis_z", Order = 5, EmitDefaultValue = false)] public List<double> CropBasisZ;
+        /// <summary>View.Origin, internal feet.</summary>
+        [DataMember(Name = "origin_ft", Order = 6, EmitDefaultValue = false)] public List<double> OriginFt;
+        [DataMember(Name = "right_direction", Order = 7, EmitDefaultValue = false)] public List<double> RightDirection;
+        [DataMember(Name = "up_direction", Order = 8, EmitDefaultValue = false)] public List<double> UpDirection;
+        /// <summary>View.ViewDirection, "the direction towards the viewer".</summary>
+        [DataMember(Name = "view_direction", Order = 9, EmitDefaultValue = false)] public List<double> ViewDirection;
+        /// <summary>Its Far Clip Offset parameter as read, feet.</summary>
+        [DataMember(Name = "far_clip_ft", Order = 10, EmitDefaultValue = false)] public double? FarClipFt;
+        /// <summary>Its crop region's corners, each x y z internal feet: the first loop GetCropShape gives, each curve's start.</summary>
+        [DataMember(Name = "crop_loop_ft", Order = 11, EmitDefaultValue = false)] public List<List<double>> CropLoopFt;
+        [DataMember(Name = "error", Order = 12, EmitDefaultValue = false)] public string Error;
     }
 }
