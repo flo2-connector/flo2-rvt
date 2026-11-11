@@ -1,4 +1,4 @@
-// The gateway ↔ flo2-rvt contract, v8 (v7, and a drawing set, change-list version 7), as types and validators. Everything the
+// The gateway ↔ flo2-rvt contract, v9 (v8, and a drawing set's room tags, room schedule and cover, change-list version 8), as types and validators. Everything the
 // agent sends is untrusted and bounded here; everything that decides what
 // flo2-rvt does with Autodesk (the token, the client id, the input file and the
 // time limit) comes only from the hidden context the gateway sets.
@@ -59,8 +59,22 @@ import { ENGINE, MAX_SAVE_FAMILIES, NEW_MODEL_UNITS } from './names.ts';
  * a change's `drawing_set` and `totals.sheets_added`, `totals.views_added`). Nothing of v7 changed: a v7
  * gateway, whose copy of the schema reads versions 0 to 6, refuses a version 7 list before the person is
  * asked, and every list it hands over runs as before.
+ * 9 (flo2-rvt 0.17.0, add-in 0.16.0) reads change-list version 8: a drawing set's plans tag their rooms (every
+ * room placed on a plan's level, with the model's default room tag type), and a version 8 set that says nothing
+ * also makes a room schedule (the view kind room_schedule: level, number, name and area, sorted by level then
+ * number, a grand total row) on a sheet of its own, A-601, split side by side when it is taller than the sheet,
+ * and a cover (the view kind cover) on A-001, which sheets.pdf prints first: a sheet index of every sheet the
+ * model holds and one note saying the set is conceptual, not for permit or construction. It names no file, so
+ * nothing new is handed over: the hidden context is v8's, and so is the report_summary (sheets_added counts the
+ * schedule's and the cover's sheets). report.json's drawing_set adds `tags_rooms`, `room_tag_type`,
+ * `room_tag_type_was`, per plan `rooms_on_level`, `rooms_tagged` and `rooms_why`, the room schedule's entry
+ * (`schedule_fields`, `segments`, `schedule_segments`, `rooms_scheduled`) and the cover's (the same, with
+ * `sheets_listed`, `note_placed`, `note_why`, `note_id`, `note_text`). Nothing of v8 changed: a version 7 list
+ * makes the set it made, with no room tag, schedule or cover; a v8 gateway, whose copy of the
+ * schema reads versions 0 to 7, refuses a version 8 list before the person is asked, and every list it hands
+ * over runs as before.
  */
-export const CONTRACT_VERSION = 8;
+export const CONTRACT_VERSION = 9;
 
 /** The `_meta` keys of the contract. */
 export const META_JOB = 'flo2.io/job';
@@ -174,7 +188,7 @@ export function expiresAtMs(value: string | number): number {
 
 /** What the change list is, in the words both tools that take one show the agent. */
 const CHANGE_LIST_WORDS =
-  "The changes, in flo2-rvt's fixed vocabulary (schema/change-list.schema.json, version 7; a list of an earlier version still reads): delete_elements_on_level, delete_elements_by_global_id, set_level_elevation, move_levels_together (version 1: several levels moved by one offset in one transaction), add_wall, add_floor, add_room and add_door (version 3), add_footing, add_wall_footing and add_pile (version 4, each from a type the model holds or, for a footing or pile, a family file the design keeps, named by family_file), add_level (version 5: a level by name at an elevation; later changes place on it by its name), a door's family_file, sizes and new_type (version 6: a door from a door family file the design keeps, sized on a copy of its type, as a footing's or pile's may be), and add_drawing_set (version 7: a conceptual drawing set of the model, a floor plan of every level, the four elevations, two sections and a 3D view, each on a numbered sheet the job's sheets.pdf prints; put it last). Applied in order, each in its own transaction. A level move's groups_in_the_way (version 1) is \"refuse\" unless the list says \"ungroup\", which only the person may agree to.";
+  "The changes, in flo2-rvt's fixed vocabulary (schema/change-list.schema.json, version 8; a list of an earlier version still reads): delete_elements_on_level, delete_elements_by_global_id, set_level_elevation, move_levels_together (version 1: several levels moved by one offset in one transaction), add_wall, add_floor, add_room and add_door (version 3), add_footing, add_wall_footing and add_pile (version 4, each from a type the model holds or, for a footing or pile, a family file the design keeps, named by family_file), add_level (version 5: a level by name at an elevation; later changes place on it by its name), a door's family_file, sizes and new_type (version 6: a door from a door family file the design keeps, sized on a copy of its type, as a footing's or pile's may be), and add_drawing_set (version 7: a conceptual drawing set of the model, a floor plan of every level, the four elevations, two sections and a 3D view, each on a numbered sheet the job's sheets.pdf prints; put it last; since version 8 its plans tag their rooms and it holds a room schedule, room_schedule, on A-601, and a cover, cover, on A-001). Applied in order, each in its own transaction. A level move's groups_in_the_way (version 1) is \"refuse\" unless the list says \"ungroup\", which only the person may agree to.";
 
 /** The agent's arguments to rvt_probe_start. */
 export const ProbeStartArgs = z.object({

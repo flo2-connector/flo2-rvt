@@ -63,7 +63,27 @@
 //     elevation or section read as asked that says how many of the building's elements Revit shows in it
 //     shows some, and an elevation read as asked that says its view plane has the building in front of it.
 //     (0.15.1's, that it reaches the depth it needs by its far clip read back, compared unlike quantities and
-//     is gone.)
+//     is gone.) Since add-in 0.16.0 a plan of a set that tags its rooms says how many rooms are placed on its
+//     level and how many it tagged, never more, and why when fewer, which makes it not as asked; a plan of an
+//     older list's set says neither; and the room schedule, only of a set that tags its rooms, is placed by
+//     one schedule instance per segment, fits as any view does (all its segments within the usable area),
+//     and names nothing of a graphic view (RoomProblems).
+//   · ROOMS IN THE SET (since add-in 0.16.0, change-list version 8; DrawingSets.Rooms.cs): the owner settled
+//     that a set also tags every plan's rooms and holds a room schedule. A version-8 set that says nothing
+//     makes every kind, the room schedule among them (KindsAsked); a version-7 list's set is today's, no tag
+//     and no schedule (TagsRooms). Each plan tags every placed room on its level (ToTag), with the model's
+//     default room tag type, or the first it holds (ChooseRoomTagType), and says how many it tagged and why
+//     not all (RoomsWhy). The room schedule (Level, Number, Name, Area, sorted by level then number, a grand
+//     total of the count and the area) goes on a sheet of its own in a new series, A-601 (the US National CAD
+//     Standard's sheet type 6, schedules), at the top-left of the usable area; one taller than the area is
+//     split into the fewest segments that each fit (ScheduleSegments), placed side by side (SideBySide), and
+//     judged by where its segments stand (ScheduleFitWhy). A schedule is no cropped graphic view: no scale,
+//     no crop, nothing seen of the building.
+//   · THE COVER (since add-in 0.16.0, change-list version 8; DrawingSets.Cover.cs): a version-8 set that says
+//     nothing also makes a cover, sheet A-001 (a new series, A-0xx, the general sheets), which sheets.pdf prints
+//     first: a sheet index of every sheet the model holds, laid out as the room schedule is, and one note saying
+//     what the set is (CoverNote). It is made last, so its index lists every sheet the set made, and its entry
+//     comes last in the report though its sheet prints first.
 //
 // The margins, the title strip, the default sheet and the scales are this add-in's own choices, not
 // Revit's or any standard's: a live run on a real title block is what tells whether they suit it.
@@ -176,7 +196,7 @@ namespace Flo2Rvt.Addin.Edit.Logic
         public string Looking;
     }
 
-    public static class DrawingSets
+    public static partial class DrawingSets
     {
         public const string Made = "made";
         public const string NotMade = "not_made";
@@ -218,8 +238,12 @@ namespace Flo2Rvt.Addin.Edit.Logic
         public const double SheetToleranceFt = 1e-5;
         public const double MmPerFoot = 304.8;
 
-        /// <summary>Every kind of view, in the set's own order: the order of its sheets.</summary>
-        public static readonly string[] Order = { DrawingSetViewValues.Plans, DrawingSetViewValues.Elevations, DrawingSetViewValues.Sections, DrawingSetViewValues.Isometric };
+        /// <summary>
+        /// Every kind of view, in the set's own order: the order it makes them in, and of its report's sheets. Since
+        /// add-in 0.16.0 (change-list version 8) the room schedule, then the cover: made last, so its sheet index lists
+        /// every sheet the set made, though its sheet, A-001, prints first.
+        /// </summary>
+        public static readonly string[] Order = { DrawingSetViewValues.Plans, DrawingSetViewValues.Elevations, DrawingSetViewValues.Sections, DrawingSetViewValues.Isometric, DrawingSetViewValues.RoomSchedule, DrawingSetViewValues.Cover };
         /// <summary>The elevations, by the face each shows.</summary>
         public static readonly string[] Faces = { North, East, South, West };
         /// <summary>From the largest drawing to the smallest: 1/4" = 1'-0" (48) to 1/64" = 1'-0" (768).</summary>
@@ -230,16 +254,58 @@ namespace Flo2Rvt.Addin.Edit.Logic
         /// <summary>What Revit forbids in a view's or sheet's name.</summary>
         public static readonly char[] Forbidden = { '\\', ':', '{', '}', '[', ']', '|', ';', '<', '>', '?', '`', '~' };
 
-        /// <summary>The kinds asked, in the set's own order; every kind when the change named none.</summary>
-        public static List<string> KindsAsked(IList<string> views)
+        /// <summary>
+        /// The kinds asked, in the set's own order; every kind the list's version reads when the change named
+        /// none. Every list of an older version reads as it did: below change-list version 8 a set that says
+        /// nothing makes no room schedule and no cover, and neither is ever made of a list below it (the check
+        /// refuses one named).
+        /// </summary>
+        public static List<string> KindsAsked(IList<string> views, long version)
         {
-            return views == null ? Order.ToList() : Order.Where(k => views.Contains(k)).ToList();
+            return Order.Where(k => (views == null || views.Contains(k)) && (!SinceRooms(k) || TagsRooms(version))).ToList();
         }
 
-        /// <summary>The first sheet number of a kind's series, less one: 100 for plans, 200, 300, 400.</summary>
+        /// <summary>Since add-in 0.16.0: the kinds change-list version 8 brought, the room schedule and the cover, which a list below it may not name.</summary>
+        public static bool SinceRooms(string kind)
+        {
+            return kind == DrawingSetViewValues.RoomSchedule || kind == DrawingSetViewValues.Cover;
+        }
+
+        /// <summary>Since add-in 0.16.0: the kinds a set places on its sheet as a schedule, by schedule instances, not a viewport: the room schedule and the cover's sheet index.</summary>
+        public static bool PlacedAsSchedule(string kind)
+        {
+            return kind == DrawingSetViewValues.RoomSchedule || kind == DrawingSetViewValues.Cover;
+        }
+
+        /// <summary>Since add-in 0.16.0: whether a set of a list of this version tags its plans' rooms (change-list version 8 and later).</summary>
+        public static bool TagsRooms(long version)
+        {
+            return version >= ChangeListCheck.DrawingSetRoomsVersion;
+        }
+
+        /// <summary>
+        /// The first sheet number of a kind's series, less one: 100 for plans, 200, 300, 400, and since add-in 0.16.0
+        /// 600 for the room schedule (the US National CAD Standard's sheet type 6 is schedules; 5, details, is none of
+        /// the set's) and 0 for the cover (type 0, the general sheets: A-001 on); -1 for no kind of the set's.
+        /// </summary>
         public static int Series(string kind)
         {
-            return (Array.IndexOf(Order, kind) + 1) * 100;
+            switch (kind)
+            {
+                case DrawingSetViewValues.Cover: return 0;
+                case DrawingSetViewValues.Plans: return 100;
+                case DrawingSetViewValues.Elevations: return 200;
+                case DrawingSetViewValues.Sections: return 300;
+                case DrawingSetViewValues.Isometric: return 400;
+                case DrawingSetViewValues.RoomSchedule: return 600;
+                default: return -1;
+            }
+        }
+
+        /// <summary>A sheet number of the set's, its number in three digits: A-001, A-101.</summary>
+        public static string SheetNumber(int n)
+        {
+            return SheetPrefix + n.ToString("000", CultureInfo.InvariantCulture);
         }
 
         public static string Title(string face)
@@ -298,9 +364,19 @@ namespace Flo2Rvt.Addin.Edit.Logic
                     planned.Add(new KeyValuePair<DrawingSheet, string>(new DrawingSheet { Kind = kind, Cut = EastWest, Looking = North }, "East-West Section"));
                     planned.Add(new KeyValuePair<DrawingSheet, string>(new DrawingSheet { Kind = kind, Cut = NorthSouth, Looking = East }, "North-South Section"));
                 }
-                else
+                else if (kind == DrawingSetViewValues.Isometric)
                 {
                     planned.Add(new KeyValuePair<DrawingSheet, string>(new DrawingSheet { Kind = kind }, "3D View"));
+                }
+                else if (kind == DrawingSetViewValues.RoomSchedule)
+                {
+                    // Since add-in 0.16.0 (change-list version 8): the room schedule, on a sheet of its own.
+                    planned.Add(new KeyValuePair<DrawingSheet, string>(new DrawingSheet { Kind = kind }, RoomScheduleName));
+                }
+                else
+                {
+                    // Since add-in 0.16.0: the cover, its sheet named apart from its sheet index (CoverSheetName).
+                    planned.Add(new KeyValuePair<DrawingSheet, string>(new DrawingSheet { Kind = kind }, SheetIndexName));
                 }
                 foreach (KeyValuePair<DrawingSheet, string> p in planned)
                 {
@@ -317,12 +393,12 @@ namespace Flo2Rvt.Addin.Edit.Logic
                     if (number == null)
                     {
                         s.ViewName = name;
-                        Not(s, "the sheet numbers " + SheetPrefix + (Series(kind) + 1) + " to " + SheetPrefix + (Series(kind) + SeriesSize) + " are all taken");
+                        Not(s, "the sheet numbers " + SheetNumber(Series(kind) + 1) + " to " + SheetNumber(Series(kind) + SeriesSize) + " are all taken");
                         sheets.Add(s);
                         continue;
                     }
                     s.ViewName = Unique(name, input.TakenViewNames);
-                    s.SheetName = name;
+                    s.SheetName = kind == DrawingSetViewValues.Cover ? CoverSheetName : name;
                     s.SheetNumber = number;
                     sheets.Add(s);
                 }
@@ -342,7 +418,7 @@ namespace Flo2Rvt.Addin.Edit.Logic
             if (!next.TryGetValue(kind, out n)) n = Series(kind) + 1;
             for (; n <= Series(kind) + SeriesSize; n++)
             {
-                string number = SheetPrefix + n.ToString(CultureInfo.InvariantCulture);
+                string number = SheetNumber(n);
                 if (taken.Contains(number)) continue;
                 taken.Add(number);
                 next[kind] = n + 1;
@@ -810,9 +886,10 @@ namespace Flo2Rvt.Addin.Edit.Logic
             return s.ViewWas != LeftOut;
         }
 
+        /// <summary>Made, placed, fits and says nothing against itself; since add-in 0.16.0 a plan of a set that tags its rooms also tags every one placed on its level, and a cover holds its note.</summary>
         private static bool Complete(DrawingSheet s)
         {
-            return s.ViewWas == Made && s.Placed && s.Fits && s.Why == null;
+            return s.ViewWas == Made && s.Placed && s.Fits && s.Why == null && s.RoomsWhy == null && s.NoteWhy == null;
         }
 
         /// <summary>The set's counts, from its sheets.</summary>
@@ -849,8 +926,13 @@ namespace Flo2Rvt.Addin.Edit.Logic
         private static string Shortfalls(List<DrawingSheet> shortfalls)
         {
             const int shown = 6;
-            return string.Join("; ", shortfalls.Take(shown).Select(s => Label(s) + ": " + (s.Why ?? (s.ViewWas != Made ? "not made" : !s.Placed ? "not placed on its sheet" : "it overruns its sheet's usable area")))) +
+            return string.Join("; ", shortfalls.Take(shown).Select(s => Label(s) + ": " + (Said(Said(s.Why, s.RoomsWhy), s.NoteWhy) ?? (s.ViewWas != Made ? "not made" : !s.Placed ? "not placed on its sheet" : "it overruns its sheet's usable area")))) +
                    (shortfalls.Count > shown ? "; and " + (shortfalls.Count - shown) + " more" : "");
+        }
+
+        private static string Said(string a, string b)
+        {
+            return a == null ? b : b == null ? a : a + "; " + b;
         }
 
         /// <summary>A set whose change was rolled back made nothing: every view reads not made, with why.</summary>
@@ -881,6 +963,21 @@ namespace Flo2Rvt.Addin.Edit.Logic
                 s.ViewPlaneFt = null;
                 s.CropLoopFt = null;
                 s.Readings = null;
+                // Since add-in 0.16.0: what was tagged and scheduled went with the change.
+                s.RoomsOnLevel = null;
+                s.RoomsTagged = null;
+                s.RoomsWhy = null;
+                s.ScheduleFields = null;
+                s.Segments = 0;
+                s.ScheduleSegments = null;
+                s.RoomsScheduled = null;
+                s.SheetsListed = null;
+                s.NotePlaced = null;
+                s.NoteWhy = null;
+                s.NoteId = 0;
+                s.NoteText = null;
+                s.NoteMinFt = null;
+                s.NoteMaxFt = null;
                 s.Why = was || s.Why == null ? "rolled back with the change: " + because : s.Why;
             }
             Count(r);
@@ -913,7 +1010,8 @@ namespace Flo2Rvt.Addin.Edit.Logic
                 }
                 if (s.SheetId != 0 && string.IsNullOrEmpty(s.SheetNumber)) found.Add(at + " names a sheet with no number");
                 if (s.SheetId != 0 && !numbers.Add(s.SheetNumber)) found.Add("sheet number " + s.SheetNumber + " is given twice");
-                if (s.Placed && (s.ViewportId == 0 || s.SheetId == 0)) found.Add(at + " reads placed but names no viewport" + (s.SheetId == 0 ? " or sheet" : ""));
+                // A room schedule or a cover's index is placed by its schedule instances, not a viewport (RoomProblems).
+                if (!PlacedAsSchedule(s.Kind) && s.Placed && (s.ViewportId == 0 || s.SheetId == 0)) found.Add(at + " reads placed but names no viewport" + (s.SheetId == 0 ? " or sheet" : ""));
                 if (s.Fits && !s.Placed) found.Add(at + " reads that it fits, though it is not placed");
                 if (s.Fits && s.Placed && r.SheetArea != null && !Inside(s.ViewportMinFt, s.ViewportMaxFt, r.SheetArea)) found.Add(at + " reads that it fits, though its viewport overruns the sheet's usable area");
                 if (s.Kind == DrawingSetViewValues.Elevations && s.ViewWas == Made)
@@ -941,7 +1039,10 @@ namespace Flo2Rvt.Addin.Edit.Logic
                         if (behind != null) found.Add(at + " reads as asked, though " + behind);
                     }
                 }
+                // Since add-in 0.16.0: a plan's rooms tagged, and the room schedule.
+                RoomProblems(r, s, at, found);
             }
+            SetRoomProblems(r, found);
             int made = r.Sheets.Count(s => s.ViewWas == Made);
             if (r.ViewsMade != made) found.Add("views_made counts " + r.ViewsMade + ", but " + made + " read made");
             if (r.SheetsMade != r.Sheets.Count(s => s.SheetId != 0)) found.Add("sheets_made counts " + r.SheetsMade + ", but " + r.Sheets.Count(s => s.SheetId != 0) + " name a sheet");

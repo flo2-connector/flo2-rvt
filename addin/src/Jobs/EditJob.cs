@@ -143,7 +143,7 @@ namespace Flo2Rvt.Addin.Jobs
             {
                 Change change = list.List.Changes[i];
                 context.Heartbeat.Step("change " + (i + 1) + " of " + list.List.Changes.Count + ": " + change.Kind);
-                ChangeReport r = Apply(context, index, adding, change, i);
+                ChangeReport r = Apply(context, index, adding, change, i, list.List.Version);
                 report.Changes.Add(r);
                 report.Totals.Count(r);
                 // A level move tried again (groups_in_the_way "ungroup") rolled back each try before the last.
@@ -263,7 +263,8 @@ namespace Flo2Rvt.Addin.Jobs
 
         // ─────────────────────────────────────────────────────────── the change kinds
 
-        private static ChangeReport Apply(JobContext context, ElementIndex index, Adding adding, Change change, int i)
+        /// <summary>One change, by its kind; version is the list's, which since add-in 0.16.0 says what a drawing set holds.</summary>
+        private static ChangeReport Apply(JobContext context, ElementIndex index, Adding adding, Change change, int i, long version)
         {
             var r = new ChangeReport { Index = i, Id = change.Id, Kind = change.Kind };
             try
@@ -288,7 +289,7 @@ namespace Flo2Rvt.Addin.Jobs
                     case ChangeKinds.AddWallFooting: AddWallFooting(context, index, adding, change, r); break;
                     case ChangeKinds.AddPile: AddPile(context, index, adding, change, r); break;
                     case ChangeKinds.AddLevel: AddLevel(context, index, change, r); break;
-                    case ChangeKinds.AddDrawingSet: AddDrawingSet(context, index, change, r); break;
+                    case ChangeKinds.AddDrawingSet: AddDrawingSet(context, index, change, r, version); break;
                     default:
                         r.Status = ChangeStatus.NotApplied;
                         r.Why = "the kind is not in this add-in's vocabulary";

@@ -68,6 +68,16 @@
 // elevation the view plane its crop and depth were set from (`view_plane_ft`), its crop region read back
 // (`crop_loop_ft`) and Revit's readings of it as made, cropped, far clipped and placed (`readings`); the far
 // clip and crop read back are Revit's readings and no longer judged. A report of 0.15.1 reads as it did.
+// Add-in 0.16.0 writes version 2 still, with fields added and none changed: a drawing set of a change list of
+// version 8 says its plans tag their rooms (`tags_rooms`) and which room tag type they take
+// (`room_tag_type`, `room_tag_type_was`); each of its plans how many rooms are placed on its level
+// (`rooms_on_level`), how many it tagged (`rooms_tagged`) and why when fewer (`rooms_why`); and its room
+// schedule (kind `room_schedule`, on sheet A-601) the fields it holds (`schedule_fields`), how many segments it
+// is placed in (`segments`), each segment's schedule instance and box on its sheet (`schedule_segments`), and
+// how many rooms it lists (`rooms_scheduled`); and its cover (kind `cover`, on sheet A-001: its sheet index,
+// a sheet list placed as the room schedule is) how many sheets its index lists (`sheets_listed`) and whether its
+// note was placed (`note_placed`, `note_why`, `note_id`, `note_text`, `note_min_ft`, `note_max_ft`). A report of
+// 0.15.2, or of a version-7 list, says none of it, and reads as it did.
 
 using System.Collections.Generic;
 using System.Linq;
@@ -1130,7 +1140,7 @@ namespace Flo2Rvt.Addin.Edit
     [DataContract]
     public sealed class DrawingSetReport
     {
-        /// <summary>The kinds of view asked (plans, elevations, sections, isometric), in the set's own order: every kind when the change named none.</summary>
+        /// <summary>The kinds of view asked (plans, elevations, sections, isometric, and since add-in 0.16.0 room_schedule and cover), in the set's own order: every kind the list's version reads when the change named none.</summary>
         [DataMember(Name = "views_asked", Order = 0)] public List<string> ViewsAsked = new List<string>();
         /// <summary>include (a level nothing stands on still gets its plan) or leave_out.</summary>
         [DataMember(Name = "empty_levels", Order = 1)] public string EmptyLevels;
@@ -1157,6 +1167,24 @@ namespace Flo2Rvt.Addin.Edit
         /// <summary>Plans of a level nothing stands on, left out on the list's empty_levels leave_out.</summary>
         [DataMember(Name = "left_out", Order = 14)] public int LeftOut;
         [DataMember(Name = "note", Order = 15, EmitDefaultValue = false)] public string Note;
+        /// <summary>Since add-in 0.16.0: true for a set of a change list of version 8 or later, whose plans tag their rooms (and which may hold a room schedule); absent for an older list's set, which tags none.</summary>
+        [DataMember(Name = "tags_rooms", Order = 16, EmitDefaultValue = false)] public bool TagsRooms;
+        /// <summary>Since add-in 0.16.0: the room tag type the plans' tags take (family, type and type id, as a title block's); absent when the model holds none, or the set tags no rooms.</summary>
+        [DataMember(Name = "room_tag_type", Order = 17, EmitDefaultValue = false)] public TitleBlockRef RoomTagType;
+        /// <summary>Since add-in 0.16.0: default (the model's default room tag type), first_held (the first it holds, by family then type, when it has no default of its own) or none (the model holds no room tag type: no plan tags a room, each saying why); absent when the set tags no rooms or asks for no plan.</summary>
+        [DataMember(Name = "room_tag_type_was", Order = 18, EmitDefaultValue = false)] public string RoomTagTypeWas;
+    }
+
+    /// <summary>Since add-in 0.16.0: one segment of a room schedule on its sheet: the schedule instance that shows it and its box there (its bounding box in the sheet, sheet feet).</summary>
+    [DataContract]
+    public sealed class ScheduleSegment
+    {
+        /// <summary>Which segment, from 0; 0 for a schedule not split, placed whole.</summary>
+        [DataMember(Name = "segment", Order = 0)] public int Segment;
+        /// <summary>The ScheduleSheetInstance that shows it.</summary>
+        [DataMember(Name = "instance_id", Order = 1)] public long InstanceId;
+        [DataMember(Name = "min_ft", Order = 2, EmitDefaultValue = false)] public List<double> MinFt;
+        [DataMember(Name = "max_ft", Order = 3, EmitDefaultValue = false)] public List<double> MaxFt;
     }
 
     [DataContract]
@@ -1197,7 +1225,7 @@ namespace Flo2Rvt.Addin.Edit
     [DataContract]
     public sealed class DrawingSheet
     {
-        /// <summary>plans, elevations, sections or isometric.</summary>
+        /// <summary>plans, elevations, sections or isometric, and since add-in 0.16.0 room_schedule and cover.</summary>
         [DataMember(Name = "kind", Order = 0)] public string Kind;
         /// <summary>A plan's level, as the model names it.</summary>
         [DataMember(Name = "level", Order = 1, EmitDefaultValue = false)] public string Level;
@@ -1249,7 +1277,7 @@ namespace Flo2Rvt.Addin.Edit
         [DataMember(Name = "placed", Order = 29)] public bool Placed;
         /// <summary>Its viewport lies within the sheet's usable area.</summary>
         [DataMember(Name = "fits", Order = 30)] public bool Fits;
-        /// <summary>Its viewport's box on the sheet (Viewport.GetBoxOutline, the label left out), sheet feet.</summary>
+        /// <summary>Its viewport's box on the sheet (Viewport.GetBoxOutline, the label left out), sheet feet; since add-in 0.16.0, for the room schedule the box of all its segments together (schedule_segments), and for the cover of its index's segments and its note, by which each fits as any view does.</summary>
         [DataMember(Name = "viewport_min_ft", Order = 31, EmitDefaultValue = false)] public List<double> ViewportMinFt;
         [DataMember(Name = "viewport_max_ft", Order = 32, EmitDefaultValue = false)] public List<double> ViewportMaxFt;
         /// <summary>Why it was not made, placed or fitted, or is not as asked; absent when it is.</summary>
@@ -1263,6 +1291,31 @@ namespace Flo2Rvt.Addin.Edit
         /// makes the view or only after the add-in sets it. Diagnostic: nothing is judged by them.
         /// </summary>
         [DataMember(Name = "readings", Order = 35, EmitDefaultValue = false)] public List<ViewReading> Readings;
+        /// <summary>Since add-in 0.16.0, a plan of a set that tags its rooms (change-list version 8): the rooms placed on its level (Revit placed them: each Location a point), which it tags; absent for a plan of an older list's set, and for one not made.</summary>
+        [DataMember(Name = "rooms_on_level", Order = 36, EmitDefaultValue = false)] public int? RoomsOnLevel;
+        /// <summary>Since add-in 0.16.0, a plan of a set that tags its rooms: the room tags made on it, one per room; never more than rooms_on_level.</summary>
+        [DataMember(Name = "rooms_tagged", Order = 37, EmitDefaultValue = false)] public int? RoomsTagged;
+        /// <summary>Since add-in 0.16.0, a plan that tags fewer rooms than are placed on its level: why (the model holds no room tag type; Revit would not tag some, its words); a plan that says it is not as asked.</summary>
+        [DataMember(Name = "rooms_why", Order = 38, EmitDefaultValue = false)] public string RoomsWhy;
+        /// <summary>Since add-in 0.16.0, the room schedule: the fields it holds, in order (Level, Number, Name, Area; one Revit does not offer is left out, and its why says so); the cover: its sheet index's (Sheet Number, Sheet Name).</summary>
+        [DataMember(Name = "schedule_fields", Order = 39, EmitDefaultValue = false)] public List<string> ScheduleFields;
+        /// <summary>Since add-in 0.16.0, the room schedule or the cover's sheet index placed: how many segments it stands in on its sheet, side by side; 1 when it is not split.</summary>
+        [DataMember(Name = "segments", Order = 40, EmitDefaultValue = false)] public int Segments;
+        /// <summary>Since add-in 0.16.0, the room schedule placed: each segment's schedule instance and its box on the sheet, from the left.</summary>
+        [DataMember(Name = "schedule_segments", Order = 41, EmitDefaultValue = false)] public List<ScheduleSegment> ScheduleSegments;
+        /// <summary>Since add-in 0.16.0, the room schedule: the Room elements it lists, as Revit's collector over it passes them once it is placed; absent when that could not be read, and its why says so.</summary>
+        [DataMember(Name = "rooms_scheduled", Order = 42, EmitDefaultValue = false)] public int? RoomsScheduled;
+        /// <summary>Since add-in 0.16.0, the cover: the sheets its index lists (every sheet the model holds), as Revit's collector over it passes them once it is placed; absent when that could not be read, and its why says so.</summary>
+        [DataMember(Name = "sheets_listed", Order = 43, EmitDefaultValue = false)] public int? SheetsListed;
+        /// <summary>Since add-in 0.16.0, the cover made: whether its note saying what the set is was placed on it; when not, note_why says why, and the cover is not as asked.</summary>
+        [DataMember(Name = "note_placed", Order = 44, EmitDefaultValue = false)] public bool? NotePlaced;
+        [DataMember(Name = "note_why", Order = 45, EmitDefaultValue = false)] public string NoteWhy;
+        /// <summary>Since add-in 0.16.0, the cover: its note, the TextNote placed, and its words (DrawingSets.CoverNote).</summary>
+        [DataMember(Name = "note_id", Order = 46, EmitDefaultValue = false)] public long NoteId;
+        [DataMember(Name = "note_text", Order = 47, EmitDefaultValue = false)] public string NoteText;
+        /// <summary>Since add-in 0.16.0, the cover: its note's box on the sheet (its bounding box in the sheet), sheet feet.</summary>
+        [DataMember(Name = "note_min_ft", Order = 48, EmitDefaultValue = false)] public List<double> NoteMinFt;
+        [DataMember(Name = "note_max_ft", Order = 49, EmitDefaultValue = false)] public List<double> NoteMaxFt;
     }
 
     /// <summary>
