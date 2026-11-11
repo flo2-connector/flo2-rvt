@@ -63,7 +63,7 @@ describe('flo2-rvt register', () => {
       assert.ok(daCalls.every((c) => c.auth === 'Bearer registration-token-for-tests-only'));
 
       const bundle = aps.calls.find((c) => c.path === '/da/us-east/v3/appbundles');
-      assert.deepEqual(bundle?.json, { id: 'Flo2RvtProbe', engine: 'Autodesk.Revit+2024', description: 'flo2-rvt probe, edit and new-model jobs for Revit 2024 (flo2-rvt add-in 0.16.0)' }, 'its description names the add-in version a check reads back');
+      assert.deepEqual(bundle?.json, { id: 'Flo2RvtProbe', engine: 'Autodesk.Revit+2024', description: 'flo2-rvt probe, edit and new-model jobs for Revit 2024 (flo2-rvt add-in 0.16.1)' }, 'its description names the add-in version a check reads back');
       const upload = aps.appBundleUploads[0];
       assert.equal(upload?.fields.at(-1), 'file', 'the file field comes last');
       assert.ok(upload?.fields.includes('policy') && upload.fields.includes('x-amz-signature'));
@@ -255,7 +255,7 @@ describe('flo2-rvt register', () => {
       ifc: ['put', 'model.ifc', false],
     });
     assert.ok(!('rvtFile' in body.parameters), 'no model goes in');
-    assert.match(body.description, /\(flo2-rvt add-in 0\.16\.0\)$/);
+    assert.match(body.description, /\(flo2-rvt add-in 0\.16\.1\)$/);
   });
 
   test('the Activity runs revitcoreconsole with the AppBundle on the 2024 engine and names its files', () => {

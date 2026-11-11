@@ -48,7 +48,14 @@
 //     why when fewer, and a plan of an older list's set says neither; the room schedule comes only of such a
 //     set, is placed by one schedule instance per segment, numbered from 0, fits as every view does (the box
 //     of its segments, and each segment, within the usable area), says how many rooms it lists or why not,
-//     and names no scale, crop, far clip or viewport of a graphic view.
+//     and names no scale, crop, far clip or viewport of a graphic view. Since add-in 0.16.1 (Logic/DrawingSets.RoomsShown.cs
+//     RoomsShownProblems, SetRoomsShownProblems), as the first live run of a version-8 set showed a plan's tags drawing
+//     nothing and its schedule listing no row, each passed: a plan's room_tags_shown is no more than its rooms_tagged
+//     (itself no more than its rooms_on_level) and agrees with the tags it names, and a plan that shows fewer than it
+//     made, or fewer rooms' tags than are on its level, says why; the room schedule's schedule_rows below its
+//     rooms_to_list says why; each fix of a view says what it became or why not, a category fix only of a plan; a
+//     view's room readings, fixes, tags and rows only where they belong, and none of a view not made or of an older
+//     list's set; the set's phase is one of the model's, and the rooms it leaves out stand in another.
 //
 // The lists are read as the report lists them: past ElementTally.Cap a set is truncated, and
 // only its listed elements are checked.

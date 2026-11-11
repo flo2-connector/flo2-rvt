@@ -118,6 +118,23 @@
 //      the ScheduleInstance is placed") so the boxes stand side by side from the usable area's top-left; read
 //      again, they say whether it fits. How many rooms it lists: FilteredElementCollector(document, its id),
 //      the Rooms category, once placed.
+//   5b. WHAT REVIT SHOWS OF THE ROOMS (since add-in 0.16.1; Logic/DrawingSets.RoomsShown.cs). The first live run of a
+//      version-8 set printed its room schedule with no row and its plans' 14 tags drawing nothing, while its report said
+//      every room tagged: rooms_tagged counted what NewRoomTag returned. So, read raw: the model's phases
+//      (Document.Phases, "in order from earliest phase to latest phase") and each placed room's phase (its ROOM_PHASE
+//      parameter's element id, else ROOM_PHASE_ID's, else Element.CreatedPhaseId: RoomPhase) and design option
+//      (Element.DesignOption, DesignOption.IsPrimary). Before any tag is made, each plan and the room schedule read as made
+//      (VIEW_PHASE, VIEW_PHASE_FILTER, View.ViewTemplateId; a plan's View.GetCategoryHidden of Rooms and Room Tags and its
+//      AreModelCategoriesHidden, AreAnnotationCategoriesHidden; the schedule's body rows, ViewSchedule.RefreshData then
+//      GetTableData().GetSectionData(SectionType.Body).NumberOfRows), then fixed, each in a part of its own: its Phase set
+//      to the phase the rooms the set tags stand in, or most of them do (Parameter.Set), and a plan's hidden Rooms or Room
+//      Tags shown (View.SetCategoryHidden(category, false)), unless a view template controls it (View.ViewTemplateId,
+//      GetTemplateParameterIds, GetNonControlledTemplateParameterIds: VIEW_PHASE, VIS_GRAPHICS_MODEL,
+//      VIS_GRAPHICS_ANNOTATION), and read again. Once everything is placed each plan is judged by its tags as Revit reads
+//      them back (SpatialElementTag.TagText, "The text displayed by the tag") and passes them in the plan
+//      (FilteredElementCollector(document, plan id), the Room Tags category), and reads how many of its rooms Revit passes
+//      in it (the Rooms category); the room schedule by the rows of its body whose Number cell (TableView.GetCellText)
+//      names a placed room's number, beside the placed rooms in its phase and every room whose tag a plan shows.
 //   6. THE COVER (since add-in 0.16.0, change-list version 8; Logic/DrawingSets.Cover.cs), made last of the set:
 //      its sheet index, ViewSchedule.CreateSheetList(document) ("A sheet list is a schedule of sheets in the
 //      project"), its fields found by their parameters (SHEET_NUMBER, SHEET_NAME) and sorted by number as the room
@@ -261,6 +278,22 @@ namespace Flo2Rvt.Addin.Jobs
             string cannotTag = null;
             bool plans = set.ViewsAsked.Contains(DrawingSetViewValues.Plans);
             if (set.TagsRooms && (plans || set.ViewsAsked.Contains(DrawingSetViewValues.RoomSchedule))) rooms = Rooms(doc);
+            // Since add-in 0.16.1: the placed rooms, their phases and design options, and the model's phases, as Revit holds them: raw readings, once per set.
+            if (rooms != null)
+            {
+                set.Rooms = DrawingSets.RoomReadings(rooms);
+                try
+                {
+                    set.Phases = Phases(doc);
+                    set.LastPhase = set.Phases.LastOrDefault();
+                }
+                catch (Exception ex)
+                {
+                    set.Phases = null;
+                    set.LastPhase = null;
+                    set.Note = Join(set.Note, "the model's phases could not be read (" + ex.GetType().Name + ": " + ex.Message + ")");
+                }
+            }
             if (set.TagsRooms && plans)
             {
                 try
@@ -357,6 +390,30 @@ namespace Flo2Rvt.Addin.Jobs
                     }
                     made.Add(new KeyValuePair<DrawingSheet, View>(s, view));
                 }
+                // Since add-in 0.16.1: before any tag is made or room counted, each plan and the room schedule take the phase the
+                // placed rooms the set tags stand in (or most of them do), and a plan shows the Rooms and Room Tags it hides.
+                if (set.TagsRooms && rooms != null)
+                {
+                    string phaseWas;
+                    List<long> leftOut;
+                    List<SetRoom> voters = DrawingSets.PhaseVoters(rooms, made.Where(x => x.Key.Kind == DrawingSetViewValues.Plans).Select(x => x.Key.LevelId));
+                    long phase = DrawingSets.ChoosePhase(voters, set.Phases != null ? set.Phases.Select(p => p.Id).ToList() : null, out phaseWas, out leftOut);
+                    set.RoomsPhaseWas = phaseWas;
+                    set.RoomsPhase = phase > 0 ? Named(d, new ElementId(phase)) : null;
+                    set.RoomsLeftOut = leftOut.Count > 0 ? leftOut : null;
+                    foreach (KeyValuePair<DrawingSheet, View> m in made.Where(x => x.Key.Kind == DrawingSetViewValues.Plans || x.Key.Kind == DrawingSetViewValues.RoomSchedule))
+                    {
+                        context.Heartbeat.Step("drawing set: the phase and categories of " + m.Key.ViewName);
+                        try
+                        {
+                            ShowRooms(d, m.Key, m.Value, set.RoomsPhase);
+                        }
+                        catch (Exception ex)
+                        {
+                            m.Key.Note = Join(m.Key.Note, "its phase and categories could not be read or set to show its rooms (" + ex.GetType().Name + ": " + ex.Message + ")");
+                        }
+                    }
+                }
                 // Since add-in 0.16.0: each plan of a version-8 set tags the rooms placed on its level.
                 if (set.TagsRooms)
                 {
@@ -442,7 +499,34 @@ namespace Flo2Rvt.Addin.Jobs
                     s.Scale = m.Value.Scale;
                     s.ScaleText = DrawingSets.ScaleText(s.Scale, metric);
                 }
-                // Since add-in 0.16.0: how many rooms the schedule lists, once it is placed.
+                // Since add-in 0.16.1: what Revit shows of each plan's rooms and tags, once everything is placed, by which it is judged.
+                List<KeyValuePair<DrawingSheet, View>> tagging = made.Where(x => set.TagsRooms && x.Key.Kind == DrawingSetViewValues.Plans && x.Key.RoomTags != null).ToList();
+                if (tagging.Count > 0)
+                {
+                    string regenerated = null;
+                    try
+                    {
+                        d.Regenerate();
+                    }
+                    catch (Exception ex)
+                    {
+                        regenerated = "Revit would not regenerate before its tags were read (" + ex.GetType().Name + ": " + ex.Message + ")";
+                    }
+                    foreach (KeyValuePair<DrawingSheet, View> m in tagging)
+                    {
+                        context.Heartbeat.Step("drawing set: what Revit shows of the rooms of " + m.Key.ViewName);
+                        try
+                        {
+                            ReadTagsShown(d, m.Key, m.Value, rooms, set, regenerated);
+                        }
+                        catch (Exception ex)
+                        {
+                            m.Key.RoomTagsShown = null;
+                            m.Key.Why = Join(m.Key.Why, "what Revit shows of its room tags could not be read back (" + ex.GetType().Name + ": " + ex.Message + ")");
+                        }
+                    }
+                }
+                // Since add-in 0.16.0: how many rooms the schedule lists, once it is placed; since 0.16.1 judged by its rows.
                 foreach (KeyValuePair<DrawingSheet, View> m in made.Where(x => x.Key.Kind == DrawingSetViewValues.RoomSchedule))
                 {
                     string unread = null;
@@ -460,6 +544,16 @@ namespace Flo2Rvt.Addin.Jobs
                     if (scheduledWhy != null) m.Key.Why = Join(m.Key.Why, scheduledWhy + (unread != null ? " (" + unread + ")" : ""));
                     string held = DrawingSets.RoomsScheduledNote(rooms != null ? rooms.Count : -1);
                     if (held != null) m.Key.Note = Join(m.Key.Note, held);
+                    if (!set.TagsRooms) continue;
+                    try
+                    {
+                        ReadScheduleRows(m.Key, (ViewSchedule)m.Value, set);
+                    }
+                    catch (Exception ex)
+                    {
+                        m.Key.ScheduleRows = null;
+                        m.Key.Why = Join(m.Key.Why, "how many rooms its rows list could not be read back (" + ex.GetType().Name + ": " + ex.Message + ")");
+                    }
                 }
                 // Since add-in 0.16.0: how many sheets the cover's index lists, once every sheet is made.
                 foreach (KeyValuePair<DrawingSheet, View> m in made.Where(x => x.Key.Kind == DrawingSetViewValues.Cover))
@@ -511,7 +605,7 @@ namespace Flo2Rvt.Addin.Jobs
             var added = run.Added.Where(id => !own.Contains(id)).ToList();
             r.AddedByRevit = added.Count > 0 ? ReportedElements.From(Tally(doc, index, added)) : null;
             DrawingSets.Count(set);
-            set.Note = "each sheet is printed with the model's other printable sheets into the job's sheets.pdf, in sheet-number order";
+            set.Note = Join(set.Note, "each sheet is printed with the model's other printable sheets into the job's sheets.pdf, in sheet-number order");
             r.Status = DrawingSets.Judge(set, out why);
             r.Why = why;
         }
@@ -665,7 +759,10 @@ namespace Flo2Rvt.Addin.Jobs
         /// <summary>
         /// Since add-in 0.16.0: every room the model holds, as a set reads it (Logic/DrawingSets.Rooms.cs SetRoom):
         /// its id, number and level, and its point when Revit placed it (SpatialElement.Location, "the location of
-        /// the room within the level", a LocationPoint; an unplaced room has none).
+        /// the room within the level", a LocationPoint; an unplaced room has none). Since add-in 0.16.1 also its name
+        /// (ModelTypes.RoomName, its Name parameter) and level's name, its phase (RoomPhase) and its design option
+        /// (Element.DesignOption, "the design option to which the element belongs", null for the main model;
+        /// DesignOption.IsPrimary), each apart, so one Revit will not give leaves the others, its error saying which.
         /// </summary>
         private static List<SetRoom> Rooms(Document doc)
         {
@@ -674,7 +771,7 @@ namespace Flo2Rvt.Addin.Jobs
             {
                 var at = room.Location as LocationPoint;
                 XYZ p = at != null ? at.Point : null;
-                rooms.Add(new SetRoom
+                var r = new SetRoom
                 {
                     Id = room.Id.Value,
                     Number = room.Number,
@@ -682,9 +779,323 @@ namespace Flo2Rvt.Addin.Jobs
                     Placed = p != null,
                     X = p != null ? p.X : 0,
                     Y = p != null ? p.Y : 0,
+                };
+                var failed = new List<string>();
+                Try(failed, "its name and level", () =>
+                {
+                    r.Name = ModelTypes.RoomName(room);
+                    r.Level = room.Level != null ? room.Level.Name : null;
                 });
+                Try(failed, "its phase", () => RoomPhase(doc, room, r));
+                Try(failed, "its design option", () =>
+                {
+                    DesignOption option = room.DesignOption;
+                    if (option == null) return;
+                    r.OptionId = option.Id.Value;
+                    r.Option = option.Name;
+                    r.OptionPrimary = option.IsPrimary;
+                });
+                if (failed.Count > 0) r.Error = string.Join("; ", failed);
+                rooms.Add(r);
             }
             return rooms;
+        }
+
+        /// <summary>
+        /// Since add-in 0.16.1: the phase a room stands in. Revit 2024's RevitAPI.xml gives a room no phase property of its
+        /// own: it names the room's parameters ROOM_PHASE "Phase" and ROOM_PHASE_ID "Phase Id" by their labels, and
+        /// Creation.Document.NewRoom(Phase) "The phase in which the room is to exist"; Element.CreatedPhaseId is every
+        /// element's "Id of a Phase at which the Element was created". So its Phase parameter's element id, else its Phase
+        /// Id's, else its CreatedPhaseId, whichever first names a phase, and which it was (PhaseFrom); the name is the
+        /// phase element's own, else the Phase parameter's text. None that names one leaves it unread.
+        /// </summary>
+        private static void RoomPhase(Document doc, Autodesk.Revit.DB.Architecture.Room room, SetRoom r)
+        {
+            ElementId id = null;
+            string from = null;
+            Parameter phase = room.get_Parameter(BuiltInParameter.ROOM_PHASE);
+            if (phase != null && phase.HasValue && phase.StorageType == StorageType.ElementId)
+            {
+                id = phase.AsElementId();
+                from = DrawingSets.FromRoomPhase;
+            }
+            if (!Valid(id))
+            {
+                Parameter phaseId = room.get_Parameter(BuiltInParameter.ROOM_PHASE_ID);
+                if (phaseId != null && phaseId.HasValue)
+                {
+                    if (phaseId.StorageType == StorageType.ElementId) id = phaseId.AsElementId();
+                    else if (phaseId.StorageType == StorageType.Integer) id = new ElementId((long)phaseId.AsInteger());
+                    from = DrawingSets.FromRoomPhaseId;
+                }
+            }
+            if (!Valid(id))
+            {
+                id = room.CreatedPhaseId;
+                from = DrawingSets.FromCreatedPhase;
+            }
+            if (!Valid(id)) return;
+            Element named = doc.GetElement(id);
+            r.PhaseId = id.Value;
+            r.PhaseFrom = from;
+            r.Phase = named != null ? named.Name : phase != null ? phase.AsValueString() : null;
+        }
+
+        /// <summary>Since add-in 0.16.1: the model's phases, earliest first, as Document.Phases gives them ("returned in order from earliest phase to latest phase").</summary>
+        private static List<NamedRef> Phases(Document doc)
+        {
+            var list = new List<NamedRef>();
+            PhaseArray phases = doc.Phases;
+            if (phases == null) return list;
+            for (int i = 0; i < phases.Size; i++)
+            {
+                Phase p = phases.get_Item(i);
+                if (p != null) list.Add(new NamedRef { Id = p.Id.Value, Name = p.Name });
+            }
+            return list;
+        }
+
+        private static bool Valid(ElementId id)
+        {
+            return id != null && id != ElementId.InvalidElementId;
+        }
+
+        /// <summary>Since add-in 0.16.1: an element by its id and name, as Revit holds it; null for none (an invalid id).</summary>
+        private static NamedRef Named(Document d, ElementId id)
+        {
+            if (!Valid(id)) return null;
+            Element e = d.GetElement(id);
+            return new NamedRef { Id = id.Value, Name = e != null ? e.Name : null };
+        }
+
+        /// <summary>Since add-in 0.16.1: the element an element's parameter names (its Phase, its Phase Filter); null where it holds none.</summary>
+        private static ElementId ParameterElement(Element e, BuiltInParameter parameter)
+        {
+            Parameter p = e.get_Parameter(parameter);
+            return p != null && p.HasValue && p.StorageType == StorageType.ElementId ? p.AsElementId() : null;
+        }
+
+        /// <summary>
+        /// Since add-in 0.16.1: the name of the view template that controls this parameter of the view; null when none does.
+        /// View.ViewTemplateId is "The id of the template view that controls this view's parameters", and "Parameters
+        /// controlled by the template cannot be changed directly in this view"; on the template, GetTemplateParameterIds
+        /// gives those it "may" control, GetNonControlledTemplateParameterIds those "not marked as included".
+        /// </summary>
+        private static string TemplateControlling(Document d, View view, BuiltInParameter parameter)
+        {
+            ElementId id = view.ViewTemplateId;
+            if (!Valid(id)) return null;
+            var template = d.GetElement(id) as View;
+            if (template == null) return null;
+            long p = new ElementId(parameter).Value;
+            bool may = template.GetTemplateParameterIds().Any(x => x.Value == p);
+            bool left = template.GetNonControlledTemplateParameterIds().Any(x => x.Value == p);
+            return may && !left ? (template.Name ?? "") : null;
+        }
+
+        /// <summary>
+        /// Since add-in 0.16.1: Revit's reading of a plan or the room schedule at a stage (made, fixed), once regenerated, each
+        /// part apart: its Phase (VIEW_PHASE) and Phase Filter (VIEW_PHASE_FILTER), its view template (View.ViewTemplateId);
+        /// a plan's Rooms and Room Tags categories hidden or not (View.GetCategoryHidden, which "checks only if the category
+        /// is set visible or invisible individually"), so beside them its model and annotation categories as classes
+        /// (View.AreModelCategoriesHidden, AreAnnotationCategoriesHidden); the schedule's body rows (ScheduleBody).
+        /// </summary>
+        private static RoomsViewReading RoomsReading(Document d, View view, string at, bool plan)
+        {
+            var r = new RoomsViewReading { At = at };
+            var failed = new List<string>();
+            try
+            {
+                d.Regenerate();
+            }
+            catch (Exception ex)
+            {
+                failed.Add("Revit would not regenerate before it was read (" + ex.GetType().Name + ": " + ex.Message + ")");
+            }
+            Try(failed, "its phase", () => r.Phase = Named(d, ParameterElement(view, BuiltInParameter.VIEW_PHASE)));
+            Try(failed, "its phase filter", () => r.PhaseFilter = Named(d, ParameterElement(view, BuiltInParameter.VIEW_PHASE_FILTER)));
+            Try(failed, "its view template", () => r.ViewTemplate = Named(d, view.ViewTemplateId));
+            if (plan)
+            {
+                Try(failed, "whether it hides the Rooms category", () => r.RoomsHidden = view.GetCategoryHidden(new ElementId(BuiltInCategory.OST_Rooms)));
+                Try(failed, "whether it hides the Room Tags category", () => r.RoomTagsHidden = view.GetCategoryHidden(new ElementId(BuiltInCategory.OST_RoomTags)));
+                Try(failed, "whether it hides the model and annotation categories", () =>
+                {
+                    r.ModelCategoriesHidden = view.AreModelCategoriesHidden;
+                    r.AnnotationCategoriesHidden = view.AreAnnotationCategoriesHidden;
+                });
+            }
+            var schedule = view as ViewSchedule;
+            if (schedule != null) Try(failed, "its body rows", () => r.BodyRows = ScheduleBody(schedule).NumberOfRows);
+            if (failed.Count > 0) r.Error = string.Join("; ", failed);
+            return r;
+        }
+
+        /// <summary>
+        /// Since add-in 0.16.1: a schedule's body section, its data refreshed first: ViewSchedule.RefreshData, since "the body
+        /// section of a schedule is not updated when the ViewSchedule is closed", as every view is in Design Automation;
+        /// GetTableData().GetSectionData(SectionType.Body). Its column headers stand in it too ("column header in body
+        /// section"), and its rows may start at 0 or 1 (FirstRowNumber, LastRowNumber).
+        /// </summary>
+        private static TableSectionData ScheduleBody(ViewSchedule schedule)
+        {
+            schedule.RefreshData();
+            TableData table = schedule.GetTableData();
+            TableSectionData body = table != null ? table.GetSectionData(SectionType.Body) : null;
+            if (body == null) throw new ChangeRefused("Revit gives it no body section (GetTableData().GetSectionData(SectionType.Body))");
+            return body;
+        }
+
+        /// <summary>
+        /// Since add-in 0.16.1: a plan or the room schedule made to show the set's rooms, before any tag is made or room
+        /// counted, each change in a part of its own, and read as made and once fixed (RoomsReading). Its phase set to the
+        /// set's (VIEW_PHASE, Parameter.Set) where it stands in another; a plan's Rooms or Room Tags category shown
+        /// (View.SetCategoryHidden(category, false)) where it hides it. One a view template controls (TemplateControlling:
+        /// VIEW_PHASE, or VIS_GRAPHICS_MODEL "V/G Overrides Model" for Rooms, VIS_GRAPHICS_ANNOTATION "V/G Overrides
+        /// Annotation" for Room Tags) is left as it is, saying so; one Revit refuses says so in its words. Design options are
+        /// only read.
+        /// </summary>
+        private static void ShowRooms(Document d, DrawingSheet s, View view, NamedRef phase)
+        {
+            bool plan = s.Kind == DrawingSetViewValues.Plans;
+            RoomsViewReading made = RoomsReading(d, view, DrawingSets.AtMade, plan);
+            var fixes = new List<RoomsFix>();
+            if (phase != null && (made.Phase == null || made.Phase.Id != phase.Id))
+            {
+                string name = phase.Name ?? phase.Id.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                var fix = new RoomsFix { What = DrawingSets.FixPhase, Was = made.Phase != null ? made.Phase.Name : null };
+                string template = TemplateControlling(d, view, BuiltInParameter.VIEW_PHASE);
+                if (template != null) fix.Why = DrawingSets.TemplateWhy(template, "its phase");
+                else
+                {
+                    var to = new ElementId(phase.Id);
+                    string failed = ChangeRunner.Part(d, () =>
+                    {
+                        Parameter p = view.get_Parameter(BuiltInParameter.VIEW_PHASE);
+                        if (p == null || p.IsReadOnly || p.StorageType != StorageType.ElementId) throw new ChangeRefused("Revit holds no Phase on it that it lets be set");
+                        if (!p.Set(to)) throw new ChangeRefused("Revit would not take the phase");
+                    });
+                    if (failed != null) fix.Why = "Revit would not set its phase to \"" + name + "\" (" + failed + ")";
+                    else fix.Became = name;
+                }
+                fixes.Add(fix);
+            }
+            if (plan)
+            {
+                Unhide(d, view, BuiltInCategory.OST_Rooms, made.RoomsHidden, DrawingSets.FixRoomsCategory, BuiltInParameter.VIS_GRAPHICS_MODEL, "its Rooms category", fixes);
+                Unhide(d, view, BuiltInCategory.OST_RoomTags, made.RoomTagsHidden, DrawingSets.FixRoomTagsCategory, BuiltInParameter.VIS_GRAPHICS_ANNOTATION, "its Room Tags category", fixes);
+            }
+            s.RoomFixes = fixes.Count > 0 ? fixes : null;
+            s.RoomReadings = new List<RoomsViewReading> { made, RoomsReading(d, view, DrawingSets.AtFixed, plan) };
+        }
+
+        /// <summary>Since add-in 0.16.1: a category a plan hides, shown (View.SetCategoryHidden: "True to make elements of this category invisible, false to make them visible"), in a part of its own, unless a view template controls the plan's graphics of it.</summary>
+        private static void Unhide(Document d, View view, BuiltInCategory category, bool? hidden, string what, BuiltInParameter graphics, string named, List<RoomsFix> fixes)
+        {
+            if (hidden != true) return;
+            var fix = new RoomsFix { What = what, Was = DrawingSets.CategoryHidden };
+            string template = TemplateControlling(d, view, graphics);
+            if (template != null) fix.Why = DrawingSets.TemplateWhy(template, named);
+            else
+            {
+                var id = new ElementId(category);
+                string failed = ChangeRunner.Part(d, () => view.SetCategoryHidden(id, false));
+                if (failed != null) fix.Why = "Revit would not show " + named + " in it (" + failed + ")";
+                else fix.Became = DrawingSets.CategoryShown;
+            }
+            fixes.Add(fix);
+        }
+
+        /// <summary>
+        /// Since add-in 0.16.1: a plan judged by what Revit shows of its rooms, once everything is placed and Revit has
+        /// regenerated (regenerated says why not): how many of the rooms placed on its level Revit passes in it
+        /// (FilteredElementCollector(document, plan id), which "will search and filter the visible elements in a view", the
+        /// Rooms category); for each tag it made, its text as Revit reads it back (SpatialElementTag.TagText, "The text
+        /// displayed by the tag"; RoomTag derives from it) and whether Revit passes it in the plan (the same collector, the
+        /// Room Tags category); room_tags_shown, those that read text and are passed (DrawingSets.TagsShown); and why when
+        /// fewer than it made (TagsShownWhy), with what its readings show (PlanRoomsHint).
+        /// </summary>
+        private static void ReadTagsShown(Document d, DrawingSheet s, View plan, List<SetRoom> rooms, DrawingSetReport set, string regenerated)
+        {
+            var onLevel = new HashSet<long>(DrawingSets.ToTag(rooms, s.LevelId).Select(x => x.Id));
+            var failed = new List<string>();
+            if (regenerated != null) failed.Add(regenerated);
+            Try(failed, "how many of its rooms Revit passes in it", () => s.RoomsShown = new FilteredElementCollector(d, plan.Id).OfCategory(BuiltInCategory.OST_Rooms).WhereElementIsNotElementType().Count(e => onLevel.Contains(e.Id.Value)));
+            HashSet<long> passed = null;
+            Try(failed, "which of its room tags Revit passes in it", () => passed = new HashSet<long>(new FilteredElementCollector(d, plan.Id).OfCategory(BuiltInCategory.OST_RoomTags).WhereElementIsNotElementType().Select(e => e.Id.Value)));
+            foreach (RoomTagReading t in s.RoomTags)
+            {
+                try
+                {
+                    var tag = d.GetElement(new ElementId(t.TagId)) as Autodesk.Revit.DB.Architecture.RoomTag;
+                    if (tag == null) t.Error = "Revit holds no room tag of this id";
+                    else t.Text = tag.TagText ?? "";
+                }
+                catch (Exception ex)
+                {
+                    t.Error = "its text could not be read (" + ex.GetType().Name + ": " + ex.Message + ")";
+                }
+                t.InView = passed != null ? passed.Contains(t.TagId) : (bool?)null;
+            }
+            s.RoomTagsShown = DrawingSets.TagsShown(s.RoomTags);
+            RoomsViewReading last = s.RoomReadings != null ? s.RoomReadings.LastOrDefault() : null;
+            IEnumerable<SetRoomReading> itsRooms = set.Rooms != null ? set.Rooms.Where(x => x.LevelId == s.LevelId) : null;
+            string why = DrawingSets.TagsShownWhy(s.Level, s.RoomsOnLevel ?? 0, s.RoomsTagged ?? 0, s.RoomTagsShown, DrawingSets.PlanRoomsHint(last, itsRooms, s.RoomsShown));
+            if (why != null) s.Why = Join(s.Why, why + (!s.RoomTagsShown.HasValue && failed.Count > 0 ? " (" + string.Join("; ", failed) + ")" : ""));
+            else if (failed.Count > 0) s.Note = Join(s.Note, string.Join("; ", failed));
+        }
+
+        /// <summary>
+        /// Since add-in 0.16.1: the room schedule judged by its rows, once it is placed: the rows of its body (ScheduleBody,
+        /// refreshed) whose Number cell (TableView.GetCellText, the column of its Number field among those it shows) names a
+        /// placed room's number (DrawingSets.RoomRows), beside the rooms it should list (RoomsToList: the placed rooms in its
+        /// phase as last read, and every room whose tag a plan shows); why when fewer (ScheduleRowsWhy), with what its
+        /// readings show (ScheduleRoomsHint).
+        /// </summary>
+        private static void ReadScheduleRows(DrawingSheet s, ViewSchedule schedule, DrawingSetReport set)
+        {
+            string unread = null;
+            try
+            {
+                s.ScheduleRows = ScheduleRows(schedule, (set.Rooms ?? new List<SetRoomReading>()).Select(x => x.Number));
+            }
+            catch (Exception ex)
+            {
+                s.ScheduleRows = null;
+                unread = ex is ChangeRefused ? ex.Message : ex.GetType().Name + ": " + ex.Message;
+            }
+            RoomsViewReading last = s.RoomReadings != null ? s.RoomReadings.LastOrDefault() : null;
+            int toList = DrawingSets.RoomsToList(set.Rooms, last != null && last.Phase != null ? last.Phase.Id : 0, DrawingSets.ShownOnPlans(set.Sheets));
+            s.RoomsToList = toList;
+            string why = DrawingSets.ScheduleRowsWhy(s.ScheduleRows, toList, DrawingSets.ScheduleRoomsHint(last, set.Rooms));
+            if (why != null) s.Why = Join(s.Why, why + (unread != null ? " (" + unread + ")" : ""));
+            else if (unread != null) s.Note = Join(s.Note, "its rows could not be read back (" + unread + ")");
+        }
+
+        /// <summary>Since add-in 0.16.1: how many rows of a room schedule's body name a placed room's number (DrawingSets.RoomRows); throws, saying why, when it holds no Number field to read them by.</summary>
+        private static int ScheduleRows(ViewSchedule schedule, IEnumerable<string> numbers)
+        {
+            TableSectionData body = ScheduleBody(schedule);
+            int? column = NumberColumn(schedule.Definition);
+            if (!column.HasValue) throw new ChangeRefused("it shows no Number field to read its rooms by");
+            var cells = new List<string>();
+            for (int row = body.FirstRowNumber; row <= body.LastRowNumber; row++) cells.Add(schedule.GetCellText(SectionType.Body, row, body.FirstColumnNumber + column.Value));
+            return DrawingSets.RoomRows(cells, numbers);
+        }
+
+        /// <summary>Since add-in 0.16.1: the column of a room schedule's Number field (ROOM_NUMBER) among the fields it shows, in order (ScheduleDefinition.GetFieldOrder, a hidden field "not displayed in the schedule"), from 0; null when it shows none.</summary>
+        private static int? NumberColumn(ScheduleDefinition definition)
+        {
+            var number = new ElementId(BuiltInParameter.ROOM_NUMBER);
+            int shown = 0;
+            foreach (ScheduleFieldId id in definition.GetFieldOrder())
+            {
+                ScheduleField field = definition.GetField(id);
+                if (field.IsHidden) continue;
+                if (number.Equals(field.ParameterId)) return shown;
+                shown++;
+            }
+            return null;
         }
 
         /// <summary>
@@ -693,13 +1104,16 @@ namespace Flo2Rvt.Addin.Jobs
         /// the room's point, of the type chosen (NewRoomTag takes the model's default; the first held is set by
         /// ChangeTypeId where it is not that). One Revit refuses, or makes none of, is counted out and the others go
         /// on; the plan says how many are on its level, how many it tagged, and why when fewer (DrawingSets.RoomsWhy).
-        /// Cannot is why none can be tagged (no room tag type), so none is tried.
+        /// Cannot is why none can be tagged (no room tag type), so none is tried. Since add-in 0.16.1 each tag made is
+        /// kept by its id and its room's (room_tags), so what Revit shows of it is read once everything is placed
+        /// (ReadTagsShown): rooms_tagged counts what NewRoomTag returned, never what shows.
         /// </summary>
         private static void TagRooms(Document d, DrawingSheet s, View plan, List<SetRoom> rooms, HeldType type, string cannot, HashSet<long> own)
         {
             List<SetRoom> onLevel = DrawingSets.ToTag(rooms, s.LevelId);
             int tagged = 0;
             string refused = null;
+            var made = new List<RoomTagReading>();
             if (cannot == null && type != null)
             {
                 foreach (SetRoom room in onLevel)
@@ -719,10 +1133,12 @@ namespace Flo2Rvt.Addin.Jobs
                     }
                     tagged++;
                     own.Add(tagId);
+                    made.Add(new RoomTagReading { TagId = tagId, RoomId = room.Id });
                 }
             }
             s.RoomsOnLevel = onLevel.Count;
             s.RoomsTagged = tagged;
+            s.RoomTags = made;
             s.RoomsWhy = DrawingSets.RoomsWhy(s.Level, onLevel.Count, tagged, cannot ?? (type == null ? DrawingSets.NoTagTypeWhy : null), refused);
         }
 
