@@ -1,7 +1,7 @@
 {
-  "_note": "A made-up report of add-in 0.15.2 (report version 2, fields added), shaped as flo2's own fixtures of a list and its report, for change_list, a version-7 list on a made-up model (no person's, no building's): one add_drawing_set that says nothing, so every view is made. The model holds three levels (Level 1, Level 2, and Roof, which nothing stands on and still gets its plan, as empty_levels include says), one title block type (E1 30 x 42 Horizontal, a 42 x 30 in sheet), and a building 60 x 40 ft in plan, 24 ft high, of 14 elements, in the model's internal axes. Ten views, each on a sheet of its own: three floor plans (A-101 to A-103, lowest level first), the four elevations (A-201 to A-204: north, east, south, west, each named by the face it shows, looking at it from outside), two sections through the middle (A-301 east-west, looking north; A-302 north-south, looking east) and a 3D view (A-401). Each viewport sits at the middle of the sheet's usable area (the title block's box inset by 4% of its shorter side, its right 18% kept for the title strip) at 1/4\" = 1'-0\", the largest standard scale at which it fits there. The job's sheets.pdf holds the ten sheets. Since add-in 0.15.2 each elevation and section is judged by what Revit says it shows: how many of the building's 14 elements Revit passes in it (building_elements_seen). Its far clip and crop box as Revit reads them back once everything is set (far_clip_active, far_clip_ft, crop_min_ft and crop_max_ft in model terms, origin_ft) are raw readings and not judged: the south elevation's Far Clip Offset reads 46 ft beside the 54 ft set, as the second live run's read 108.78 ft beside 157.49. depth_needed_ft is the depth the add-in set, from the view's plane to the building's far side, and the 3 ft margin. Each elevation gives its view plane (view_plane_ft: the middle of the crop region Revit made, read in model coordinates, on its marker's plane 11 ft beyond the side it shows), its crop region read back once set (crop_loop_ft: a rectangle on that plane along its right and up directions holding the building and the margin), and Revit's readings of it as made, cropped, far clipped and placed (readings: its View.CropBox and that box's frame, View.Origin, its right, up and view directions, its Far Clip Offset and its crop region). Each section's view_direction and origin_ft are where CreateSection's documented convention puts the box asked (it looks along the box's BasisZ, its View.Origin the cut face's lower-left corner as the viewer sees it). Made-up ids; every value consistent with the add-in's invariants (ReportCheck, DrawingSets.Problems).",
+  "_note": "A made-up report of add-in 0.16.0 (report version 2, fields added), shaped as flo2's own fixtures of a list and its report, for change_list, a version-8 list on a made-up model (no person's, no building's): one add_drawing_set that says nothing, so every view is made, the room schedule and the cover among them, and its plans tag their rooms. The model, its Project Name \"Made-up Model\", holds three levels (Level 1, Level 2, and Roof, which nothing stands on and still gets its plan, as empty_levels include says), one title block type (E1 30 x 42 Horizontal, a 42 x 30 in sheet), one room tag type (Room Tag, the model's default for room tags), five made-up rooms, each placed (101 Living, 102 Kitchen and 103 Hall on Level 1; 201 Bedroom and 202 Bath on Level 2; none on Roof), and a building 60 x 40 ft in plan, 24 ft high, of 14 elements, in the model's internal axes. Twelve views, each on a sheet of its own: three floor plans (A-101 to A-103, lowest level first), each saying how many rooms are placed on its level and how many it tagged (rooms_on_level and rooms_tagged: 3 and 3, 2 and 2, 0 and 0); the four elevations (A-201 to A-204: north, east, south, west, each named by the face it shows, looking at it from outside); two sections through the middle (A-301 east-west, looking north; A-302 north-south, looking east); a 3D view (A-401); and, since add-in 0.16.0 (change-list version 8), the room schedule (A-601, a series of its own: the US National CAD Standard's sheet type 6 is schedules), its fields Level, Number, Name and Area, placed whole in one segment by its schedule instance at the top-left of the sheet's usable area, its box there 5 x 2.25 in, listing the five rooms (rooms_scheduled); and the cover (A-001, a series of its own, the general sheets, which sheets.pdf prints first), made last: its sheet index (Sheet Index: Sheet Number and Sheet Name) placed whole in one segment at the top-left of the usable area, its box there 3.5 x 3 in, listing the twelve sheets the model then holds (sheets_listed: the set's eleven and the cover's own), and its note under it (note_placed, note_text, its box 6 x 0.75 in), saying what the set is. The cover's entry comes last in sheets, as the set makes it last. Each other view's viewport sits at the middle of the sheet's usable area (the title block's box inset by 4% of its shorter side, its right 18% kept for the title strip) at 1/4\" = 1'-0\", the largest standard scale at which it fits there; the schedule and the cover have no scale, viewport or crop, and each fits as a view does, the box of its segments (and the cover's note) within the usable area (viewport_min_ft, viewport_max_ft). The job's sheets.pdf holds the twelve sheets, the cover first. Since add-in 0.15.2 each elevation and section is judged by what Revit says it shows: how many of the building's 14 elements Revit passes in it (building_elements_seen). Its far clip and crop box as Revit reads them back once everything is set (far_clip_active, far_clip_ft, crop_min_ft and crop_max_ft in model terms, origin_ft) are raw readings and not judged: the south elevation's Far Clip Offset reads 46 ft beside the 54 ft set, as the second live run's read 108.78 ft beside 157.49. depth_needed_ft is the depth the add-in set, from the view's plane to the building's far side, and the 3 ft margin. Each elevation gives its view plane (view_plane_ft: the middle of the crop region Revit made, read in model coordinates, on its marker's plane 11 ft beyond the side it shows), its crop region read back once set (crop_loop_ft: a rectangle on that plane along its right and up directions holding the building and the margin), and Revit's readings of it as made, cropped, far clipped and placed (readings: its View.CropBox and that box's frame, View.Origin, its right, up and view directions, its Far Clip Offset and its crop region). Each section's view_direction and origin_ft are where CreateSection's documented convention puts the box asked (it looks along the box's BasisZ, its View.Origin the cut face's lower-left corner as the viewer sees it). Made-up ids; every value consistent with the add-in's invariants (ReportCheck, DrawingSets.Problems).",
   "change_list": {
-    "version": 7,
+    "version": 8,
     "list_id": "drawing-set-1",
     "description": "Made-up: a conceptual drawing set of a small made-up model, every view on a numbered sheet.",
     "changes": [
@@ -15,7 +15,7 @@
     "schema": "flo2-rvt/edit-report",
     "version": 2,
     "edit": {
-      "addin_version": "0.15.2",
+      "addin_version": "0.16.0",
       "started_at": "2026-11-09T12:00:00.0000000Z",
       "finished_at": "2026-11-09T12:02:10.0000000Z",
       "transactions_committed": 1,
@@ -40,7 +40,7 @@
     "change_list": {
       "list_id": "drawing-set-1",
       "description": "Made-up: a conceptual drawing set of a small made-up model, every view on a numbered sheet.",
-      "sha256": "93599acd4ad879cb19266e1a1ec7603c5437752e17c09b58caa8e536d885baef",
+      "sha256": "0c1d9f90ae73f509d9dac373a0f2567920072a3ec0412c142599ca3011f33cb8",
       "bytes": 197,
       "changes": 1
     },
@@ -64,8 +64,8 @@
       "groups_ungrouped": 0,
       "elements_reshaped_unexpected": 0,
       "elements_added": 0,
-      "views_added": 10,
-      "sheets_added": 10
+      "views_added": 12,
+      "sheets_added": 12
     },
     "changes": [
       {
@@ -78,7 +78,9 @@
             "plans",
             "elevations",
             "sections",
-            "isometric"
+            "isometric",
+            "room_schedule",
+            "cover"
           ],
           "empty_levels": "include",
           "units": "imperial",
@@ -153,7 +155,9 @@
               "viewport_max_ft": [
                 2.1225,
                 1.729167
-              ]
+              ],
+              "rooms_on_level": 3,
+              "rooms_tagged": 3
             },
             {
               "kind": "plans",
@@ -184,7 +188,9 @@
               "viewport_max_ft": [
                 2.1225,
                 1.729167
-              ]
+              ],
+              "rooms_on_level": 2,
+              "rooms_tagged": 2
             },
             {
               "kind": "plans",
@@ -216,7 +222,9 @@
                 2.1225,
                 1.729167
               ],
-              "note": "nothing stands on level \"Roof\" by its Revit settings; it has its plan, as empty_levels include says"
+              "note": "nothing stands on level \"Roof\" by its Revit settings; it has its plan, as empty_levels include says",
+              "rooms_on_level": 0,
+              "rooms_tagged": 0
             },
             {
               "kind": "elevations",
@@ -908,14 +916,114 @@
                 2.335,
                 1.9
               ]
+            },
+            {
+              "kind": "room_schedule",
+              "view_was": "made",
+              "view_name": "Room Schedule",
+              "view_id": 990410,
+              "sheet_number": "A-601",
+              "sheet_name": "Room Schedule",
+              "sheet_id": 990411,
+              "title_block_instance_id": 990412,
+              "placed": true,
+              "fits": true,
+              "viewport_min_ft": [
+                0.1,
+                2.2125
+              ],
+              "viewport_max_ft": [
+                0.516667,
+                2.4
+              ],
+              "schedule_fields": [
+                "Level",
+                "Number",
+                "Name",
+                "Area"
+              ],
+              "segments": 1,
+              "schedule_segments": [
+                {
+                  "segment": 0,
+                  "instance_id": 990413,
+                  "min_ft": [
+                    0.1,
+                    2.2125
+                  ],
+                  "max_ft": [
+                    0.516667,
+                    2.4
+                  ]
+                }
+              ],
+              "rooms_scheduled": 5
+            },
+            {
+              "kind": "cover",
+              "view_was": "made",
+              "view_name": "Sheet Index",
+              "view_id": 990420,
+              "sheet_number": "A-001",
+              "sheet_name": "Cover Sheet",
+              "sheet_id": 990421,
+              "title_block_instance_id": 990422,
+              "placed": true,
+              "fits": true,
+              "viewport_min_ft": [
+                0.1,
+                2.066667
+              ],
+              "viewport_max_ft": [
+                0.6,
+                2.4
+              ],
+              "schedule_fields": [
+                "Sheet Number",
+                "Sheet Name"
+              ],
+              "segments": 1,
+              "schedule_segments": [
+                {
+                  "segment": 0,
+                  "instance_id": 990423,
+                  "min_ft": [
+                    0.1,
+                    2.15
+                  ],
+                  "max_ft": [
+                    0.391667,
+                    2.4
+                  ]
+                }
+              ],
+              "sheets_listed": 12,
+              "note_placed": true,
+              "note_id": 990424,
+              "note_text": "Conceptual drawing set of Made-up Model: drawings of the model to look the design over, not for permit or construction.",
+              "note_min_ft": [
+                0.1,
+                2.066667
+              ],
+              "note_max_ft": [
+                0.6,
+                2.129167
+              ]
             }
           ],
-          "views_made": 10,
-          "sheets_made": 10,
-          "placed": 10,
+          "views_made": 12,
+          "sheets_made": 12,
+          "placed": 12,
           "not_made": 0,
           "left_out": 0,
-          "note": "each sheet is printed with the model's other printable sheets into the job's sheets.pdf, in sheet-number order"
+          "note": "each sheet is printed with the model's other printable sheets into the job's sheets.pdf, in sheet-number order",
+          "tags_rooms": true,
+          "room_tag_type": {
+            "family": "Room Tag",
+            "type": "Room Tag",
+            "type_id": 4700
+          },
+          "room_tag_type_was": "default"
         },
         "seconds": 41.2
       }
@@ -950,7 +1058,7 @@
       }
     ],
     "element_count_total_before": 5000,
-    "element_count_total_after": 5060,
+    "element_count_total_after": 5075,
     "exports": {
       "model_rvt": {
         "written": true,
@@ -959,7 +1067,7 @@
       },
       "sheets_pdf": {
         "written": true,
-        "sheets": 10
+        "sheets": 12
       },
       "model_ifc": {
         "written": true,

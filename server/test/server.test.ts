@@ -166,7 +166,29 @@ describe('the tools, as the contract names them', () => {
     assert.match(said('rvt_edit_start'), /views \(plans, elevations, sections, isometric\), levels, empty_levels \(include or leave_out\) and title_block/);
     assert.match(said('rvt_job_status'), /sheets_added/);
     const editSchema = JSON.stringify((tools.find((t) => t.name === 'rvt_edit_start') as { inputSchema: Record<string, unknown> }).inputSchema);
-    assert.ok(editSchema.includes('schema/change-list.schema.json, version 7'), 'the change list the agent sees says version 7');
+    // Since flo2-rvt 0.17.0 the change list the agent sees says version 8, a version 7 list still reading.
+    assert.ok(editSchema.includes('schema/change-list.schema.json, version 8; a list of an earlier version still reads'), 'the change list the agent sees says version 8');
+  });
+
+  // Since flo2-rvt 0.17.0 (add-in 0.16.0, change-list version 8): a chat is told a set's plans tag their rooms and a
+  // set holds a room schedule on a sheet of its own, that room_schedule needs version 8, that a version 7 list's set
+  // is as it was, and what the report says of each.
+  test("the edit and new-model texts say a version 8 set's plans tag their rooms and it holds a room schedule on A-601 and a cover on A-001", async () => {
+    const r = await rpc(h.url, { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} });
+    const tools = (r.json as Rpc).result?.tools ?? [];
+    const said = (name: string) => String(tools.find((t) => t.name === name)?.description ?? '');
+    for (const name of ['rvt_edit_start', 'rvt_new_model_start']) assert.match(said(name), /change-list version 8/, name);
+    const edit = said('rvt_edit_start');
+    assert.match(edit, /Since change-list version 8 \(add-in 0\.16\.0\) a set's plans also TAG THEIR ROOMS \(every room placed on the plan's level, at its point, with the model's default room tag type\)/);
+    assert.match(edit, /ROOM SCHEDULE \(views' room_schedule: each room's level, number, name and area, sorted by level then number, with a grand total of the count and the area\) on a sheet of its own, A-601/);
+    assert.match(edit, /split into segments side by side when it is taller than the sheet/);
+    assert.match(edit, /a COVER \(views' cover\) on A-001, which sheets\.pdf prints first: a sheet index of every sheet the model holds, by number and name, and one note saying it is a conceptual drawing set of the project, to look the design over, not for permit or construction/);
+    assert.match(edit, /room_schedule and cover need a version 8 list, and a version 7 list's set is as it was, with no room tag, no schedule and no cover/);
+    assert.match(edit, /\(sheets_listed, note_placed, note_why\)/);
+    assert.match(edit, /\(rooms_on_level, rooms_tagged, rooms_why\)/);
+    assert.match(edit, /\(segments, schedule_segments, rooms_scheduled\)/);
+    assert.match(said('rvt_new_model_start'), /the same vocabulary as rvt_edit_start, change-list version 8/);
+    assert.match(said('rvt_new_model_start'), /since change-list version 8 its plans tag their rooms and it holds a room schedule on A-601 and a cover on A-001/);
   });
 
   // Since flo2-rvt 0.16.1 (add-in 0.15.1): the first live drawing set's sections looked the opposite way, and

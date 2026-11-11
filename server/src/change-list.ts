@@ -30,6 +30,9 @@
 // no plan to make of them); and a list makes one drawing set (two would number their sheets as one
 // series and print each view twice). Its levels by their storey's GlobalId count as references. A set
 // adds no building content (ADDING_KINDS leaves it out), so a new model's first list needs more than it.
+// Since flo2-rvt 0.17.0, version 8: a drawing set's plans tag their rooms and it may hold a room schedule
+// and a cover (views' room_schedule and cover), either of which says version 8; a version-8 set that says
+// nothing makes both too, and every older list reads as it did (the add-in's DrawingSets.KindsAsked, TagsRooms).
 //
 // ⭐ ITS CANONICAL FORM: the JSON with every object's keys sorted, no whitespace. That is the
 // exact byte string flo2-rvt uploads as changes.json, and its SHA-256 is the change list's
@@ -69,6 +72,10 @@ export const LEVELS_VERSION = 5;
 export const DOOR_FAMILIES_VERSION = 6;
 /** The first change-list version that reads add_drawing_set (flo2-rvt 0.16.0). */
 export const DRAWING_SET_VERSION = 7;
+/** The first change-list version whose drawing set tags its plans' rooms and reads room_schedule and cover (flo2-rvt 0.17.0). */
+export const DRAWING_SET_ROOMS_VERSION = 8;
+/** The view kinds a drawing set reads only since change-list version 8 (the add-in's DrawingSets.SinceRooms). */
+export const SINCE_ROOMS_VIEWS: readonly string[] = ['room_schedule', 'cover'];
 /** The most family files (family_file, counted once each) one list may name (the add-in's FamilyFiles.Max). */
 export const MAX_FAMILY_FILES = 8;
 /** How close two points must be to be one, in feet (the add-in's Placement.ToleranceFt, LevelMoves.ToleranceFt). */
@@ -251,13 +258,20 @@ export function checkChangeList(value: unknown): CheckedChangeList {
     extent(`changes.${i}.point`, pointFeet(c.point));
     if (c.top_offset !== undefined) lengthWithin(`changes.${i}.top_offset`, c.top_offset);
   };
-  // Since 0.16.0 (version 7): a drawing set, once in a list, its levels and empty levels only beside plans.
+  // Since 0.16.0 (version 7): a drawing set, once in a list, its levels and empty levels only beside plans; since
+  // 0.17.0 its room schedule and cover only in a version 8 list.
   let drawingSet: number | undefined;
   const drawing = (c: Change, i: number) => {
     if (c.kind !== 'add_drawing_set') return;
     if (list.version < DRAWING_SET_VERSION) errors.push(`changes.${i}.kind: add_drawing_set needs version ${DRAWING_SET_VERSION}; say "version": ${DRAWING_SET_VERSION}`);
     if (drawingSet !== undefined) errors.push(`changes.${i}.kind: a list makes one drawing set, and change ${drawingSet + 1} makes it already`);
     else drawingSet = i;
+    // Since 0.17.0 (version 8): the room schedule and the cover.
+    if (list.version < DRAWING_SET_ROOMS_VERSION) {
+      (c.views ?? []).forEach((v: string, j: number) => {
+        if (SINCE_ROOMS_VIEWS.includes(v)) errors.push(`changes.${i}.views.${j}: ${v} needs version ${DRAWING_SET_ROOMS_VERSION}; say "version": ${DRAWING_SET_ROOMS_VERSION}`);
+      });
+    }
     const plans = c.views === undefined || c.views.includes('plans');
     if (!plans && c.levels !== undefined) errors.push(`changes.${i}.levels: names the levels whose plans the set makes, but its views ask for no plans; add "plans" to views, or leave levels out`);
     if (!plans && c.empty_levels !== undefined) errors.push(`changes.${i}.empty_levels: says what to do with a level nothing stands on, but its views ask for no plans; add "plans" to views, or leave empty_levels out`);

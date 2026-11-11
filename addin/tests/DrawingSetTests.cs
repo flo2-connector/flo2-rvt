@@ -30,6 +30,18 @@
 // up (ScreenAxes, CropRectangle), never through View.CropBox's Transform; its depth is set from that plane
 // (ElevationDepthFrom), and the building must stand in front of it (BehindWhy); the far clip and crop read
 // back are kept as raw readings and no longer judged.
+//
+// Since add-in 0.16.0 (change-list version 8): the owner settled that a set also tags every plan's rooms, holds a
+// room schedule, and has a cover. Tested here: a version-8 set that says nothing makes every kind, the room
+// schedule and the cover last, and tags its plans' rooms, while a version-7 list's set is exactly what it was
+// (KindsAsked, TagsRooms); the check refuses room_schedule and cover below version 8; the schedule's sheet in its
+// own series, A-601, and the cover's, A-001; which rooms a plan tags and with which tag type (ToTag,
+// ChooseRoomTagType), and why when fewer (RoomsWhy); the schedule's fields, how many segments a tall one is split
+// into and where they stand (ScheduleSegments, SideBySide), whether it fits and why not (ScheduleFitWhy); the
+// cover's sheet index, its note's words (CoverNote) and where it goes (NoteUnder, NoteBeside), and how the cover
+// fits (CoverBox, CoverFitWhy); the invariants on each; and the made-up report flo2 reads, now of a version-8 list
+// (server/test/fixtures/sample-edit-report-drawing-set.json: twelve views, the plans' rooms tagged, the room
+// schedule on A-601, the cover on A-001).
 
 using System;
 using System.Collections.Generic;
@@ -59,7 +71,7 @@ namespace Flo2Rvt.Addin.Tests
                 Change all = r.List.Changes[0];
                 Eq(ChangeKinds.AddDrawingSet, all.Kind, "a drawing set");
                 Is(all.Views == null && all.Levels == null && all.EmptyLevels == null && all.TitleBlock == null, "it says nothing");
-                Is(DrawingSets.KindsAsked(all.Views).SequenceEqual(new[] { DrawingSetViewValues.Plans, DrawingSetViewValues.Elevations, DrawingSetViewValues.Sections, DrawingSetViewValues.Isometric }), "so every kind, in the set's own order");
+                Is(DrawingSets.KindsAsked(all.Views, r.List.Version).SequenceEqual(new[] { DrawingSetViewValues.Plans, DrawingSetViewValues.Elevations, DrawingSetViewValues.Sections, DrawingSetViewValues.Isometric }), "so every kind of version 7, in the set's own order");
                 r = ReadList(SharedCase(root, PlansAlone));
                 Is(r.Ok, string.Join("; ", r.Errors));
                 Change plans = r.List.Changes[0];
@@ -70,7 +82,7 @@ namespace Flo2Rvt.Addin.Tests
                 Eq(EmptyLevelsValues.LeaveOut, plans.EmptyLevels, "an empty level left out");
                 Eq("E1 30 x 42 Horizontal", plans.TitleBlock.Family, "the title block's family");
                 Eq("E1 30x42 Horizontal", plans.TitleBlock.Type, "and type");
-                Is(DrawingSets.KindsAsked(new List<string> { DrawingSetViewValues.Isometric, DrawingSetViewValues.Plans }).SequenceEqual(new[] { DrawingSetViewValues.Plans, DrawingSetViewValues.Isometric }), "the kinds asked, in the set's order whatever the list's");
+                Is(DrawingSets.KindsAsked(new List<string> { DrawingSetViewValues.Isometric, DrawingSetViewValues.Plans }, 7).SequenceEqual(new[] { DrawingSetViewValues.Plans, DrawingSetViewValues.Isometric }), "the kinds asked, in the set's order whatever the list's");
                 Is(ReadList(SharedCase(root, "version 7 reads a list of version 6's vocabulary as it did")).Ok, "version 6's vocabulary still reads");
             });
             Test("a drawing set says version 7, asks for its levels and empty levels only beside plans, comes once in a list, and every rule beside the schema says where and why", () =>
@@ -89,7 +101,7 @@ namespace Flo2Rvt.Addin.Tests
                 r = ReadList("{\"version\":7,\"changes\":[" + set + ",\"views\":[\"plans\",\"plans\"]}]}");
                 Is(!r.Ok && r.Errors.Any(e => e.StartsWith("changes[0].views[1]") && e.Contains("names \"plans\" a second time")), string.Join("; ", r.Errors));
                 r = ReadList("{\"version\":7,\"changes\":[" + set + ",\"views\":[]}]}");
-                Is(!r.Ok && r.Errors.Any(e => e.StartsWith("changes[0].views") && e.Contains("must hold 1 to 4 items")), string.Join("; ", r.Errors));
+                Is(!r.Ok && r.Errors.Any(e => e.StartsWith("changes[0].views") && e.Contains("must hold 1 to 6 items")), string.Join("; ", r.Errors));
                 r = ReadList("{\"version\":7,\"changes\":[" + set + ",\"scale\":100}]}");
                 Is(!r.Ok && r.Errors.Any(e => e.StartsWith("changes[0]") && e.Contains("a key the schema does not name: \"scale\"")), string.Join("; ", r.Errors));
                 r = ReadList("{\"version\":7,\"changes\":[" + set + ",\"levels\":[{\"level_name\":\"Level 1\"},{\"level_name\":\"Level 1\"}]}]}");
@@ -106,7 +118,7 @@ namespace Flo2Rvt.Addin.Tests
             // ─── which views, which sheets
             Test("a set that says nothing makes a plan of every level, lowest first, the four elevations, two sections and a 3D view, each on a sheet numbered in its series", () =>
             {
-                SetPlanInput input = Input(DrawingSets.KindsAsked(null), false, Lv(1302, "Roof", 20, true), Lv(311, "Level 1", 0, false), Lv(1240, "Level 2", 10, false));
+                SetPlanInput input = Input(DrawingSets.KindsAsked(null, 7), false, Lv(1302, "Roof", 20, true), Lv(311, "Level 1", 0, false), Lv(1240, "Level 2", 10, false));
                 List<DrawingSheet> plan = DrawingSets.Plan(input);
                 Is(plan.Select(s => s.SheetNumber).SequenceEqual(new[] { "A-101", "A-102", "A-103", "A-201", "A-202", "A-203", "A-204", "A-301", "A-302", "A-401" }), string.Join(", ", plan.Select(s => s.SheetNumber)));
                 Is(plan.Take(3).Select(s => s.Level).SequenceEqual(new[] { "Level 1", "Level 2", "Roof" }), "plans by elevation, lowest first");
@@ -137,7 +149,7 @@ namespace Flo2Rvt.Addin.Tests
             });
             Test("a sheet number or view name the model holds already is skipped, never reused; a kind the model cannot make is not made, saying why; names lose what Revit forbids", () =>
             {
-                SetPlanInput input = Input(DrawingSets.KindsAsked(null), false, Lv(311, "Level 1", 0, false), Lv(1240, "Level {2}", 10, false));
+                SetPlanInput input = Input(DrawingSets.KindsAsked(null, 7), false, Lv(311, "Level 1", 0, false), Lv(1240, "Level {2}", 10, false));
                 input.TakenSheetNumbers.Add("a-101");
                 input.TakenSheetNumbers.Add("A-201");
                 input.TakenViewNames.Add("Level 1 Floor Plan");
@@ -488,7 +500,7 @@ namespace Flo2Rvt.Addin.Tests
                 Eq(ChangeStatus.Applied, DrawingSets.Judge(whole, out why), "the fixture: " + why);
                 Is(DrawingSets.Problems(whole, ChangeStatus.Applied).Count == 0, string.Join("; ", DrawingSets.Problems(whole, ChangeStatus.Applied)));
                 DrawingSetReport part = Fixture(root).DrawingSet;
-                DrawingSheet iso = part.Sheets.Last();
+                DrawingSheet iso = part.Sheets[9];
                 iso.Fits = false;
                 iso.Why = "it overruns the sheet's usable area at 1/64\" = 1'-0\", the smallest standard scale";
                 DrawingSheet ns = part.Sheets[8];
@@ -506,8 +518,8 @@ namespace Flo2Rvt.Addin.Tests
                 ns.Why = "Revit refused the section: ArgumentException: made up";
                 DrawingSets.Count(part);
                 Eq(ChangeStatus.AppliedInPart, DrawingSets.Judge(part, out why), "in part");
-                Is(why.Contains("2 of the 10 views") && why.Contains("A-401 3D View") && why.Contains("North-South Section: Revit refused the section"), why);
-                Eq(9, part.ViewsMade, "nine made");
+                Is(why.Contains("2 of the 12 views") && why.Contains("A-401 3D View") && why.Contains("North-South Section: Revit refused the section"), why);
+                Eq(11, part.ViewsMade, "eleven made");
                 Eq(1, part.NotMade, "one not");
                 Is(DrawingSets.Problems(part, ChangeStatus.AppliedInPart).Count == 0, string.Join("; ", DrawingSets.Problems(part, ChangeStatus.AppliedInPart)));
                 Is(DrawingSets.Problems(part, ChangeStatus.Applied).Any(p => p.Contains("reads applied though")), "applied it is not");
@@ -539,7 +551,7 @@ namespace Flo2Rvt.Addin.Tests
                 Is(p.Any(x => x.Contains("A-201 North Elevation shows the north face but reads looking north")), string.Join("; ", p));
                 Is(p.Any(x => x.Contains("A-202 East Elevation reads placed but names no viewport")), string.Join("; ", p));
                 Is(p.Any(x => x.Contains("A-203 South Elevation reads that it fits, though its viewport overruns the sheet's usable area")), string.Join("; ", p));
-                Is(p.Any(x => x.Contains("views_made counts 3, but 10 read made")), string.Join("; ", p));
+                Is(p.Any(x => x.Contains("views_made counts 3, but 12 read made")), string.Join("; ", p));
                 DrawingSetReport kept = Fixture(root).DrawingSet;
                 Is(DrawingSets.Problems(kept, ChangeStatus.RolledBack).Any(x => x.Contains("though the change was not kept")), "a change not kept made nothing");
             });
@@ -571,11 +583,12 @@ namespace Flo2Rvt.Addin.Tests
                 ChangeReport c = read.Changes.Single();
                 Eq(ChangeKinds.AddDrawingSet, c.Kind, "the drawing set");
                 DrawingSetReport set = c.DrawingSet;
-                Eq(10, set.Sheets.Count, "ten views");
+                Eq(12, set.Sheets.Count, "twelve views: since add-in 0.16.0 a version-8 set's room schedule and cover among them");
                 Eq("E1 30 x 42 Horizontal", set.TitleBlock.Family, "the model's first title block");
                 Eq(DrawingSets.FirstHeld, set.TitleBlockWas, "chosen as the first it holds");
                 Eq(DrawingSets.FromTitleBlock, set.SheetArea.From, "the usable area from the title block's box");
-                Is(set.Sheets.All(s => s.Scale == 48 && s.ScaleText == DrawingSets.ScaleText(48, false)), "each at 1/4\" = 1'-0\"");
+                Is(set.Sheets.Where(s => !DrawingSets.PlacedAsSchedule(s.Kind)).All(s => s.Scale == 48 && s.ScaleText == DrawingSets.ScaleText(48, false)), "each view at 1/4\" = 1'-0\"");
+                Is(set.Sheets.Where(s => DrawingSets.PlacedAsSchedule(s.Kind)).All(s => s.Scale == 0 && s.ScaleText == null), "the room schedule and the cover's index at no scale of the set's");
                 Is(set.Sheets.All(s => DrawingSets.Inside(s.ViewportMinFt, s.ViewportMaxFt, set.SheetArea)), "each inside the usable area");
                 Is(set.Sheets.Where(s => s.Kind == DrawingSetViewValues.Elevations).All(s => s.MarkerId != 0 && s.Looking == DrawingSets.Opposite(s.Facing)), "each elevation on its marker, looking at its face");
                 // Since add-in 0.15.1 each elevation and section says its far clip and crop as Revit reads them back; since
@@ -625,10 +638,36 @@ namespace Flo2Rvt.Addin.Tests
                     Is(Same(s.ViewDirection.ToArray(), made[0], 1e-9) && Same(s.OriginFt.ToArray(), made[1], 1e-6), s.SheetNumber + " stands where CreateSection's convention puts the box asked: " + string.Join(", ", s.OriginFt) + " vs " + string.Join(", ", made[1]));
                 }
                 Is(set.Sheets.Where(x => x.Kind == DrawingSetViewValues.Plans || x.Kind == DrawingSetViewValues.Isometric).All(x => x.FarClipFt == null && x.DepthNeededFt == null && x.CropMinFt == null), "a plan and the 3D view say no far clip");
-                Eq(10, read.Totals.SheetsAdded, "sheets added");
-                Eq(10, read.Totals.ViewsAdded, "views added");
+                Eq(12, read.Totals.SheetsAdded, "sheets added");
+                Eq(12, read.Totals.ViewsAdded, "views added");
                 Eq(0, read.Totals.ElementsAdded, "no building content");
-                Eq(10, read.Exports.SheetsPdf.Sheets, "the job's sheets.pdf holds them");
+                Eq(12, read.Exports.SheetsPdf.Sheets, "the job's sheets.pdf holds them");
+                // Since add-in 0.16.0: a version-8 list's set, its plans' rooms tagged and the room schedule on A-601.
+                Eq(8L, list.List.Version, "of a version-8 list");
+                Is(set.TagsRooms && set.RoomTagType != null && set.RoomTagType.TypeId == 4700 && set.RoomTagTypeWas == DrawingSets.DefaultTagType, "its plans tag their rooms with the model's default room tag type");
+                Is(set.ViewsAsked.SequenceEqual(DrawingSets.KindsAsked(null, 8)), "every kind asked, the room schedule and the cover last");
+                Is(set.Sheets.Where(x => x.Kind == DrawingSetViewValues.Plans).Select(x => x.RoomsOnLevel + "/" + x.RoomsTagged).SequenceEqual(new[] { "3/3", "2/2", "0/0" }), "every placed room on each level tagged");
+                Is(set.Sheets.Where(x => x.Kind == DrawingSetViewValues.Plans).All(x => x.RoomsWhy == null), "so no plan says why not");
+                DrawingSheet rs = set.Sheets.Single(x => x.Kind == DrawingSetViewValues.RoomSchedule);
+                Is(rs.SheetNumber == "A-601" && rs.ViewName == DrawingSets.RoomScheduleName && rs.SheetName == DrawingSets.RoomScheduleName, "the room schedule on A-601");
+                Is(rs.ScheduleFields.SequenceEqual(DrawingSets.RoomScheduleFields), "its fields");
+                Is(rs.Segments == 1 && rs.ScheduleSegments.Count == 1 && rs.ScheduleSegments[0].Segment == 0 && rs.ScheduleSegments[0].InstanceId != 0, "whole, in one segment, by its schedule instance");
+                Is(rs.ScheduleSegments[0].MinFt[0] == set.SheetArea.UsableMinFt[0] && rs.ScheduleSegments[0].MaxFt[1] == set.SheetArea.UsableMaxFt[1], "its top-left at the usable area's");
+                Is(DrawingSets.ScheduleFitWhy(rs.ScheduleSegments, set.SheetArea) == null && rs.Fits, "it fits");
+                Eq(5, rs.RoomsScheduled, "it lists the model's five rooms");
+                Is(rs.ViewportId == 0 && rs.MarkerId == 0 && rs.CropMinFt == null && rs.BuildingElementsSeen == null, "and names nothing of a cropped graphic view");
+                // Since add-in 0.16.0: the cover on A-001, made last, its sheet index listing every sheet and its note under it.
+                DrawingSheet cover = set.Sheets.Last();
+                Is(cover.Kind == DrawingSetViewValues.Cover && cover.SheetNumber == "A-001" && cover.ViewName == DrawingSets.SheetIndexName && cover.SheetName == DrawingSets.CoverSheetName, "the cover, last made, on A-001");
+                Is(cover.ScheduleFields.SequenceEqual(DrawingSets.SheetIndexFields) && cover.Segments == 1 && cover.ScheduleSegments.Single().InstanceId != 0, "its sheet index, whole, by its schedule instance");
+                Eq(12, cover.SheetsListed, "listing the twelve sheets the model holds, its own among them");
+                Is(cover.NotePlaced == true && cover.NoteId != 0 && cover.NoteWhy == null, "its note placed");
+                Eq(DrawingSets.CoverNote("Made-up Model"), cover.NoteText, "its words");
+                double[] under = DrawingSets.NoteUnder(cover.ScheduleSegments[0].MinFt, cover.ScheduleSegments[0].MaxFt, set.SheetArea, DrawingSets.SegmentGapFt);
+                Is(Near(cover.NoteMinFt[0], under[0], 1e-6) && Near(cover.NoteMaxFt[1], under[1], 1e-6) && Near(under[1], 2.15 - DrawingSets.SegmentGapFt, 1e-12), "its top-left under its index, a quarter inch below, at the usable area's left");
+                List<double> cmin, cmax;
+                DrawingSets.CoverBox(cover.ScheduleSegments, cover.NoteMinFt, cover.NoteMaxFt, out cmin, out cmax);
+                Is(cmin.SequenceEqual(cover.ViewportMinFt) && cmax.SequenceEqual(cover.ViewportMaxFt) && cover.Fits && DrawingSets.CoverFitWhy(cover.ScheduleSegments, cover.NoteMinFt, cover.NoteMaxFt, set.SheetArea) == null, "the box of its index and its note within the usable area: it fits");
                 foreach (ChangeReport x in read.Changes)
                 {
                     List<string> broken = ReportCheck.Violations(x);
@@ -636,7 +675,7 @@ namespace Flo2Rvt.Addin.Tests
                 }
                 var totals = new Totals();
                 totals.Count(c);
-                Is(totals.SheetsAdded == 10 && totals.ViewsAdded == 10, "a kept set's sheets and views are counted");
+                Is(totals.SheetsAdded == 12 && totals.ViewsAdded == 12, "a kept set's sheets and views are counted, the room schedule's and the cover's among them");
             });
             Test("the report check names a drawing set read applied with a view not placed, and a drawing set change that says nothing of its set", () =>
             {
@@ -656,6 +695,460 @@ namespace Flo2Rvt.Addin.Tests
                 blank.DrawingSet = null;
                 Is(ReportCheck.Violations(blank).Any(x => x.Contains("says nothing of the drawing set it made")), string.Join("; ", ReportCheck.Violations(blank)));
             });
+
+            // ─── rooms in the set: the change list, version 8 (since add-in 0.16.0)
+            const string EveryV8 = "version 8: a drawing set that says nothing: every view of version 7, its plans tagging their rooms, a room schedule and a cover, each on a sheet of its own";
+            const string RoomSchedule = DrawingSetViewValues.RoomSchedule;
+            const string Cover = DrawingSetViewValues.Cover;
+            Test("a version 8 set that says nothing makes every kind, the room schedule and the cover last, and tags its plans' rooms; a version 7 list's set is exactly what it was: no room schedule, no cover, no tag", () =>
+            {
+                CheckedList r = ReadList(SharedCase(root, EveryV8));
+                Is(r.Ok, string.Join("; ", r.Errors));
+                Eq(8L, r.List.Version, "version");
+                Change all = r.List.Changes[0];
+                Is(all.Views == null && all.Levels == null, "it says nothing");
+                Is(DrawingSets.KindsAsked(all.Views, r.List.Version).SequenceEqual(new[] { DrawingSetViewValues.Plans, DrawingSetViewValues.Elevations, DrawingSetViewValues.Sections, DrawingSetViewValues.Isometric, RoomSchedule, Cover }), "every kind, the room schedule and then the cover last: the cover is made last, so its index lists every sheet");
+                Is(DrawingSets.TagsRooms(8) && DrawingSets.TagsRooms(9), "from version 8 on, a set's plans tag their rooms");
+                Eq(8L, ChangeListCheck.DrawingSetRoomsVersion, "the version that brought them");
+                Is(DrawingSets.KindsAsked(null, 7).SequenceEqual(new[] { DrawingSetViewValues.Plans, DrawingSetViewValues.Elevations, DrawingSetViewValues.Sections, DrawingSetViewValues.Isometric }), "a version 7 set that says nothing is what it was: no room schedule, no cover");
+                Is(!DrawingSets.TagsRooms(7) && !DrawingSets.TagsRooms(0), "and its plans tag no room");
+                Is(DrawingSets.KindsAsked(new List<string> { RoomSchedule }, 8).SequenceEqual(new[] { RoomSchedule }), "the room schedule alone");
+                Is(DrawingSets.KindsAsked(new List<string> { RoomSchedule, Cover, DrawingSetViewValues.Plans }, 7).SequenceEqual(new[] { DrawingSetViewValues.Plans }), "a room schedule or a cover is never made of a list below version 8, which the check refuses anyway");
+                Is(DrawingSets.KindsAsked(new List<string> { Cover }, 8).SequenceEqual(new[] { Cover }), "the cover alone");
+                Is(DrawingSets.SinceRooms(RoomSchedule) && DrawingSets.SinceRooms(Cover) && !DrawingSets.SinceRooms(DrawingSetViewValues.Plans), "the kinds version 8 brought");
+                Is(DrawingSets.PlacedAsSchedule(RoomSchedule) && DrawingSets.PlacedAsSchedule(Cover) && !DrawingSets.PlacedAsSchedule(DrawingSetViewValues.Isometric), "the kinds placed as schedules are");
+                Is(ReadList(SharedCase(root, "version 8: a drawing set of the cover alone")).Ok, "the cover alone reads");
+                Is(ReadList(SharedCase(root, "version 8: a drawing set of the room schedule alone")).Ok, "the room schedule alone reads");
+                Is(ReadList(SharedCase(root, "version 8: a room on a new level, then a drawing set of that level's plan, which tags it, and the room schedule, which lists it")).Ok, "a room and its set read");
+                Is(ReadList(SharedCase(root, "version 8 reads a list of version 7's vocabulary with no drawing set as it did")).Ok, "version 7's vocabulary still reads as version 8");
+                Is(ReadList(SharedCase(root, Every)).Ok, "and a version 7 set as version 7");
+            });
+            Test("room_schedule needs version 8, is named once among a set's views, and is no plan: each rule beside the schema says where and why", () =>
+            {
+                const string set = "{\"kind\":\"add_drawing_set\",\"id\":\"ds1\"";
+                CheckedList r = ReadList("{\"version\":7,\"changes\":[" + set + ",\"views\":[\"plans\",\"room_schedule\"]}]}");
+                Is(!r.Ok && r.Errors.Any(e => e == "changes[0].views[1]: room_schedule needs version 8; say \"version\": 8"), string.Join("; ", r.Errors));
+                Is(ReadList("{\"version\":8,\"changes\":[" + set + ",\"views\":[\"plans\",\"room_schedule\"]}]}").Ok, "in a version 8 list");
+                r = ReadList("{\"version\":8,\"changes\":[" + set + ",\"views\":[\"room_schedule\",\"room_schedule\"]}]}");
+                Is(!r.Ok && r.Errors.Any(e => e.StartsWith("changes[0].views[1]") && e.Contains("names \"room_schedule\" a second time")), string.Join("; ", r.Errors));
+                r = ReadList("{\"version\":8,\"changes\":[" + set + ",\"views\":[\"room_schedule\"],\"levels\":[{\"level_name\":\"Level 1\"}]}]}");
+                Is(!r.Ok && r.Errors.Any(e => e == "changes[0].levels: names the levels whose plans the set makes, but its views ask for no plans; add \"plans\" to views, or leave levels out"), string.Join("; ", r.Errors));
+                r = ReadList("{\"version\":8,\"changes\":[" + set + ",\"views\":[\"plans\",\"elevations\",\"sections\",\"isometric\",\"room_schedule\",\"cover\",\"plans\"]}]}");
+                Is(!r.Ok && r.Errors.Any(e => e.StartsWith("changes[0].views") && e.Contains("must hold 1 to 6 items")), string.Join("; ", r.Errors));
+                r = ReadList("{\"version\":8,\"changes\":[" + set + ",\"views\":[\"schedules\"]}]}");
+                Is(!r.Ok && r.Errors.Any(e => e.StartsWith("changes[0].views[0]") && e.Contains("must be one of plans, elevations, sections, isometric, room_schedule, cover")), string.Join("; ", r.Errors));
+                // Since add-in 0.16.0: the cover needs version 8 too.
+                r = ReadList("{\"version\":7,\"changes\":[" + set + ",\"views\":[\"cover\",\"plans\"]}]}");
+                Is(!r.Ok && r.Errors.Any(e => e == "changes[0].views[0]: cover needs version 8; say \"version\": 8"), string.Join("; ", r.Errors));
+                Is(ReadList("{\"version\":8,\"changes\":[" + set + ",\"views\":[\"cover\"]}]}").Ok, "a cover alone in a version 8 list");
+                r = ReadList("{\"version\":8,\"changes\":[" + set + ",\"views\":[\"cover\",\"cover\"]}]}");
+                Is(!r.Ok && r.Errors.Any(e => e.StartsWith("changes[0].views[1]") && e.Contains("names \"cover\" a second time")), string.Join("; ", r.Errors));
+                r = ReadList("{\"version\":8,\"changes\":[" + set + ",\"views\":[\"cover\"],\"empty_levels\":\"leave_out\"}]}");
+                Is(!r.Ok && r.Errors.Any(e => e.StartsWith("changes[0].empty_levels") && e.Contains("its views ask for no plans")), "a cover is no plan: " + string.Join("; ", r.Errors));
+            });
+
+            // ─── the room schedule's sheet
+            Test("a version 8 set puts the room schedule on a sheet of its own in a series of its own, A-601 (the US National CAD Standard's sheet type 6 is schedules), after the 3D view, named Room Schedule; a number or name the model holds is skipped", () =>
+            {
+                List<DrawingSheet> plan = DrawingSets.Plan(Input(DrawingSets.KindsAsked(null, 8), false, Lv(1302, "Roof", 20, true), Lv(311, "Level 1", 0, false), Lv(1240, "Level 2", 10, false)));
+                Is(plan.Select(s => s.SheetNumber).SequenceEqual(new[] { "A-101", "A-102", "A-103", "A-201", "A-202", "A-203", "A-204", "A-301", "A-302", "A-401", "A-601", "A-001" }), string.Join(", ", plan.Select(s => s.SheetNumber)));
+                DrawingSheet rs = plan[10];
+                Eq(RoomSchedule, rs.Kind, "the room schedule, after the 3D view");
+                Eq("Room Schedule", rs.ViewName, "named");
+                Eq("Room Schedule", rs.SheetName, "its sheet named as it is");
+                Is(rs.ViewWas == null && rs.Why == null && rs.Level == null && rs.Facing == null && rs.Cut == null && rs.Looking == null, "planned, of no level, face or cut");
+                Is(DrawingSets.Series(DrawingSetViewValues.Plans) == 100 && DrawingSets.Series(DrawingSetViewValues.Elevations) == 200 && DrawingSets.Series(DrawingSetViewValues.Sections) == 300 && DrawingSets.Series(DrawingSetViewValues.Isometric) == 400, "the other series as they were");
+                Eq(600, DrawingSets.Series(RoomSchedule), "the schedules' series, 600");
+                Eq(-1, DrawingSets.Series("roof_plans"), "no series of no kind");
+                // Since add-in 0.16.0: the cover, made last, on A-001, a series of its own, which sheets.pdf prints first.
+                DrawingSheet cover = plan.Last();
+                Is(cover.Kind == Cover && cover.SheetNumber == "A-001", "the cover, last made, on A-001");
+                Eq("Sheet Index", cover.ViewName, "its view, the sheet index");
+                Eq("Cover Sheet", cover.SheetName, "its sheet");
+                Eq(0, DrawingSets.Series(Cover), "the general sheets' series, 0: A-001 on");
+                Is(DrawingSets.SheetNumber(1) == "A-001" && DrawingSets.SheetNumber(99) == "A-099" && DrawingSets.SheetNumber(101) == "A-101", "three digits");
+                Is(string.CompareOrdinal(DrawingSets.SheetNumber(1), DrawingSets.SheetNumber(101)) < 0, "so A-001 sorts first, as sheets.pdf prints in sheet-number order");
+                SetPlanInput covered = Input(new List<string> { Cover }, false);
+                covered.TakenSheetNumbers.Add("A-001");
+                covered.TakenViewNames.Add("Sheet Index");
+                DrawingSheet next = DrawingSets.Plan(covered).Single();
+                Is(next.SheetNumber == "A-002" && next.ViewName == "Sheet Index (2)" && next.SheetName == "Cover Sheet", next.SheetNumber + " " + next.ViewName);
+                SetPlanInput crowded = Input(new List<string> { Cover }, false);
+                crowded.TakenSheetNumbers = new HashSet<string>(Enumerable.Range(1, 99).Select(n => DrawingSets.SheetNumber(n)), StringComparer.OrdinalIgnoreCase);
+                DrawingSheet no = DrawingSets.Plan(crowded).Single();
+                Is(no.ViewWas == DrawingSets.NotMade && no.Why.Contains("A-001 to A-099 are all taken"), no.Why);
+                Is(DrawingSets.Plan(Input(DrawingSets.KindsAsked(null, 7), false, Lv(311, "Level 1", 0, false))).All(s => s.Kind != RoomSchedule), "a version 7 set: no room schedule, no A-601");
+                SetPlanInput taken = Input(new List<string> { RoomSchedule }, false);
+                taken.TakenSheetNumbers.Add("a-601");
+                taken.TakenViewNames.Add("room schedule");
+                DrawingSheet again = DrawingSets.Plan(taken).Single();
+                Eq("A-602", again.SheetNumber, "A-601 is taken, in any case");
+                Eq("Room Schedule (2)", again.ViewName, "a view name the model holds, whatever its case");
+                Eq("Room Schedule", again.SheetName, "its sheet keeps the name");
+                SetPlanInput full = Input(new List<string> { RoomSchedule }, false);
+                full.TakenSheetNumbers = new HashSet<string>(Enumerable.Range(601, 99).Select(n => "A-" + n), StringComparer.OrdinalIgnoreCase);
+                DrawingSheet none = DrawingSets.Plan(full).Single();
+                Is(none.ViewWas == DrawingSets.NotMade && none.Why.Contains("A-601 to A-699 are all taken"), none.Why);
+            });
+
+            // ─── the plans' room tags
+            Test("each plan of a version 8 set tags every placed room on its level, with the model's default room tag type or else the first it holds, and says why in plain words when it tags fewer", () =>
+            {
+                var rooms = new List<SetRoom>
+                {
+                    new SetRoom { Id = 2002, Number = "102", LevelId = 311, Placed = true, X = 30, Y = 10 },
+                    new SetRoom { Id = 2001, Number = "101", LevelId = 311, Placed = true, X = 10, Y = 10 },
+                    new SetRoom { Id = 2003, Number = "103", LevelId = 311, Placed = false },
+                    new SetRoom { Id = 2101, Number = "201", LevelId = 1240, Placed = true, X = 10, Y = 30 },
+                };
+                Is(DrawingSets.ToTag(rooms, 311).Select(x => x.Id).SequenceEqual(new long[] { 2001, 2002 }), "the placed rooms on its level, by id: an unplaced room has no point to tag");
+                Eq("201", DrawingSets.ToTag(rooms, 1240).Single().Number, "another level's own");
+                Eq(0, DrawingSets.ToTag(rooms, 1302).Count, "none on the roof");
+                Eq(0, DrawingSets.ToTag(null, 311).Count, "no rooms read, none to tag");
+                Is(DrawingSets.RoomsWhy("Level 1", 3, 3, null, null) == null, "every one tagged: no why");
+                Is(DrawingSets.RoomsWhy("Roof", 0, 0, DrawingSets.NoTagTypeWhy, null) == null, "no room on the level: nothing to tag, so no why, whatever the model holds");
+                Eq("the model holds no room tag type, so none of the 3 rooms placed on level \"Level 1\" is tagged", DrawingSets.RoomsWhy("Level 1", 3, 0, DrawingSets.NoTagTypeWhy, null), "no room tag type");
+                Eq("the model holds no room tag type, so the one room placed on level \"Level 2\" is not tagged", DrawingSets.RoomsWhy("Level 2", 1, 0, DrawingSets.NoTagTypeWhy, null), "one room");
+                Eq("Revit would not tag 1 of the 3 rooms placed on level \"Level 1\" (room 102: ArgumentException: made up)", DrawingSets.RoomsWhy("Level 1", 3, 2, null, "room 102: ArgumentException: made up"), "a tag Revit refused, in its words");
+                Eq("Revit would not tag the one room placed on level \"Level 2\"", DrawingSets.RoomsWhy("Level 2", 1, 0, null, null), "the one room");
+                var held = new List<HeldType>
+                {
+                    new HeldType { Family = "Room Tag", Type = "Room Tag With Area", Id = 4701 },
+                    new HeldType { Family = "Room Tag", Type = "Room Tag", Id = 4700 },
+                };
+                string was;
+                HeldType chosen = DrawingSets.ChooseRoomTagType(held, 4701, out was);
+                Is(chosen != null && chosen.Id == 4701 && was == DrawingSets.DefaultTagType, "the model's default room tag type");
+                chosen = DrawingSets.ChooseRoomTagType(held, -1, out was);
+                Is(chosen != null && chosen.Id == 4700 && was == DrawingSets.FirstHeld, "no default of its own: the first held, by family then type");
+                chosen = DrawingSets.ChooseRoomTagType(held, 9999, out was);
+                Is(chosen != null && chosen.Id == 4700 && was == DrawingSets.FirstHeld, "a default it does not hold: the first held");
+                chosen = DrawingSets.ChooseRoomTagType(new List<HeldType>(), 4700, out was);
+                Is(chosen == null && was == DrawingSets.NoTagType, "the model holds none");
+            });
+
+            // ─── the room schedule: its fields, its segments, its fit
+            Test("the room schedule holds Level, Number, Name and Area, sorted by level then number, its area totalled; a field Revit does not offer is left out, saying why; a model with no room still gets it, saying so", () =>
+            {
+                Is(DrawingSets.RoomScheduleFields.SequenceEqual(new[] { "Level", "Number", "Name", "Area" }), "its fields, in order");
+                Is(DrawingSets.RoomScheduleSort.SequenceEqual(new[] { "Level", "Number" }), "sorted by level, then number");
+                Eq("Area", DrawingSets.TotalledField, "the grand total totals the area beside the count");
+                Is(DrawingSets.MissingFieldsWhy(new List<string>()) == null && DrawingSets.MissingFieldsWhy(null) == null, "none missing, no why");
+                Eq("Revit offers a room schedule no Area field, so it is made without it", DrawingSets.MissingFieldsWhy(new List<string> { "Area" }), "one");
+                Eq("Revit offers a room schedule no Name and Area fields, so it is made without them", DrawingSets.MissingFieldsWhy(new List<string> { "Name", "Area" }), "two");
+                Eq("Revit offers a room schedule no Level, Name and Area fields, so it is made without them", DrawingSets.MissingFieldsWhy(new List<string> { "Level", "Name", "Area" }), "three");
+                Is(DrawingSets.RoomsScheduledWhy(5) == null && DrawingSets.RoomsScheduledWhy(0) == null, "a count read, none among them, is no shortfall");
+                string unread = DrawingSets.RoomsScheduledWhy(null);
+                Is(unread != null && unread.Contains("could not be read back"), "a count not read is never taken as some: " + unread);
+                Eq("the model holds no room, so it lists none", DrawingSets.RoomsScheduledNote(0), "a model with no room");
+                Is(DrawingSets.RoomsScheduledNote(5) == null && DrawingSets.RoomsScheduledNote(-1) == null, "one with some, or not read");
+            });
+            Test("a room schedule taller than the sheet's usable area is split into the fewest segments that each fit its height, each repeating its title and column headers, and set side by side from the usable area's left; one that fits stays whole", () =>
+            {
+                DrawingSheetArea a = DrawingSets.Area(0, 0, 3.5, 2.5, DrawingSets.FromTitleBlock);
+                Is(Near(a.Height, 2.3, 1e-9) && Near(a.Width, 2.67, 1e-9), "the usable area, 2.67 x 2.3 ft");
+                double border;
+                Eq(1, DrawingSets.ScheduleSegments(0.05, 0.04, Enumerable.Repeat(0.02, 30).ToList(), a.Height, out border), "0.69 ft of schedule fits whole");
+                Is(Near(border, 2.25, 1e-9), "its border, were it split, the usable height less the title: " + border);
+                // 300 rows of 0.02 ft: 2.3 - 0.05 - 0.04 = 2.21 ft of body per segment, 110 rows; 110, 110 and 80.
+                Eq(3, DrawingSets.ScheduleSegments(0.05, 0.04, Enumerable.Repeat(0.02, 300).ToList(), a.Height, out border), "6.09 ft of schedule in three segments");
+                Is(Near(border, 2.25, 1e-9), "each segment but the last set to 2.25 ft, headers and body, under its title: " + border);
+                Eq(1, DrawingSets.ScheduleSegments(0.05, 0.04, Enumerable.Repeat(0.01, 221).ToList(), a.Height, out border), "exactly the usable height: whole");
+                Eq(2, DrawingSets.ScheduleSegments(0.05, 0.04, Enumerable.Repeat(0.01, 222).ToList(), a.Height, out border), "one row more: two");
+                Eq(1, DrawingSets.ScheduleSegments(1.0, 1.2, new List<double> { 0.2, 0.2 }, a.Height, out border), "a title and headers that leave no room for a row: splitting cannot help, so whole, and judged where it stands");
+                Eq(1, DrawingSets.ScheduleSegments(0.05, 0.04, new List<double>(), a.Height, out border), "no row read: whole");
+                List<double> lefts = DrawingSets.SideBySide(new List<double> { 0.5, 0.5, 0.4 }, a, DrawingSets.SegmentGapFt);
+                Eq(3, lefts.Count, "one left edge per segment");
+                Is(Near(lefts[0], 0.1, 1e-12) && Near(lefts[1], 0.6 + 0.25 / 12, 1e-12) && Near(lefts[2], 1.1 + 0.5 / 12, 1e-12), "from the usable area's left, a quarter inch between: " + string.Join(", ", lefts));
+            });
+            Test("a room schedule fits as any view does, when the box of all its segments lies within the usable area; one that does not says why: a segment too tall, its segments too wide side by side, or it stands over the edge", () =>
+            {
+                DrawingSheetArea a = DrawingSets.Area(0, 0, 3.5, 2.5, DrawingSets.FromTitleBlock);
+                var whole = new List<ScheduleSegment> { Seg(0, 0.1, 2.2125, 0.516667, 2.4) };
+                Is(DrawingSets.ScheduleFitWhy(whole, a) == null, "the made-up report's schedule fits");
+                List<double> min, max;
+                DrawingSets.Union(whole, out min, out max);
+                Is(min.SequenceEqual(new[] { 0.1, 2.2125 }) && max.SequenceEqual(new[] { 0.516667, 2.4 }), "the box of its one segment");
+                var three = new List<ScheduleSegment> { Seg(0, 0.1, 0.15, 1.0, 2.4), Seg(1, 1.020833, 0.15, 1.920833, 2.4), Seg(2, 1.941667, 1.0, 2.841667, 2.4) };
+                DrawingSets.Union(three, out min, out max);
+                Is(min.SequenceEqual(new[] { 0.1, 0.15 }) && max.SequenceEqual(new[] { 2.841667, 2.4 }), "the box of all three");
+                Eq("its 3 segments side by side are 2.74 ft across, wider than the sheet's usable area (2.67 ft)", DrawingSets.ScheduleFitWhy(three, a), "too wide");
+                Eq("it stands 2.35 ft tall, taller than the sheet's usable area (2.3 ft)", DrawingSets.ScheduleFitWhy(new List<ScheduleSegment> { Seg(0, 0.1, 0.05, 0.6, 2.4) }, a), "one too tall");
+                Eq("segment 2 of 2 stands 2.35 ft tall, taller than the sheet's usable area (2.3 ft)", DrawingSets.ScheduleFitWhy(new List<ScheduleSegment> { Seg(0, 0.1, 0.5, 0.6, 2.4), Seg(1, 0.620833, 0.05, 1.120833, 2.4) }, a), "a segment too tall");
+                Eq("it overruns the sheet's usable area where it stands", DrawingSets.ScheduleFitWhy(new List<ScheduleSegment> { Seg(0, 0.05, 2.2125, 0.466667, 2.4) }, a), "over the edge");
+                Eq("no segment of it could be read on its sheet", DrawingSets.ScheduleFitWhy(new List<ScheduleSegment> { new ScheduleSegment { Segment = 0, InstanceId = 990413 } }, a), "no box read");
+                DrawingSets.Union(new List<ScheduleSegment>(), out min, out max);
+                Is(min == null && max == null, "no box of none");
+            });
+
+            // ─── the invariants of the rooms in the set
+            Test("the invariants hold a version 8 set's plans to the rooms placed on their levels: no more tagged than are there, a why when fewer, which makes the set applied in part; a version 7 list's plans to none", () =>
+            {
+                DrawingSetReport whole = Fixture(root).DrawingSet;
+                Is(whole.TagsRooms, "the made-up report's set tags its plans' rooms");
+                Is(DrawingSets.Problems(whole, ChangeStatus.Applied).Count == 0, string.Join("; ", DrawingSets.Problems(whole, ChangeStatus.Applied)));
+                DrawingSetReport more = Fixture(root).DrawingSet;
+                more.Sheets[0].RoomsTagged = 4;
+                List<string> p = DrawingSets.Problems(more, ChangeStatus.Applied);
+                Is(p.Any(x => x.Contains("A-101 Level 1 Floor Plan tags 4 rooms, more than the 3 placed on its level")), string.Join("; ", p));
+                DrawingSetReport fewer = Fixture(root).DrawingSet;
+                fewer.Sheets[1].RoomsTagged = 1;
+                p = DrawingSets.Problems(fewer, ChangeStatus.Applied);
+                Is(p.Any(x => x.Contains("A-102 Level 2 Floor Plan tags 1 of the 2 rooms placed on its level, but says not why")), string.Join("; ", p));
+                fewer.Sheets[1].RoomsWhy = DrawingSets.RoomsWhy("Level 2", 2, 1, null, "room 202: ArgumentException: made up");
+                Is(DrawingSets.Problems(fewer, ChangeStatus.AppliedInPart).Count == 0, "one that says why breaks none: " + string.Join("; ", DrawingSets.Problems(fewer, ChangeStatus.AppliedInPart)));
+                string why;
+                Eq(ChangeStatus.AppliedInPart, DrawingSets.Judge(fewer, out why), "a room not tagged makes the set applied in part");
+                Is(why.Contains("1 of the 12 views asked is not as asked") && why.Contains("A-102 Level 2 Floor Plan: Revit would not tag 1 of the 2 rooms placed on level \"Level 2\" (room 202: ArgumentException: made up)"), why);
+                Is(DrawingSets.Problems(fewer, ChangeStatus.Applied).Any(x => x.Contains("reads applied though")), "applied it is not");
+                DrawingSetReport untold = Fixture(root).DrawingSet;
+                untold.Sheets[0].RoomsOnLevel = null;
+                untold.Sheets[0].RoomsTagged = null;
+                p = DrawingSets.Problems(untold, ChangeStatus.Applied);
+                Is(p.Any(x => x.Contains("A-101 Level 1 Floor Plan is a plan of a set whose plans tag their rooms, but says not how many rooms are placed on its level and how many it tagged")), string.Join("; ", p));
+                DrawingSetReport needless = Fixture(root).DrawingSet;
+                needless.Sheets[0].RoomsWhy = "made up";
+                p = DrawingSets.Problems(needless, ChangeStatus.AppliedInPart);
+                Is(p.Any(x => x.Contains("A-101 Level 1 Floor Plan tags every room placed on its level, yet says why not")), string.Join("; ", p));
+                DrawingSetReport elevation = Fixture(root).DrawingSet;
+                elevation.Sheets[3].RoomsOnLevel = 0;
+                elevation.Sheets[2].RoomsScheduled = 5;
+                p = DrawingSets.Problems(elevation, ChangeStatus.Applied);
+                Is(p.Any(x => x.Contains("A-201 North Elevation says what rooms it tagged, though it is no plan")), string.Join("; ", p));
+                Is(p.Any(x => x.Contains("A-103 Roof Floor Plan says what it schedules, though it is no room schedule")), string.Join("; ", p));
+                // A version 7 list's set, as add-in 0.15.2 reported it: no tag, no schedule, no tag type.
+                DrawingSetReport older = Fixture(root).DrawingSet;
+                older.TagsRooms = false;
+                older.RoomTagType = null;
+                older.RoomTagTypeWas = null;
+                older.ViewsAsked = DrawingSets.KindsAsked(null, 7);
+                older.Sheets.RemoveAll(x => DrawingSets.SinceRooms(x.Kind));
+                DrawingSets.Count(older);
+                p = DrawingSets.Problems(older, ChangeStatus.Applied);
+                Is(p.Any(x => x.Contains("A-101 Level 1 Floor Plan says what rooms it tagged, though its set's plans tag none (a list below version 8)")), string.Join("; ", p));
+                foreach (DrawingSheet s in older.Sheets)
+                {
+                    s.RoomsOnLevel = null;
+                    s.RoomsTagged = null;
+                }
+                Is(DrawingSets.Problems(older, ChangeStatus.Applied).Count == 0, "a version 7 list's set keeps every invariant: " + string.Join("; ", DrawingSets.Problems(older, ChangeStatus.Applied)));
+                Eq(ChangeStatus.Applied, DrawingSets.Judge(older, out why), "and is judged as it was: " + why);
+                older.RoomTagType = new TitleBlockRef { Family = "Room Tag", Type = "Room Tag", TypeId = 4700 };
+                Is(DrawingSets.Problems(older, ChangeStatus.Applied).Any(x => x.Contains("the set names a room tag type, though its plans tag no rooms")), "a tag type of a set that tags none");
+                DrawingSetReport scheduled7 = Fixture(root).DrawingSet;
+                scheduled7.TagsRooms = false;
+                scheduled7.RoomTagType = null;
+                scheduled7.RoomTagTypeWas = null;
+                foreach (DrawingSheet s in scheduled7.Sheets.Where(x => x.Kind == DrawingSetViewValues.Plans))
+                {
+                    s.RoomsOnLevel = null;
+                    s.RoomsTagged = null;
+                }
+                p = DrawingSets.Problems(scheduled7, ChangeStatus.Applied);
+                Is(p.Any(x => x.Contains("A-601 Room Schedule is a room schedule, which a set makes only of a list of version 8 or later")), string.Join("; ", p));
+                Is(p.Any(x => x.Contains("A-001 Sheet Index is a cover, which a set makes only of a list of version 8 or later")), string.Join("; ", p));
+                DrawingSetReport noType = Fixture(root).DrawingSet;
+                noType.RoomTagTypeWas = DrawingSets.NoTagType;
+                Is(DrawingSets.Problems(noType, ChangeStatus.Applied).Any(x => x.Contains("the set says the model holds no room tag type, yet names one")), "none, yet one named");
+                noType.RoomTagTypeWas = DrawingSets.DefaultTagType;
+                noType.RoomTagType = null;
+                Is(DrawingSets.Problems(noType, ChangeStatus.Applied).Any(x => x.Contains("the set says how its room tag type was chosen, but names none")), "chosen, yet none named");
+            });
+            Test("the invariants hold the room schedule to its schedule instances: placed names one per segment, numbered from 0, fits only within the usable area, says how many rooms it lists, and names nothing of a cropped graphic view", () =>
+            {
+                ChangeReport c = Fixture(root);
+                Eq(RoomSchedule, c.DrawingSet.Sheets[10].Kind, "the made-up report's room schedule");
+                Is(ReportCheck.Violations(c).Count == 0, string.Join("; ", ReportCheck.Violations(c)));
+                Func<Action<DrawingSheet>, string, List<string>> broken = (edit, status) =>
+                {
+                    DrawingSetReport r = Fixture(root).DrawingSet;
+                    edit(r.Sheets[10]);
+                    DrawingSets.Count(r);
+                    return DrawingSets.Problems(r, status);
+                };
+                List<string> p = broken(s => s.ScheduleSegments = null, ChangeStatus.Applied);
+                Is(p.Any(x => x.Contains("A-601 Room Schedule reads placed but names no schedule instance of each segment")), string.Join("; ", p));
+                p = broken(s => s.Segments = 2, ChangeStatus.Applied);
+                Is(p.Any(x => x.Contains("A-601 Room Schedule counts 2 segment(s) but places 1")), string.Join("; ", p));
+                p = broken(s => s.ScheduleSegments[0].Segment = 1, ChangeStatus.Applied);
+                Is(p.Any(x => x.Contains("A-601 Room Schedule's segments are not numbered 0 to 0, each once")), string.Join("; ", p));
+                p = broken(s =>
+                {
+                    s.ScheduleSegments[0].MaxFt = new List<double> { 0.516667, 2.45 };
+                    s.ViewportMaxFt = new List<double> { 0.516667, 2.45 };
+                }, ChangeStatus.Applied);
+                Is(p.Any(x => x.Contains("A-601 Room Schedule reads that it fits, though its viewport overruns the sheet's usable area")), string.Join("; ", p));
+                Is(p.Any(x => x.Contains("A-601 Room Schedule reads that it fits, though a segment of it overruns the sheet's usable area")), string.Join("; ", p));
+                p = broken(s =>
+                {
+                    s.Scale = 48;
+                    s.ScaleText = DrawingSets.ScaleText(48, false);
+                }, ChangeStatus.Applied);
+                Is(p.Any(x => x.Contains("A-601 Room Schedule is a room schedule, yet names a scale")), string.Join("; ", p));
+                p = broken(s => s.ViewportId = 990414, ChangeStatus.Applied);
+                Is(p.Any(x => x.Contains("A-601 Room Schedule is a room schedule, yet names a viewport")), string.Join("; ", p));
+                p = broken(s => s.RoomsScheduled = null, ChangeStatus.Applied);
+                Is(p.Any(x => x.Contains("A-601 Room Schedule reads as asked but says not how many rooms it lists")), string.Join("; ", p));
+                p = broken(s =>
+                {
+                    s.RoomsScheduled = null;
+                    s.Why = DrawingSets.RoomsScheduledWhy(null);
+                }, ChangeStatus.AppliedInPart);
+                Is(p.Count == 0, "one that says why breaks none: " + string.Join("; ", p));
+                p = broken(s =>
+                {
+                    s.SheetId = 0;
+                    s.SheetNumber = null;
+                    s.SheetName = null;
+                    s.TitleBlockInstanceId = 0;
+                    s.Placed = false;
+                    s.Fits = false;
+                    s.Segments = 0;
+                    s.ScheduleSegments = null;
+                    s.ViewportMinFt = null;
+                    s.ViewportMaxFt = null;
+                    s.Why = "its sheet could not be made: ArgumentException: made up";
+                }, ChangeStatus.AppliedInPart);
+                Is(p.Count == 0, "a schedule made but not placed, saying why, breaks none: " + string.Join("; ", p));
+                DrawingSetReport unplaced = Fixture(root).DrawingSet;
+                unplaced.Sheets[10].Placed = false;
+                unplaced.Sheets[10].Fits = false;
+                p = DrawingSets.Problems(unplaced, ChangeStatus.AppliedInPart);
+                Is(p.Any(x => x.Contains("A-601 Room Schedule names schedule instances, though it reads not placed")), string.Join("; ", p));
+                DrawingSetReport back = Fixture(root).DrawingSet;
+                DrawingSets.RolledBack(back, "Revit raised an error: made up");
+                Is(back.Sheets.All(s => s.RoomsOnLevel == null && s.RoomsTagged == null && s.RoomsWhy == null && s.ScheduleFields == null && s.Segments == 0 && s.ScheduleSegments == null && s.RoomsScheduled == null), "a set rolled back tagged and scheduled nothing");
+                Is(DrawingSets.Problems(back, ChangeStatus.RolledBack).Count == 0, string.Join("; ", DrawingSets.Problems(back, ChangeStatus.RolledBack)));
+            });
+
+            // ─── the cover (since add-in 0.16.0): its sheet index, its note, how it fits
+            Test("the cover's sheet index lists every sheet by its number and name, sorted by number; its note says what the set is, by the project's name when it has one of its own, in words held in one place", () =>
+            {
+                Is(DrawingSets.SheetIndexFields.SequenceEqual(new[] { "Sheet Number", "Sheet Name" }), "its fields");
+                Is(DrawingSets.SheetIndexSort.SequenceEqual(new[] { "Sheet Number" }), "sorted by number");
+                Eq("Revit offers a sheet list no Sheet Name field, so it is made without it", DrawingSets.MissingFieldsWhy(new List<string> { "Sheet Name" }, "a sheet list"), "a field Revit does not offer a sheet list");
+                Is(DrawingSets.CoverNoteWords.Contains("{0}"), "the words name the project");
+                Eq("Conceptual drawing set of Made-up Model: drawings of the model to look the design over, not for permit or construction.", DrawingSets.CoverNote("Made-up Model"), "by its Project Name");
+                Eq("Conceptual drawing set of Made-up Model: drawings of the model to look the design over, not for permit or construction.", DrawingSets.CoverNote("  Made-up Model "), "trimmed");
+                Eq("Conceptual drawing set: drawings of the model to look the design over, not for permit or construction.", DrawingSets.CoverNote(" "), "no Project Name: no name, never Design Automation's input.rvt");
+                Eq("Conceptual drawing set: drawings of the model to look the design over, not for permit or construction.", DrawingSets.CoverNote(null), "none read: no name");
+                Eq("Conceptual drawing set: drawings of the model to look the design over, not for permit or construction.", DrawingSets.CoverNote("project name"), "a template's placeholder is no name of its own");
+                Is(DrawingSets.SheetsListedWhy(12) == null && DrawingSets.SheetsListedWhy(0) == null, "a count read is no shortfall");
+                string unread = DrawingSets.SheetsListedWhy(null);
+                Is(unread != null && unread.Contains("could not be read back"), "a count not read is never taken as some: " + unread);
+                var textTypes = new List<HeldType> { new HeldType { Family = "Text", Type = "3/32\" Arial", Id = 5101 }, new HeldType { Family = "Text", Type = "1/4\" Arial", Id = 5102 } };
+                string was;
+                HeldType chosen = DrawingSets.DefaultOrFirst(textTypes, 5101, out was);
+                Is(chosen.Id == 5101 && was == DrawingSets.DefaultTagType, "the model's default text note type");
+                chosen = DrawingSets.DefaultOrFirst(textTypes, -1, out was);
+                Is(chosen.Id == 5102 && was == DrawingSets.FirstHeld, "else the first it holds, by name");
+                Is(DrawingSets.DefaultOrFirst(new List<HeldType>(), 5101, out was) == null && was == DrawingSets.NoTagType, "none held: " + DrawingSets.NoTextTypeWhy);
+            });
+            Test("the cover's note is wrapped to six inches within what Revit allows its type, its top-left under the index a quarter inch below, or beside it at the top; the cover fits when its index and its note lie within the usable area", () =>
+            {
+                DrawingSheetArea a = DrawingSets.Area(0, 0, 3.5, 2.5, DrawingSets.FromTitleBlock);
+                Eq(0.5, DrawingSets.NoteWidth(DrawingSets.CoverNoteWidthFt, 0.01, 10), "six inches");
+                Eq(0.6, DrawingSets.NoteWidth(0.5, 0.6, 10), "no narrower than Revit allows");
+                Eq(0.3, DrawingSets.NoteWidth(0.5, 0.01, 0.3), "no wider");
+                var indexMin = new List<double> { 0.1, 2.15 };
+                var indexMax = new List<double> { 0.391667, 2.4 };
+                double gap = DrawingSets.SegmentGapFt;
+                double[] under = DrawingSets.NoteUnder(indexMin, indexMax, a, gap);
+                Is(Near(under[0], 0.1, 1e-12) && Near(under[1], 2.15 - gap, 1e-12), "under the index: " + string.Join(", ", under));
+                double[] beside = DrawingSets.NoteBeside(indexMin, indexMax, a, gap);
+                Is(Near(beside[0], 0.391667 + gap, 1e-12) && Near(beside[1], 2.4, 1e-12), "beside it, at the top: " + string.Join(", ", beside));
+                Is(DrawingSets.NoteUnder(null, null, a, gap).SequenceEqual(new[] { 0.1, 2.4 }) && DrawingSets.NoteBeside(null, null, a, gap).SequenceEqual(new[] { 0.1, 2.4 }), "no index box read: the usable area's top-left");
+                var index = new List<ScheduleSegment> { Seg(0, 0.1, 2.15, 0.391667, 2.4) };
+                var noteMin = new List<double> { 0.1, 2.066667 };
+                var noteMax = new List<double> { 0.6, 2.129167 };
+                List<double> min, max;
+                DrawingSets.CoverBox(index, noteMin, noteMax, out min, out max);
+                Is(min.SequenceEqual(new[] { 0.1, 2.066667 }) && max.SequenceEqual(new[] { 0.6, 2.4 }), "the box of its index and its note");
+                DrawingSets.CoverBox(index, null, null, out min, out max);
+                Is(min.SequenceEqual(new[] { 0.1, 2.15 }) && max.SequenceEqual(new[] { 0.391667, 2.4 }), "with no note, its index's");
+                Is(DrawingSets.CoverFitWhy(index, noteMin, noteMax, a) == null && DrawingSets.CoverFitWhy(index, null, null, a) == null, "the made-up report's cover fits, with its note or without");
+                Eq("its note overruns the sheet's usable area, under its index and beside it alike", DrawingSets.CoverFitWhy(index, new List<double> { 0.1, 0.05 }, new List<double> { 0.6, 0.2 }, a), "a note past the bottom");
+                var wide = new List<ScheduleSegment> { Seg(0, 0.1, 0.15, 1.0, 2.4), Seg(1, 1.020833, 0.15, 1.920833, 2.4), Seg(2, 1.941667, 1.0, 2.841667, 2.4) };
+                Eq("its sheet index: its 3 segments side by side are 2.74 ft across, wider than the sheet's usable area (2.67 ft)", DrawingSets.CoverFitWhy(wide, null, null, a), "an index too wide");
+                Eq("its sheet index: its 3 segments side by side are 2.74 ft across, wider than the sheet's usable area (2.67 ft); its note overruns the sheet's usable area, under its index and beside it alike", DrawingSets.CoverFitWhy(wide, new List<double> { 2.8, 2.0 }, new List<double> { 3.3, 2.4 }, a), "both");
+            });
+            Test("the invariants hold the cover as the room schedule, and to its note: placed or not, with a why when not, which makes the set applied in part; it says how many sheets its index lists; a version 7 list's set has none", () =>
+            {
+                ChangeReport c = Fixture(root);
+                Eq(Cover, c.DrawingSet.Sheets[11].Kind, "the made-up report's cover, last");
+                Is(ReportCheck.Violations(c).Count == 0, string.Join("; ", ReportCheck.Violations(c)));
+                Func<Action<DrawingSheet>, string, List<string>> broken = (edit, status) =>
+                {
+                    DrawingSetReport r = Fixture(root).DrawingSet;
+                    edit(r.Sheets[11]);
+                    DrawingSets.Count(r);
+                    return DrawingSets.Problems(r, status);
+                };
+                Action<DrawingSheet> noNote = s =>
+                {
+                    s.NotePlaced = false;
+                    s.NoteId = 0;
+                    s.NoteText = null;
+                    s.NoteMinFt = null;
+                    s.NoteMaxFt = null;
+                    s.ViewportMinFt = new List<double> { 0.1, 2.15 };
+                    s.ViewportMaxFt = new List<double> { 0.391667, 2.4 };
+                };
+                List<string> p = broken(noNote, ChangeStatus.Applied);
+                Is(p.Any(x => x.Contains("A-001 Sheet Index reads its note not placed but says not why")), string.Join("; ", p));
+                p = broken(s =>
+                {
+                    noNote(s);
+                    s.NoteWhy = DrawingSets.NoTextTypeWhy + ", so it has no note";
+                }, ChangeStatus.AppliedInPart);
+                Is(p.Count == 0, "a cover with no note that says why breaks none: " + string.Join("; ", p));
+                DrawingSetReport bare = Fixture(root).DrawingSet;
+                noNote(bare.Sheets[11]);
+                bare.Sheets[11].NoteWhy = DrawingSets.NoTextTypeWhy + ", so it has no note";
+                string why;
+                Eq(ChangeStatus.AppliedInPart, DrawingSets.Judge(bare, out why), "a cover with no note makes the set applied in part");
+                Is(why.Contains("1 of the 12 views asked is not as asked: A-001 Sheet Index: the model holds no text note type, so it has no note"), why);
+                p = broken(s => s.NoteId = 0, ChangeStatus.Applied);
+                Is(p.Any(x => x.Contains("A-001 Sheet Index reads its note placed but names no note")), string.Join("; ", p));
+                p = broken(s => s.NoteWhy = "made up", ChangeStatus.AppliedInPart);
+                Is(p.Any(x => x.Contains("A-001 Sheet Index reads its note placed, yet says why not")), string.Join("; ", p));
+                p = broken(s => s.NotePlaced = null, ChangeStatus.Applied);
+                Is(p.Any(x => x.Contains("A-001 Sheet Index is a cover that says not whether its note was placed")), string.Join("; ", p));
+                p = broken(s =>
+                {
+                    s.NotePlaced = false;
+                    s.NoteWhy = "made up";
+                }, ChangeStatus.AppliedInPart);
+                Is(p.Any(x => x.Contains("A-001 Sheet Index names a note, though it reads none placed")), string.Join("; ", p));
+                p = broken(s => s.NoteMinFt = new List<double> { 0.1, 0.05 }, ChangeStatus.Applied);
+                Is(p.Any(x => x.Contains("A-001 Sheet Index reads that it fits, though its note overruns the sheet's usable area")), string.Join("; ", p));
+                p = broken(s => s.SheetsListed = null, ChangeStatus.Applied);
+                Is(p.Any(x => x.Contains("A-001 Sheet Index reads as asked but says not how many sheets its index lists")), string.Join("; ", p));
+                p = broken(s => s.ScheduleSegments = null, ChangeStatus.Applied);
+                Is(p.Any(x => x.Contains("A-001 Sheet Index reads placed but names no schedule instance of each segment")), "placed as the room schedule is: " + string.Join("; ", p));
+                p = broken(s =>
+                {
+                    s.Scale = 96;
+                    s.ScaleText = DrawingSets.ScaleText(96, false);
+                }, ChangeStatus.Applied);
+                Is(p.Any(x => x.Contains("A-001 Sheet Index is a cover, yet names a scale")), string.Join("; ", p));
+                DrawingSetReport plan = Fixture(root).DrawingSet;
+                plan.Sheets[0].SheetsListed = 12;
+                plan.Sheets[10].NotePlaced = true;
+                p = DrawingSets.Problems(plan, ChangeStatus.Applied);
+                Is(p.Any(x => x.Contains("A-101 Level 1 Floor Plan says what sheets it lists or what note it holds, though it is no cover")), string.Join("; ", p));
+                Is(p.Any(x => x.Contains("A-601 Room Schedule says what sheets it lists or what note it holds, though it is no cover")), string.Join("; ", p));
+                DrawingSetReport back = Fixture(root).DrawingSet;
+                DrawingSets.RolledBack(back, "Revit raised an error: made up");
+                Is(back.Sheets.All(s => s.SheetsListed == null && s.NotePlaced == null && s.NoteWhy == null && s.NoteId == 0 && s.NoteText == null && s.NoteMinFt == null && s.NoteMaxFt == null), "a set rolled back noted nothing");
+                Is(DrawingSets.Problems(back, ChangeStatus.RolledBack).Count == 0, string.Join("; ", DrawingSets.Problems(back, ChangeStatus.RolledBack)));
+            });
+        }
+
+        /// <summary>A made-up segment of a room schedule on its sheet, its box in sheet feet.</summary>
+        private static ScheduleSegment Seg(int segment, double minX, double minY, double maxX, double maxY)
+        {
+            return new ScheduleSegment { Segment = segment, InstanceId = 990413 + segment, MinFt = new List<double> { minX, minY }, MaxFt = new List<double> { maxX, maxY } };
         }
 
         private static SetLevel Lv(long id, string name, double elevationFt, bool empty)

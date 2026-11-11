@@ -28,7 +28,10 @@
 // foundation is refused here, as the server refuses it. Since add-in 0.15.0, version 7's add_drawing_set
 // needs version 7; its views name each kind of view once, from the set's own (plans, elevations, sections,
 // isometric); it names levels and says what to do with an empty one only beside plans; and a list makes
-// one drawing set (Logic/DrawingSets.cs).
+// one drawing set (Logic/DrawingSets.cs). Since add-in 0.16.0, version 8: a drawing set's views may name
+// room_schedule and cover, which need version 8, as add_drawing_set needs 7; a version-8 set that says nothing
+// makes the room schedule and the cover too and tags its plans' rooms, and every older list's set reads as it
+// did (Logic/DrawingSets.Rooms.cs, DrawingSets.Cover.cs).
 //
 // PURE LOGIC: no Revit type here, so addin/tests runs it on any OS.
 
@@ -78,6 +81,8 @@ namespace Flo2Rvt.Addin.Edit.Logic
         public const long DoorFamiliesVersion = 6;
         /// <summary>The first change-list version that reads add_drawing_set (add-in 0.15.0).</summary>
         public const long DrawingSetVersion = 7;
+        /// <summary>The first change-list version whose drawing set tags its plans' rooms and reads room_schedule and cover (add-in 0.16.0).</summary>
+        public const long DrawingSetRoomsVersion = 8;
         /// <summary>The most sizes one foundation change may set.</summary>
         public const int MaxSizes = 16;
 
@@ -477,7 +482,7 @@ namespace Flo2Rvt.Addin.Edit.Logic
                 if (m.TryGetValue("id", out x)) Text(x, at + ".id", 1, 64, IdPattern);
             }
 
-            /// <summary>Since add-in 0.15.0: a drawing set, once in a list, its views each a kind of the set's once, its levels and empty levels only beside plans.</summary>
+            /// <summary>Since add-in 0.15.0: a drawing set, once in a list, its views each a kind of the set's once, its levels and empty levels only beside plans; since 0.16.0 its room schedule only in a version-8 list.</summary>
             private void DrawingSet(Dictionary<string, XElement> m, string at)
             {
                 if (version < DrawingSetVersion) Fail(at + ".kind", ChangeKinds.AddDrawingSet + " needs version " + DrawingSetVersion + "; say \"version\": " + DrawingSetVersion);
@@ -498,6 +503,8 @@ namespace Flo2Rvt.Addin.Edit.Logic
                             if (v == null) continue;
                             if (Array.IndexOf(DrawingSets.Order, v) < 0) Fail(here, "must be one of " + string.Join(", ", DrawingSets.Order));
                             else if (!seen.Add(v)) Fail(here, "names " + Quote(v) + " a second time");
+                            // Since add-in 0.16.0: the room schedule and the cover need version 8.
+                            else if (DrawingSets.SinceRooms(v) && version < DrawingSetRoomsVersion) Fail(here, v + " needs version " + DrawingSetRoomsVersion + "; say \"version\": " + DrawingSetRoomsVersion);
                         }
                         plans = seen.Contains(DrawingSetViewValues.Plans);
                     }

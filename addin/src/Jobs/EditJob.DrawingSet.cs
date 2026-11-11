@@ -93,6 +93,43 @@
 //      277.91 ft, south 108.78), not the 157.49 set from the view plane, so it passed a north elevation that
 //      printed no house and failed three that print it. Each elevation is also read as made, cropped, far
 //      clipped and placed (DrawingSheet.Readings), the instrument the second live run lacked.
+//   5. ROOMS IN THE SET (since add-in 0.16.0, change-list version 8; what is decided is Logic/DrawingSets.Rooms.cs).
+//      THE TAGS: once every view is made, each plan tags every room placed on its level, each in a part of its
+//      own: Document.Create.NewRoomTag(new LinkElementId(room.Id), new UV(x, y), plan.Id) ("Creates a new
+//      RoomTag referencing a room in the host model"; "A 2D point that defines the tag location on the level of
+//      the room"; "If successful a RoomTag object will be returned, otherwise null"), at the room's own point
+//      (its LocationPoint), of the room tag type chosen: the model's default, Document.GetDefaultFamilyTypeId of
+//      the Room Tags category, which NewRoomTag takes, else the first it holds, set by Element.ChangeTypeId. A
+//      tag Revit refuses, or makes none of, is counted out and the others go on. THE SCHEDULE:
+//      ViewSchedule.CreateSchedule(document, the Rooms category) ("Creates a regular schedule"), its fields
+//      found among ScheduleDefinition.GetSchedulableFields() by their parameters (ROOM_LEVEL_ID, ROOM_NUMBER,
+//      ROOM_NAME, ROOM_AREA) and added (AddField), sorted (AddSortGroupField, ScheduleSortGroupField of a field,
+//      ascending), a grand total row (ShowGrandTotal, ShowGrandTotalTitle, ShowGrandTotalCount: "a count of
+//      elements") totalling its area (ScheduleField.DisplayType Totals, where CanTotal). Its sheet as any
+//      view's, then its heights on a sheet (ViewSchedule.GetScheduleHeightsOnSheet: TitleHeight,
+//      ColumnHeaderHeight, GetBodyRowHeights) say how many segments fit the usable area's height; one that
+//      needs more than one is split (ViewSchedule.Split(int), "Splits the schedule into several segments by
+//      given segment number", in a part of its own) and every segment but the last set to that height
+//      (SetSegmentHeight: "If the row cannot be shown within the instance border, it will flow to the next
+//      segment"; "The last segment can not set height"), so each holds what fits and the last the rest. Each
+//      segment is placed by ScheduleSheetInstance.Create(document, sheet, schedule, origin, segmentIndex), or
+//      whole by the four-argument Create when it is not split, its box on the sheet read
+//      (Element.get_BoundingBox(sheet)), and moved (ScheduleSheetInstance.Point, "Location on the sheet where
+//      the ScheduleInstance is placed") so the boxes stand side by side from the usable area's top-left; read
+//      again, they say whether it fits. How many rooms it lists: FilteredElementCollector(document, its id),
+//      the Rooms category, once placed.
+//   6. THE COVER (since add-in 0.16.0, change-list version 8; Logic/DrawingSets.Cover.cs), made last of the set:
+//      its sheet index, ViewSchedule.CreateSheetList(document) ("A sheet list is a schedule of sheets in the
+//      project"), its fields found by their parameters (SHEET_NUMBER, SHEET_NAME) and sorted by number as the room
+//      schedule's are, on sheet A-001, placed and split as the room schedule is; then one text note,
+//      TextNote.Create(document, the sheet, its top-left, a width, its words, a text type) ("Creates a new
+//      line-wrapping text note element of the given width"; "For a left-aligned text (default), the origin is set
+//      at the top-left corner of the note's bounding box"), of the model's default text note type
+//      (Document.GetDefaultElementTypeId(ElementTypeGroup.TextNoteType)), or the first it holds, its width within
+//      TextElement.GetMinimumAllowedWidth and GetMaximumAllowedWidth, under the index, moved beside it
+//      (ElementTransformUtils.MoveElement) where its box read on the sheet overruns the usable area. Its words name
+//      the project by ProjectInformation's Name, or name none (DrawingSets.CoverNote). How many sheets the index lists:
+//      FilteredElementCollector(document, its id), the Sheets category, once placed.
 //
 // The job's existing PDF export (Probe/Exports.cs) then prints every printable sheet, these among them,
 // into sheets.pdf, in sheet-number order. The first live run (2026-11-10, add-in 0.15.0) measured the
@@ -130,15 +167,41 @@ namespace Flo2Rvt.Addin.Jobs
             public ViewFamilyType ThreeD;
         }
 
-        private static void AddDrawingSet(JobContext context, ElementIndex index, Change change, ChangeReport r)
+        /// <summary>Since add-in 0.16.0: the cover's sheet index's fields by name (DrawingSets.SheetIndexFields), each found among the fields Revit offers a sheet list by its parameter.</summary>
+        private static BuiltInParameter SheetFieldParameter(string field)
+        {
+            switch (field)
+            {
+                case "Sheet Number": return BuiltInParameter.SHEET_NUMBER;
+                case "Sheet Name": return BuiltInParameter.SHEET_NAME;
+                default: throw new ArgumentException("no sheet index field " + field);
+            }
+        }
+
+        /// <summary>The room schedule's fields by name (DrawingSets.RoomScheduleFields), each found among the fields Revit offers by its parameter.</summary>
+        private static BuiltInParameter RoomFieldParameter(string field)
+        {
+            switch (field)
+            {
+                case "Level": return BuiltInParameter.ROOM_LEVEL_ID;
+                case "Number": return BuiltInParameter.ROOM_NUMBER;
+                case "Name": return BuiltInParameter.ROOM_NAME;
+                case "Area": return BuiltInParameter.ROOM_AREA;
+                default: throw new ArgumentException("no room schedule field " + field);
+            }
+        }
+
+        private static void AddDrawingSet(JobContext context, ElementIndex index, Change change, ChangeReport r, long version)
         {
             Document doc = context.Document;
             bool metric = doc.DisplayUnitSystem == DisplayUnit.METRIC;
             var set = new DrawingSetReport
             {
-                ViewsAsked = DrawingSets.KindsAsked(change.Views),
+                // Since add-in 0.16.0: which kinds, and whether its plans tag their rooms, by the list's version.
+                ViewsAsked = DrawingSets.KindsAsked(change.Views, version),
                 EmptyLevels = change.EmptyLevels ?? EmptyLevelsValues.Include,
                 Units = metric ? "metric" : "imperial",
+                TagsRooms = DrawingSets.TagsRooms(version),
             };
             r.DrawingSet = set;
 
@@ -192,6 +255,55 @@ namespace Flo2Rvt.Addin.Jobs
             else if (!building.HasValue) input.CannotMake[DrawingSetViewValues.Sections] = set.BuildingWhy;
             if (types.ThreeD == null) input.CannotMake[DrawingSetViewValues.Isometric] = "the model holds no 3D view type";
             else if (!building.HasValue) input.CannotMake[DrawingSetViewValues.Isometric] = set.BuildingWhy;
+            // Since add-in 0.16.0: the rooms its plans tag and its schedule lists, and the room tag type the tags take.
+            List<SetRoom> rooms = null;
+            HeldType tagType = null;
+            string cannotTag = null;
+            bool plans = set.ViewsAsked.Contains(DrawingSetViewValues.Plans);
+            if (set.TagsRooms && (plans || set.ViewsAsked.Contains(DrawingSetViewValues.RoomSchedule))) rooms = Rooms(doc);
+            if (set.TagsRooms && plans)
+            {
+                try
+                {
+                    List<HeldType> tags = new FilteredElementCollector(doc).OfClass(typeof(FamilySymbol)).OfCategory(BuiltInCategory.OST_RoomTags).Cast<FamilySymbol>()
+                        .Select(t => new HeldType { Family = t.FamilyName, Type = t.Name, Id = t.Id.Value, FamilyId = t.Family != null ? t.Family.Id.Value : 0 }).ToList();
+                    ElementId defaultTag = doc.GetDefaultFamilyTypeId(new ElementId(BuiltInCategory.OST_RoomTags));
+                    string tagWas;
+                    tagType = DrawingSets.ChooseRoomTagType(tags, defaultTag != null ? defaultTag.Value : 0, out tagWas);
+                    set.RoomTagTypeWas = tagWas;
+                    if (tagType != null) set.RoomTagType = new TitleBlockRef { Family = tagType.Family, Type = tagType.Type, TypeId = tagType.Id };
+                    else cannotTag = DrawingSets.NoTagTypeWhy;
+                }
+                catch (Exception ex)
+                {
+                    tagType = null;
+                    set.RoomTagType = null;
+                    set.RoomTagTypeWas = null;
+                    cannotTag = "the model's room tag types could not be read (" + ex.GetType().Name + ": " + ex.Message + ")";
+                }
+            }
+            // Since add-in 0.16.0: the cover's note, its words and the text note type it takes.
+            HeldType noteType = null;
+            string noteText = null;
+            string cannotNote = null;
+            if (set.ViewsAsked.Contains(DrawingSetViewValues.Cover))
+            {
+                try
+                {
+                    noteText = DrawingSets.CoverNote(doc.ProjectInformation != null ? doc.ProjectInformation.Name : null);
+                    List<HeldType> textTypes = new FilteredElementCollector(doc).OfClass(typeof(TextNoteType)).Cast<TextNoteType>()
+                        .Select(t => new HeldType { Family = t.FamilyName, Type = t.Name, Id = t.Id.Value }).ToList();
+                    ElementId defaultText = doc.GetDefaultElementTypeId(ElementTypeGroup.TextNoteType);
+                    string noteWas;
+                    noteType = DrawingSets.DefaultOrFirst(textTypes, defaultText != null ? defaultText.Value : 0, out noteWas);
+                    if (noteType == null) cannotNote = DrawingSets.NoTextTypeWhy;
+                }
+                catch (Exception ex)
+                {
+                    noteType = null;
+                    cannotNote = "the model's text note types or project name could not be read (" + ex.GetType().Name + ": " + ex.Message + ")";
+                }
+            }
             foreach (ViewSheet s in new FilteredElementCollector(doc).OfClass(typeof(ViewSheet)).Cast<ViewSheet>()) input.TakenSheetNumbers.Add(s.SheetNumber);
             foreach (View v in new FilteredElementCollector(doc).OfClass(typeof(View)).Cast<View>()) if (!(v is ViewSheet)) input.TakenViewNames.Add(v.Name);
             set.Sheets = DrawingSets.Plan(input);
@@ -231,15 +343,28 @@ namespace Flo2Rvt.Addin.Jobs
                     s.MarkerId = marker;
                     own.Add(view.Id.Value);
                     if (marker != 0) own.Add(marker);
-                    try
+                    // A schedule (the room schedule, the cover's sheet index) has no view direction or view type to read back (since add-in 0.16.0).
+                    if (!DrawingSets.PlacedAsSchedule(s.Kind))
                     {
-                        ReadBack(d, s, view, building);
-                    }
-                    catch (Exception ex)
-                    {
-                        s.Why = Join(s.Why, "what Revit made of it could not be read back (" + ex.GetType().Name + ": " + ex.Message + ")");
+                        try
+                        {
+                            ReadBack(d, s, view, building);
+                        }
+                        catch (Exception ex)
+                        {
+                            s.Why = Join(s.Why, "what Revit made of it could not be read back (" + ex.GetType().Name + ": " + ex.Message + ")");
+                        }
                     }
                     made.Add(new KeyValuePair<DrawingSheet, View>(s, view));
+                }
+                // Since add-in 0.16.0: each plan of a version-8 set tags the rooms placed on its level.
+                if (set.TagsRooms)
+                {
+                    foreach (KeyValuePair<DrawingSheet, View> m in made.Where(x => x.Key.Kind == DrawingSetViewValues.Plans))
+                    {
+                        context.Heartbeat.Step("drawing set: the rooms of " + m.Key.ViewName);
+                        TagRooms(d, m.Key, m.Value, rooms, tagType, cannotTag, own);
+                    }
                 }
                 // Each plan and elevation cropped to the building, once every elevation hangs on its marker.
                 if (building.HasValue)
@@ -284,22 +409,74 @@ namespace Flo2Rvt.Addin.Jobs
                     n++;
                     context.Heartbeat.Step("drawing set: sheet " + n + " of " + made.Count + ", " + m.Key.SheetNumber);
                     DrawingSheet s = m.Key;
-                    string failed = ChangeRunner.Part(d, () => MakeSheet(d, s, m.Value, block, set, metric));
+                    bool schedule = DrawingSets.PlacedAsSchedule(s.Kind);
+                    bool cover = s.Kind == DrawingSetViewValues.Cover;
+                    string failed = ChangeRunner.Part(d, () =>
+                    {
+                        if (cover) MakeCoverSheet(d, s, (ViewSchedule)m.Value, block, set, metric, noteType, noteText, cannotNote);
+                        else if (schedule) MakeScheduleSheet(d, s, (ViewSchedule)m.Value, block, set, metric);
+                        else MakeSheet(d, s, m.Value, block, set, metric);
+                    });
                     if (failed != null)
                     {
                         ClearSheet(s);
                         s.SheetNumber = null;
                         s.SheetName = null;
                         s.Why = "its sheet could not be made: " + failed;
+                        if (cover)
+                        {
+                            s.NotePlaced = false;
+                            s.NoteWhy = "its sheet could not be made, so neither could its note";
+                        }
                     }
                     else
                     {
                         own.Add(s.SheetId);
                         if (s.TitleBlockInstanceId != 0) own.Add(s.TitleBlockInstanceId);
                         if (s.ViewportId != 0) own.Add(s.ViewportId);
+                        if (s.ScheduleSegments != null) foreach (ScheduleSegment x in s.ScheduleSegments) if (x.InstanceId != 0) own.Add(x.InstanceId);
+                        if (s.NoteId != 0) own.Add(s.NoteId);
                     }
+                    // A schedule has no scale of the set's (since add-in 0.16.0).
+                    if (schedule) continue;
                     s.Scale = m.Value.Scale;
                     s.ScaleText = DrawingSets.ScaleText(s.Scale, metric);
+                }
+                // Since add-in 0.16.0: how many rooms the schedule lists, once it is placed.
+                foreach (KeyValuePair<DrawingSheet, View> m in made.Where(x => x.Key.Kind == DrawingSetViewValues.RoomSchedule))
+                {
+                    string unread = null;
+                    try
+                    {
+                        d.Regenerate();
+                        m.Key.RoomsScheduled = new FilteredElementCollector(d, m.Value.Id).OfCategory(BuiltInCategory.OST_Rooms).WhereElementIsNotElementType().GetElementCount();
+                    }
+                    catch (Exception ex)
+                    {
+                        m.Key.RoomsScheduled = null;
+                        unread = ex.GetType().Name + ": " + ex.Message;
+                    }
+                    string scheduledWhy = DrawingSets.RoomsScheduledWhy(m.Key.RoomsScheduled);
+                    if (scheduledWhy != null) m.Key.Why = Join(m.Key.Why, scheduledWhy + (unread != null ? " (" + unread + ")" : ""));
+                    string held = DrawingSets.RoomsScheduledNote(rooms != null ? rooms.Count : -1);
+                    if (held != null) m.Key.Note = Join(m.Key.Note, held);
+                }
+                // Since add-in 0.16.0: how many sheets the cover's index lists, once every sheet is made.
+                foreach (KeyValuePair<DrawingSheet, View> m in made.Where(x => x.Key.Kind == DrawingSetViewValues.Cover))
+                {
+                    string unread = null;
+                    try
+                    {
+                        d.Regenerate();
+                        m.Key.SheetsListed = new FilteredElementCollector(d, m.Value.Id).OfCategory(BuiltInCategory.OST_Sheets).WhereElementIsNotElementType().GetElementCount();
+                    }
+                    catch (Exception ex)
+                    {
+                        m.Key.SheetsListed = null;
+                        unread = ex.GetType().Name + ": " + ex.Message;
+                    }
+                    string listedWhy = DrawingSets.SheetsListedWhy(m.Key.SheetsListed);
+                    if (listedWhy != null) m.Key.Why = Join(m.Key.Why, listedWhy + (unread != null ? " (" + unread + ")" : ""));
                 }
                 // Since add-in 0.15.2: what each elevation and section shows, judged once everything is set and placed, its far clip and crop read beside it.
                 if (building.HasValue)
@@ -446,6 +623,14 @@ namespace Flo2Rvt.Addin.Jobs
                     view = section;
                     break;
                 }
+                case DrawingSetViewValues.RoomSchedule:
+                    // Since add-in 0.16.0 (change-list version 8).
+                    view = MakeRoomSchedule(d, s);
+                    break;
+                case DrawingSetViewValues.Cover:
+                    // Since add-in 0.16.0: the cover's sheet index; its sheet and note come with the other sheets.
+                    view = MakeSheetIndex(d, s);
+                    break;
                 default:
                 {
                     View3D iso = View3D.CreateIsometric(d, types.ThreeD.Id);
@@ -475,6 +660,173 @@ namespace Flo2Rvt.Addin.Jobs
                 s.ViewName = view.Name;
             }
             return view;
+        }
+
+        /// <summary>
+        /// Since add-in 0.16.0: every room the model holds, as a set reads it (Logic/DrawingSets.Rooms.cs SetRoom):
+        /// its id, number and level, and its point when Revit placed it (SpatialElement.Location, "the location of
+        /// the room within the level", a LocationPoint; an unplaced room has none).
+        /// </summary>
+        private static List<SetRoom> Rooms(Document doc)
+        {
+            var rooms = new List<SetRoom>();
+            foreach (Autodesk.Revit.DB.Architecture.Room room in new FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_Rooms).WhereElementIsNotElementType().OfType<Autodesk.Revit.DB.Architecture.Room>())
+            {
+                var at = room.Location as LocationPoint;
+                XYZ p = at != null ? at.Point : null;
+                rooms.Add(new SetRoom
+                {
+                    Id = room.Id.Value,
+                    Number = room.Number,
+                    LevelId = room.LevelId != null ? room.LevelId.Value : 0,
+                    Placed = p != null,
+                    X = p != null ? p.X : 0,
+                    Y = p != null ? p.Y : 0,
+                });
+            }
+            return rooms;
+        }
+
+        /// <summary>
+        /// Since add-in 0.16.0: a plan's room tags, one for each room placed on its level (DrawingSets.ToTag), each in
+        /// a part of its own: Document.Create.NewRoomTag(new LinkElementId(room id), new UV(x, y), the plan's id), at
+        /// the room's point, of the type chosen (NewRoomTag takes the model's default; the first held is set by
+        /// ChangeTypeId where it is not that). One Revit refuses, or makes none of, is counted out and the others go
+        /// on; the plan says how many are on its level, how many it tagged, and why when fewer (DrawingSets.RoomsWhy).
+        /// Cannot is why none can be tagged (no room tag type), so none is tried.
+        /// </summary>
+        private static void TagRooms(Document d, DrawingSheet s, View plan, List<SetRoom> rooms, HeldType type, string cannot, HashSet<long> own)
+        {
+            List<SetRoom> onLevel = DrawingSets.ToTag(rooms, s.LevelId);
+            int tagged = 0;
+            string refused = null;
+            if (cannot == null && type != null)
+            {
+                foreach (SetRoom room in onLevel)
+                {
+                    long tagId = 0;
+                    string failed = ChangeRunner.Part(d, () =>
+                    {
+                        Autodesk.Revit.DB.Architecture.RoomTag tag = d.Create.NewRoomTag(new LinkElementId(new ElementId(room.Id)), new UV(room.X, room.Y), plan.Id);
+                        if (tag == null) throw new ChangeRefused("Revit made no tag of it (NewRoomTag returned none)");
+                        if (tag.GetTypeId().Value != type.Id) tag.ChangeTypeId(new ElementId(type.Id));
+                        tagId = tag.Id.Value;
+                    });
+                    if (failed != null)
+                    {
+                        if (refused == null) refused = "room " + (room.Number ?? room.Id.ToString(System.Globalization.CultureInfo.InvariantCulture)) + ": " + failed;
+                        continue;
+                    }
+                    tagged++;
+                    own.Add(tagId);
+                }
+            }
+            s.RoomsOnLevel = onLevel.Count;
+            s.RoomsTagged = tagged;
+            s.RoomsWhy = DrawingSets.RoomsWhy(s.Level, onLevel.Count, tagged, cannot ?? (type == null ? DrawingSets.NoTagTypeWhy : null), refused);
+        }
+
+        /// <summary>
+        /// Since add-in 0.16.0: the room schedule, made and defined: ViewSchedule.CreateSchedule(document, the Rooms
+        /// category); its fields (DrawingSets.RoomScheduleFields) found among ScheduleDefinition.GetSchedulableFields()
+        /// by their parameters (RoomFieldParameter), an instance field first, and added (AddField), one Revit does not
+        /// offer left out, saying why (DrawingSets.MissingFieldsWhy); sorted by level, then number (AddSortGroupField,
+        /// ascending); and a grand total row (ShowGrandTotal, ShowGrandTotalTitle, ShowGrandTotalCount) totalling its
+        /// area (ScheduleField.DisplayType Totals, where CanTotal). What Revit will not set of it says why, and it is
+        /// made still. Named, as every view is, by MakeView.
+        /// </summary>
+        private static View MakeRoomSchedule(Document d, DrawingSheet s)
+        {
+            ViewSchedule schedule = ViewSchedule.CreateSchedule(d, new ElementId(BuiltInCategory.OST_Rooms));
+            ScheduleDefinition definition = schedule.Definition;
+            Dictionary<string, ScheduleField> fields = AddFields(definition, DrawingSets.RoomScheduleFields, RoomFieldParameter, s, "a room schedule");
+            SortBy(definition, fields, DrawingSets.RoomScheduleSort, s);
+            try
+            {
+                definition.ShowGrandTotal = true;
+                definition.ShowGrandTotalTitle = true;
+                definition.ShowGrandTotalCount = true;
+            }
+            catch (Exception ex)
+            {
+                s.Why = Join(s.Why, "Revit would not give it a grand total row of the count (" + ex.GetType().Name + ": " + ex.Message + ")");
+            }
+            ScheduleField area;
+            if (fields.TryGetValue(DrawingSets.TotalledField, out area))
+            {
+                if (!area.CanTotal()) s.Why = Join(s.Why, "Revit will not total its " + DrawingSets.TotalledField + " field");
+                else
+                {
+                    try
+                    {
+                        area.DisplayType = ScheduleFieldDisplayType.Totals;
+                    }
+                    catch (Exception ex)
+                    {
+                        s.Why = Join(s.Why, "Revit would not total its " + DrawingSets.TotalledField + " field (" + ex.GetType().Name + ": " + ex.Message + ")");
+                    }
+                }
+            }
+            return schedule;
+        }
+
+        /// <summary>
+        /// Since add-in 0.16.0: a schedule's fields, by name, each found among ScheduleDefinition.GetSchedulableFields()
+        /// by its parameter (an instance field first) and added (AddField), in order; one Revit does not offer is left
+        /// out, saying why (DrawingSets.MissingFieldsWhy). The fields it holds are said on its sheet's report.
+        /// </summary>
+        private static Dictionary<string, ScheduleField> AddFields(ScheduleDefinition definition, string[] names, Func<string, BuiltInParameter> parameterOf, DrawingSheet s, string schedule)
+        {
+            IList<SchedulableField> offered = definition.GetSchedulableFields();
+            var fields = new Dictionary<string, ScheduleField>(StringComparer.Ordinal);
+            var missing = new List<string>();
+            foreach (string name in names)
+            {
+                var parameter = new ElementId(parameterOf(name));
+                SchedulableField field = offered.FirstOrDefault(f => parameter.Equals(f.ParameterId) && f.FieldType == ScheduleFieldType.Instance) ?? offered.FirstOrDefault(f => parameter.Equals(f.ParameterId));
+                if (field == null)
+                {
+                    missing.Add(name);
+                    continue;
+                }
+                fields[name] = definition.AddField(field);
+            }
+            s.ScheduleFields = names.Where(fields.ContainsKey).ToList();
+            string lacks = DrawingSets.MissingFieldsWhy(missing, schedule);
+            if (lacks != null) s.Why = Join(s.Why, lacks);
+            return fields;
+        }
+
+        /// <summary>Since add-in 0.16.0: a schedule sorted by these of its fields, in order, ascending (AddSortGroupField); one Revit will not sort by says why.</summary>
+        private static void SortBy(ScheduleDefinition definition, Dictionary<string, ScheduleField> fields, string[] names, DrawingSheet s)
+        {
+            foreach (string name in names)
+            {
+                ScheduleField by;
+                if (!fields.TryGetValue(name, out by)) continue;
+                try
+                {
+                    definition.AddSortGroupField(new ScheduleSortGroupField(by.FieldId, ScheduleSortOrder.Ascending));
+                }
+                catch (Exception ex)
+                {
+                    s.Why = Join(s.Why, "Revit would not sort it by " + name + " (" + ex.GetType().Name + ": " + ex.Message + ")");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Since add-in 0.16.0: the cover's sheet index, a sheet list (ViewSchedule.CreateSheetList: "a schedule of
+        /// sheets in the project"), its fields Sheet Number and Sheet Name (DrawingSets.SheetIndexFields, by their
+        /// parameters), sorted by number. It lists every sheet the model holds. Named, as every view is, by MakeView.
+        /// </summary>
+        private static View MakeSheetIndex(Document d, DrawingSheet s)
+        {
+            ViewSchedule index = ViewSchedule.CreateSheetList(d);
+            ScheduleDefinition definition = index.Definition;
+            Dictionary<string, ScheduleField> fields = AddFields(definition, DrawingSets.SheetIndexFields, SheetFieldParameter, s, "a sheet list");
+            SortBy(definition, fields, DrawingSets.SheetIndexSort, s);
+            return index;
         }
 
         /// <summary>What a view made is, as Revit holds it: its type, its view direction, which way it looks, and a section's cut.</summary>
@@ -784,14 +1136,20 @@ namespace Flo2Rvt.Addin.Jobs
             if (failed.Count > 0) s.Note = Join(s.Note, string.Join("; ", failed));
         }
 
-        /// <summary>The view's sheet, numbered and named, its scale fitted to the sheet's usable area and its viewport at its middle.</summary>
-        private static void MakeSheet(Document d, DrawingSheet s, View view, HeldType block, DrawingSetReport set, bool metric)
+        /// <summary>A sheet of the set, numbered and named as planned, with the set's title block (or none).</summary>
+        private static ViewSheet NewSheet(Document d, DrawingSheet s, HeldType block)
         {
             ViewSheet sheet = ViewSheet.Create(d, block != null ? new ElementId(block.Id) : ElementId.InvalidElementId);
             sheet.SheetNumber = s.SheetNumber;
             sheet.Name = s.SheetName;
             d.Regenerate();
-            long titleBlock = 0;
+            return sheet;
+        }
+
+        /// <summary>A sheet's usable area: from its title block's box on the sheet, else the default sheet; titleBlock, the title block ViewSheet.Create placed on it, or 0.</summary>
+        private static DrawingSheetArea SheetArea(Document d, DrawingSheet s, ViewSheet sheet, HeldType block, bool metric, out long titleBlock)
+        {
+            titleBlock = 0;
             DrawingSheetArea area = null;
             if (block != null)
             {
@@ -801,7 +1159,15 @@ namespace Flo2Rvt.Addin.Jobs
                 if (box != null && box.Max.X - box.Min.X > 0.1 && box.Max.Y - box.Min.Y > 0.1) area = DrawingSets.Area(box.Min.X, box.Min.Y, box.Max.X, box.Max.Y, DrawingSets.FromTitleBlock);
                 else s.Note = Join(s.Note, "its title block's box could not be read, so it is laid out on the default sheet");
             }
-            if (area == null) area = DrawingSets.DefaultSheet(metric);
+            return area ?? DrawingSets.DefaultSheet(metric);
+        }
+
+        /// <summary>The view's sheet, numbered and named, its scale fitted to the sheet's usable area and its viewport at its middle.</summary>
+        private static void MakeSheet(Document d, DrawingSheet s, View view, HeldType block, DrawingSetReport set, bool metric)
+        {
+            ViewSheet sheet = NewSheet(d, s, block);
+            long titleBlock;
+            DrawingSheetArea area = SheetArea(d, s, sheet, block, metric, out titleBlock);
             if (set.SheetArea == null) set.SheetArea = area;
             FitScale(d, s, view, area, metric);
             bool placed = false;
@@ -828,6 +1194,180 @@ namespace Flo2Rvt.Addin.Jobs
             s.Fits = fits;
             s.ViewportMinFt = min;
             s.ViewportMaxFt = max;
+        }
+
+        /// <summary>
+        /// Since add-in 0.16.0: the room schedule's sheet, numbered and named as any view's, with the set's title block,
+        /// the schedule placed on it (PlaceSchedule); the box of all its segments says whether it fits (DrawingSets.Inside),
+        /// and why not (ScheduleFitWhy). It is placed even when it does not.
+        /// </summary>
+        private static void MakeScheduleSheet(Document d, DrawingSheet s, ViewSchedule schedule, HeldType block, DrawingSetReport set, bool metric)
+        {
+            ViewSheet sheet = NewSheet(d, s, block);
+            long titleBlock;
+            DrawingSheetArea area = SheetArea(d, s, sheet, block, metric, out titleBlock);
+            if (set.SheetArea == null) set.SheetArea = area;
+            int count;
+            List<ScheduleSegment> segments = PlaceSchedule(d, s, schedule, sheet, area, out count);
+            List<double> min, max;
+            DrawingSets.Union(segments, out min, out max);
+            bool fits = min != null && DrawingSets.Inside(min, max, area);
+            if (!fits) s.Why = Join(s.Why, DrawingSets.ScheduleFitWhy(segments, area));
+            s.SheetId = sheet.Id.Value;
+            s.TitleBlockInstanceId = titleBlock;
+            s.Segments = count;
+            s.ScheduleSegments = segments;
+            s.Placed = segments.Count == count && count > 0;
+            s.Fits = fits;
+            s.ViewportMinFt = min;
+            s.ViewportMaxFt = max;
+        }
+
+        /// <summary>
+        /// Since add-in 0.16.0: a schedule (the room schedule, the cover's sheet index) placed on its sheet from the usable
+        /// area's top-left. How many segments it needs is read from its heights on a sheet
+        /// (ViewSchedule.GetScheduleHeightsOnSheet: TitleHeight, ColumnHeaderHeight, GetBodyRowHeights;
+        /// DrawingSets.ScheduleSegments); one that needs more than one is split (Split(int)) in a part of its own, and every
+        /// segment but the last set to the height that fits (SetSegmentHeight; the last "will be determined by whole
+        /// schedule height and other segments' heights"), so rows flow on. Each segment is placed
+        /// (ScheduleSheetInstance.Create, with its segment index when it is split, whole when not), its box on the sheet
+        /// read, and moved by ScheduleSheetInstance.Point so the boxes stand side by side from the usable area's top-left
+        /// (DrawingSets.SideBySide); each is read again. Count is how many segments it stands in.
+        /// </summary>
+        private static List<ScheduleSegment> PlaceSchedule(Document d, DrawingSheet s, ViewSchedule schedule, ViewSheet sheet, DrawingSheetArea area, out int count)
+        {
+            int wanted = 1;
+            double border = 0;
+            try
+            {
+                d.Regenerate();
+                ScheduleHeightsOnSheet heights = schedule.GetScheduleHeightsOnSheet();
+                var rows = new List<double>();
+                foreach (double row in heights.GetBodyRowHeights()) rows.Add(row);
+                wanted = DrawingSets.ScheduleSegments(heights.TitleHeight, heights.ColumnHeaderHeight, rows, area.Height, out border);
+            }
+            catch (Exception ex)
+            {
+                s.Note = Join(s.Note, "its heights on a sheet could not be read (" + ex.GetType().Name + ": " + ex.Message + "), so it is placed whole");
+            }
+            if (wanted > 1)
+            {
+                int ask = wanted;
+                double limit = border;
+                string failed = ChangeRunner.Part(d, () =>
+                {
+                    schedule.Split(ask);
+                    for (int i = 0; i < ask - 1; i++) schedule.SetSegmentHeight(i, limit);
+                });
+                if (failed != null) s.Note = Join(s.Note, "it could not be split into " + wanted + " segments (" + failed + "), so it is placed whole");
+            }
+            count = schedule.IsSplit() ? schedule.GetSegmentCount() : 1;
+            var corner = new XYZ(area.UsableMinFt[0], area.UsableMaxFt[1], 0);
+            var instances = new List<ScheduleSheetInstance>();
+            for (int i = 0; i < count; i++) instances.Add(count > 1 ? ScheduleSheetInstance.Create(d, sheet.Id, schedule.Id, corner, i) : ScheduleSheetInstance.Create(d, sheet.Id, schedule.Id, corner));
+            d.Regenerate();
+            List<BoundingBoxXYZ> boxes = instances.Select(x => x.get_BoundingBox(sheet)).ToList();
+            if (boxes.Any(b => b == null)) s.Note = Join(s.Note, "a segment's box on the sheet could not be read, so it stands where Revit put it");
+            else
+            {
+                List<double> lefts = DrawingSets.SideBySide(boxes.Select(b => b.Max.X - b.Min.X).ToList(), area, DrawingSets.SegmentGapFt);
+                for (int i = 0; i < instances.Count; i++)
+                {
+                    var by = new XYZ(lefts[i] - boxes[i].Min.X, area.UsableMaxFt[1] - boxes[i].Max.Y, 0);
+                    if (!by.IsZeroLength()) instances[i].Point = instances[i].Point + by;
+                }
+                d.Regenerate();
+            }
+            var segments = new List<ScheduleSegment>();
+            for (int i = 0; i < instances.Count; i++)
+            {
+                BoundingBoxXYZ b = instances[i].get_BoundingBox(sheet);
+                segments.Add(new ScheduleSegment { Segment = i, InstanceId = instances[i].Id.Value, MinFt = b != null ? Xy(b.Min) : null, MaxFt = b != null ? Xy(b.Max) : null });
+            }
+            return segments;
+        }
+
+        /// <summary>
+        /// Since add-in 0.16.0: the cover's sheet, A-001, with the set's title block: its sheet index placed as the room
+        /// schedule is (PlaceSchedule), then its note (PlaceNote) in a part of its own, of the text note type chosen; a
+        /// model that holds none, or a note Revit will not place, leaves the cover without it, saying why (note_why). The
+        /// box of all it holds says whether it fits (DrawingSets.CoverBox, Inside), and why not (CoverFitWhy).
+        /// </summary>
+        private static void MakeCoverSheet(Document d, DrawingSheet s, ViewSchedule index, HeldType block, DrawingSetReport set, bool metric, HeldType noteType, string noteText, string cannotNote)
+        {
+            ViewSheet sheet = NewSheet(d, s, block);
+            long titleBlock;
+            DrawingSheetArea area = SheetArea(d, s, sheet, block, metric, out titleBlock);
+            if (set.SheetArea == null) set.SheetArea = area;
+            int count;
+            List<ScheduleSegment> segments = PlaceSchedule(d, s, index, sheet, area, out count);
+            long noteId = 0;
+            List<double> noteMin = null, noteMax = null;
+            if (cannotNote == null && noteType != null)
+            {
+                string failed = ChangeRunner.Part(d, () => PlaceNote(d, sheet, area, segments, noteType, noteText, out noteId, out noteMin, out noteMax));
+                if (failed != null)
+                {
+                    noteId = 0;
+                    noteMin = null;
+                    noteMax = null;
+                    s.NoteWhy = "Revit would not place its note (" + failed + ")";
+                }
+            }
+            else s.NoteWhy = (cannotNote ?? DrawingSets.NoTextTypeWhy) + ", so it has no note";
+            s.NotePlaced = noteId != 0;
+            s.NoteId = noteId;
+            s.NoteText = noteId != 0 ? noteText : null;
+            s.NoteMinFt = noteId != 0 ? noteMin : null;
+            s.NoteMaxFt = noteId != 0 ? noteMax : null;
+            List<double> min, max;
+            DrawingSets.CoverBox(segments, s.NoteMinFt, s.NoteMaxFt, out min, out max);
+            bool fits = min != null && DrawingSets.Inside(min, max, area);
+            if (!fits) s.Why = Join(s.Why, DrawingSets.CoverFitWhy(segments, s.NoteMinFt, s.NoteMaxFt, area) ?? "it overruns the sheet's usable area");
+            s.SheetId = sheet.Id.Value;
+            s.TitleBlockInstanceId = titleBlock;
+            s.Segments = count;
+            s.ScheduleSegments = segments;
+            s.Placed = segments.Count == count && count > 0;
+            s.Fits = fits;
+            s.ViewportMinFt = min;
+            s.ViewportMaxFt = max;
+        }
+
+        /// <summary>
+        /// Since add-in 0.16.0: the cover's note, TextNote.Create(document, the sheet, its top-left, its width, its words,
+        /// its type): wrapped to DrawingSets.CoverNoteWidthFt within the widths Revit allows the type
+        /// (TextElement.GetMinimumAllowedWidth, GetMaximumAllowedWidth; DrawingSets.NoteWidth), its top-left under the
+        /// index (DrawingSets.NoteUnder); where its box read on the sheet overruns the usable area, moved beside the index
+        /// (NoteBeside; ElementTransformUtils.MoveElement) and read again. Throws, rolling its part back, when Revit will not.
+        /// </summary>
+        private static void PlaceNote(Document d, ViewSheet sheet, DrawingSheetArea area, List<ScheduleSegment> segments, HeldType type, string text, out long id, out List<double> min, out List<double> max)
+        {
+            List<double> indexMin, indexMax;
+            DrawingSets.Union(segments, out indexMin, out indexMax);
+            var typeId = new ElementId(type.Id);
+            double width = DrawingSets.NoteWidth(DrawingSets.CoverNoteWidthFt, TextElement.GetMinimumAllowedWidth(d, typeId), TextElement.GetMaximumAllowedWidth(d, typeId));
+            double[] under = DrawingSets.NoteUnder(indexMin, indexMax, area, DrawingSets.SegmentGapFt);
+            TextNote note = TextNote.Create(d, sheet.Id, new XYZ(under[0], under[1], 0), width, text, typeId);
+            if (note == null) throw new ChangeRefused("Revit made no note (TextNote.Create returned none)");
+            d.Regenerate();
+            BoundingBoxXYZ box = note.get_BoundingBox(sheet);
+            if (box != null && !DrawingSets.Inside(Xy(box.Min), Xy(box.Max), area))
+            {
+                double[] beside = DrawingSets.NoteBeside(indexMin, indexMax, area, DrawingSets.SegmentGapFt);
+                ElementTransformUtils.MoveElement(d, note.Id, new XYZ(beside[0] - box.Min.X, beside[1] - box.Max.Y, 0));
+                d.Regenerate();
+                box = note.get_BoundingBox(sheet);
+            }
+            id = note.Id.Value;
+            min = box != null ? Xy(box.Min) : null;
+            max = box != null ? Xy(box.Max) : null;
+        }
+
+        /// <summary>A point on a sheet, sheet feet, rounded: x and y.</summary>
+        private static List<double> Xy(XYZ p)
+        {
+            return new List<double> { Lengths.Round(p.X), Lengths.Round(p.Y) };
         }
 
         /// <summary>The largest standard scale at which the view fits the area, measured again once set, since annotation does not scale with it.</summary>
@@ -866,6 +1406,7 @@ namespace Flo2Rvt.Addin.Jobs
             s.ViewWas = DrawingSets.NotMade;
             s.ViewId = 0;
             s.MarkerId = 0;
+            s.ScheduleFields = null;
             ClearSheet(s);
             s.SheetNumber = null;
             s.SheetName = null;
@@ -881,6 +1422,15 @@ namespace Flo2Rvt.Addin.Jobs
             s.Fits = false;
             s.ViewportMinFt = null;
             s.ViewportMaxFt = null;
+            // Since add-in 0.16.0: a room schedule's or a cover's segments, and a cover's note, went with its sheet.
+            s.Segments = 0;
+            s.ScheduleSegments = null;
+            s.NotePlaced = null;
+            s.NoteWhy = null;
+            s.NoteId = 0;
+            s.NoteText = null;
+            s.NoteMinFt = null;
+            s.NoteMaxFt = null;
         }
     }
 }

@@ -220,7 +220,7 @@
       "schema": false,
       "accepted": false,
       "list": {
-        "version": 8,
+        "version": 9,
         "list_id": "sample-1",
         "description": "Made-up changes to a public sample model.",
         "changes": [
@@ -6858,6 +6858,418 @@
             "kind": "add_drawing_set",
             "id": "ds1",
             "title_block": "E1 30x42 Horizontal"
+          }
+        ]
+      }
+    },
+    {
+      "why": "version 8: a drawing set that says nothing: every view of version 7, its plans tagging their rooms, a room schedule and a cover, each on a sheet of its own",
+      "schema": true,
+      "accepted": true,
+      "list": {
+        "version": 8,
+        "changes": [
+          {
+            "kind": "add_drawing_set",
+            "id": "ds1"
+          }
+        ]
+      }
+    },
+    {
+      "why": "version 8: a drawing set of the room schedule alone",
+      "schema": true,
+      "accepted": true,
+      "list": {
+        "version": 8,
+        "changes": [
+          {
+            "kind": "add_drawing_set",
+            "id": "ds1",
+            "views": [
+              "room_schedule"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "why": "version 8: a drawing set naming all six kinds of view",
+      "schema": true,
+      "accepted": true,
+      "list": {
+        "version": 8,
+        "changes": [
+          {
+            "kind": "add_drawing_set",
+            "id": "ds1",
+            "views": [
+              "cover",
+              "room_schedule",
+              "isometric",
+              "sections",
+              "elevations",
+              "plans"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "why": "version 8: a room on a new level, then a drawing set of that level's plan, which tags it, and the room schedule, which lists it",
+      "schema": true,
+      "accepted": true,
+      "list": {
+        "version": 8,
+        "list_id": "rooms-in-the-set-1",
+        "description": "Made-up: a room inside four new walls, its plan tagging it and the room schedule listing it.",
+        "changes": [
+          {
+            "kind": "add_level",
+            "id": "l1",
+            "name": "Ground Floor",
+            "elevation": {
+              "value": 0,
+              "unit": "ft"
+            },
+            "relative_to": "project_origin"
+          },
+          {
+            "kind": "add_level",
+            "id": "l2",
+            "name": "Level 2",
+            "elevation": {
+              "value": 10,
+              "unit": "ft"
+            },
+            "relative_to": "project_origin"
+          },
+          {
+            "kind": "add_wall",
+            "id": "w1",
+            "level": {
+              "level_name": "Ground Floor"
+            },
+            "start": {
+              "x": 0,
+              "y": 0,
+              "unit": "ft"
+            },
+            "end": {
+              "x": 20,
+              "y": 0,
+              "unit": "ft"
+            },
+            "coordinates": "internal",
+            "wall_type": {
+              "family": "Basic Wall",
+              "type": "Generic - 8\""
+            },
+            "top": {
+              "top_level": {
+                "level_name": "Level 2"
+              }
+            }
+          },
+          {
+            "kind": "add_wall",
+            "id": "w2",
+            "level": {
+              "level_name": "Ground Floor"
+            },
+            "start": {
+              "x": 20,
+              "y": 0,
+              "unit": "ft"
+            },
+            "end": {
+              "x": 20,
+              "y": 20,
+              "unit": "ft"
+            },
+            "coordinates": "internal",
+            "wall_type": {
+              "family": "Basic Wall",
+              "type": "Generic - 8\""
+            },
+            "top": {
+              "top_level": {
+                "level_name": "Level 2"
+              }
+            }
+          },
+          {
+            "kind": "add_wall",
+            "id": "w3",
+            "level": {
+              "level_name": "Ground Floor"
+            },
+            "start": {
+              "x": 20,
+              "y": 20,
+              "unit": "ft"
+            },
+            "end": {
+              "x": 0,
+              "y": 20,
+              "unit": "ft"
+            },
+            "coordinates": "internal",
+            "wall_type": {
+              "family": "Basic Wall",
+              "type": "Generic - 8\""
+            },
+            "top": {
+              "top_level": {
+                "level_name": "Level 2"
+              }
+            }
+          },
+          {
+            "kind": "add_wall",
+            "id": "w4",
+            "level": {
+              "level_name": "Ground Floor"
+            },
+            "start": {
+              "x": 0,
+              "y": 20,
+              "unit": "ft"
+            },
+            "end": {
+              "x": 0,
+              "y": 0,
+              "unit": "ft"
+            },
+            "coordinates": "internal",
+            "wall_type": {
+              "family": "Basic Wall",
+              "type": "Generic - 8\""
+            },
+            "top": {
+              "top_level": {
+                "level_name": "Level 2"
+              }
+            }
+          },
+          {
+            "kind": "add_room",
+            "id": "r1",
+            "level": {
+              "level_name": "Ground Floor"
+            },
+            "point": {
+              "x": 10,
+              "y": 10,
+              "unit": "ft"
+            },
+            "coordinates": "internal",
+            "name": "Living",
+            "number": "101"
+          },
+          {
+            "kind": "add_drawing_set",
+            "id": "ds1",
+            "views": [
+              "plans",
+              "room_schedule"
+            ],
+            "levels": [
+              {
+                "level_name": "Ground Floor"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "why": "version 8 reads a list of version 7's vocabulary with no drawing set as it did",
+      "schema": true,
+      "accepted": true,
+      "list": {
+        "version": 8,
+        "changes": [
+          {
+            "kind": "add_level",
+            "id": "l1",
+            "name": "Ground Floor",
+            "elevation": {
+              "value": 0,
+              "unit": "ft"
+            },
+            "relative_to": "project_origin"
+          },
+          {
+            "kind": "add_level",
+            "id": "l2",
+            "name": "Level 2",
+            "elevation": {
+              "value": 10,
+              "unit": "ft"
+            },
+            "relative_to": "project_origin"
+          },
+          {
+            "kind": "add_wall",
+            "id": "w1",
+            "level": {
+              "level_name": "Ground Floor"
+            },
+            "start": {
+              "x": 0,
+              "y": 0,
+              "unit": "ft"
+            },
+            "end": {
+              "x": 20,
+              "y": 0,
+              "unit": "ft"
+            },
+            "coordinates": "internal",
+            "wall_type": {
+              "family": "Basic Wall",
+              "type": "Generic - 8\""
+            },
+            "top": {
+              "top_level": {
+                "level_name": "Level 2"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "why": "version 7 naming room_schedule, which needs version 8",
+      "schema": true,
+      "accepted": false,
+      "list": {
+        "version": 7,
+        "changes": [
+          {
+            "kind": "add_drawing_set",
+            "id": "ds1",
+            "views": [
+              "plans",
+              "room_schedule"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "why": "a drawing set of the room schedule alone that names levels, but asks for no plans",
+      "schema": true,
+      "accepted": false,
+      "list": {
+        "version": 8,
+        "changes": [
+          {
+            "kind": "add_drawing_set",
+            "id": "ds1",
+            "views": [
+              "room_schedule"
+            ],
+            "levels": [
+              {
+                "level_name": "Level 1"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "why": "a drawing set naming the room schedule twice",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 8,
+        "changes": [
+          {
+            "kind": "add_drawing_set",
+            "id": "ds1",
+            "views": [
+              "room_schedule",
+              "room_schedule"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "why": "version 8: a drawing set of the cover alone",
+      "schema": true,
+      "accepted": true,
+      "list": {
+        "version": 8,
+        "changes": [
+          {
+            "kind": "add_drawing_set",
+            "id": "ds1",
+            "views": [
+              "cover"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "why": "version 7 naming the cover, which needs version 8",
+      "schema": true,
+      "accepted": false,
+      "list": {
+        "version": 7,
+        "changes": [
+          {
+            "kind": "add_drawing_set",
+            "id": "ds1",
+            "views": [
+              "cover",
+              "plans"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "why": "a drawing set naming the cover twice",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 8,
+        "changes": [
+          {
+            "kind": "add_drawing_set",
+            "id": "ds1",
+            "views": [
+              "cover",
+              "cover"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "why": "a drawing set naming seven kinds of view, one of them twice",
+      "schema": false,
+      "accepted": false,
+      "list": {
+        "version": 8,
+        "changes": [
+          {
+            "kind": "add_drawing_set",
+            "id": "ds1",
+            "views": [
+              "plans",
+              "elevations",
+              "sections",
+              "isometric",
+              "room_schedule",
+              "cover",
+              "plans"
+            ]
           }
         ]
       }

@@ -42,7 +42,13 @@
 //     of the building's elements Revit shows in it shows some, and an elevation read as asked that says its
 //     view plane has the building in front of it. (0.15.1 held an elevation's or section's far clip read
 //     back to the depth it needs; the second live run showed the two are measured from different planes,
-//     so since 0.15.2 the far clip and crop read back are Revit's readings and not judged.)
+//     so since 0.15.2 the far clip and crop read back are Revit's readings and not judged.) Since add-in
+//     0.16.0 (change-list version 8; Logic/DrawingSets.Rooms.cs RoomProblems): a plan of a set whose plans
+//     tag their rooms says how many rooms are placed on its level and how many it tagged, never more, and
+//     why when fewer, and a plan of an older list's set says neither; the room schedule comes only of such a
+//     set, is placed by one schedule instance per segment, numbered from 0, fits as every view does (the box
+//     of its segments, and each segment, within the usable area), says how many rooms it lists or why not,
+//     and names no scale, crop, far clip or viewport of a graphic view.
 //
 // The lists are read as the report lists them: past ElementTally.Cap a set is truncated, and
 // only its listed elements are checked.
