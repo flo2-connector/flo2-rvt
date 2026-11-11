@@ -77,7 +77,14 @@
 // how many rooms it lists (`rooms_scheduled`); and its cover (kind `cover`, on sheet A-001: its sheet index,
 // a sheet list placed as the room schedule is) how many sheets its index lists (`sheets_listed`) and whether its
 // note was placed (`note_placed`, `note_why`, `note_id`, `note_text`, `note_min_ft`, `note_max_ft`). A report of
-// 0.15.2, or of a version-7 list, says none of it, and reads as it did.
+// 0.15.2, or of a version-7 list, says none of it, and reads as it did. Add-in 0.16.1 writes version 2 still, with
+// fields added and none changed: a set that tags its rooms reads the model's phases (`phases`, `last_phase`) and each
+// placed room's phase and design option (`rooms`), and says the phase it put its plans and room schedule in
+// (`rooms_phase`, `rooms_phase_was`, `rooms_left_out`); each plan and the room schedule its readings as made and once
+// fixed (`room_readings`) and what was fixed (`room_fixes`); each plan how many of its rooms Revit passes in it
+// (`rooms_shown`), each tag's text read back (`room_tags`) and how many of its tags Revit shows (`room_tags_shown`),
+// by which it is judged; and the room schedule how many rows list a room (`schedule_rows`) beside how many it should
+// list (`rooms_to_list`), by which it is judged. A report of 0.16.0 says none of it, and reads as it did.
 
 using System.Collections.Generic;
 using System.Linq;
@@ -1173,6 +1180,100 @@ namespace Flo2Rvt.Addin.Edit
         [DataMember(Name = "room_tag_type", Order = 17, EmitDefaultValue = false)] public TitleBlockRef RoomTagType;
         /// <summary>Since add-in 0.16.0: default (the model's default room tag type), first_held (the first it holds, by family then type, when it has no default of its own) or none (the model holds no room tag type: no plan tags a room, each saying why); absent when the set tags no rooms or asks for no plan.</summary>
         [DataMember(Name = "room_tag_type_was", Order = 18, EmitDefaultValue = false)] public string RoomTagTypeWas;
+        /// <summary>Since add-in 0.16.1, a set that tags its rooms and asks for plans or the room schedule: the model's phases, earliest first, as Document.Phases gives them (id and name). Revit's reading, not judged.</summary>
+        [DataMember(Name = "phases", Order = 19, EmitDefaultValue = false)] public List<NamedRef> Phases;
+        /// <summary>Since add-in 0.16.1: the last of them, the phase Revit gives what it makes in Design Automation ("the default phase for newly created elements is the latest phase in the document").</summary>
+        [DataMember(Name = "last_phase", Order = 20, EmitDefaultValue = false)] public NamedRef LastPhase;
+        /// <summary>Since add-in 0.16.1: every placed room the set considers, once (not per plan), by id: its number, name, level, phase and design option as Revit holds them. Revit's reading, not judged.</summary>
+        [DataMember(Name = "rooms", Order = 21, EmitDefaultValue = false)] public List<SetRoomReading> Rooms;
+        /// <summary>Since add-in 0.16.1: the phase the set put its plans and its room schedule in, before any tag was made or room counted: the one the placed rooms it tags stand in, or the one most of them do (DrawingSets.ChoosePhase); absent when no room's phase was read.</summary>
+        [DataMember(Name = "rooms_phase", Order = 22, EmitDefaultValue = false)] public NamedRef RoomsPhase;
+        /// <summary>Since add-in 0.16.1: one (every placed room it tags stands in rooms_phase), most (the most of them do; rooms_left_out names the others) or none (no room's phase was read, so no view's phase was set).</summary>
+        [DataMember(Name = "rooms_phase_was", Order = 23, EmitDefaultValue = false)] public string RoomsPhaseWas;
+        /// <summary>Since add-in 0.16.1: the rooms it tags that stand in another phase than rooms_phase, by id, which its views do not show.</summary>
+        [DataMember(Name = "rooms_left_out", Order = 24, EmitDefaultValue = false)] public List<long> RoomsLeftOut;
+    }
+
+    /// <summary>Since add-in 0.16.1: an element by its id and its name as Revit holds them: a phase, a phase filter, a view template or a design option.</summary>
+    [DataContract]
+    public sealed class NamedRef
+    {
+        [DataMember(Name = "id", Order = 0)] public long Id;
+        [DataMember(Name = "name", Order = 1, EmitDefaultValue = false)] public string Name;
+    }
+
+    /// <summary>Since add-in 0.16.1: a placed room a drawing set considers, as Revit holds it. Each part absent that could not be read, error saying why.</summary>
+    [DataContract]
+    public sealed class SetRoomReading
+    {
+        [DataMember(Name = "room_id", Order = 0)] public long RoomId;
+        [DataMember(Name = "number", Order = 1, EmitDefaultValue = false)] public string Number;
+        /// <summary>Its Name parameter (ROOM_NAME).</summary>
+        [DataMember(Name = "name", Order = 2, EmitDefaultValue = false)] public string Name;
+        [DataMember(Name = "level", Order = 3, EmitDefaultValue = false)] public string Level;
+        [DataMember(Name = "level_id", Order = 4, EmitDefaultValue = false)] public long LevelId;
+        /// <summary>The phase it stands in: its Phase parameter (ROOM_PHASE), else its Phase Id (ROOM_PHASE_ID), else Element.CreatedPhaseId; absent when none could be read.</summary>
+        [DataMember(Name = "phase", Order = 5, EmitDefaultValue = false)] public NamedRef Phase;
+        /// <summary>Which of those its phase was read from: ROOM_PHASE, ROOM_PHASE_ID or CreatedPhaseId.</summary>
+        [DataMember(Name = "phase_from", Order = 6, EmitDefaultValue = false)] public string PhaseFrom;
+        /// <summary>The design option it stands in (Element.DesignOption); absent for the main model.</summary>
+        [DataMember(Name = "design_option", Order = 7, EmitDefaultValue = false)] public NamedRef DesignOption;
+        /// <summary>Whether that design option is its option set's primary one (DesignOption.IsPrimary); absent for the main model.</summary>
+        [DataMember(Name = "design_option_primary", Order = 8, EmitDefaultValue = false)] public bool? DesignOptionPrimary;
+        [DataMember(Name = "error", Order = 9, EmitDefaultValue = false)] public string Error;
+    }
+
+    /// <summary>
+    /// Since add-in 0.16.1: Revit's reading of a plan or the room schedule a set made, as made and once the set fixed it
+    /// (before any tag is made or room counted), each part apart, so one Revit will not give leaves the others. Raw, not judged.
+    /// </summary>
+    [DataContract]
+    public sealed class RoomsViewReading
+    {
+        /// <summary>made or fixed.</summary>
+        [DataMember(Name = "at", Order = 0)] public string At;
+        /// <summary>Its Phase (VIEW_PHASE).</summary>
+        [DataMember(Name = "phase", Order = 1, EmitDefaultValue = false)] public NamedRef Phase;
+        /// <summary>Its Phase Filter (VIEW_PHASE_FILTER).</summary>
+        [DataMember(Name = "phase_filter", Order = 2, EmitDefaultValue = false)] public NamedRef PhaseFilter;
+        /// <summary>The view template that controls it (View.ViewTemplateId); absent when none does.</summary>
+        [DataMember(Name = "view_template", Order = 3, EmitDefaultValue = false)] public NamedRef ViewTemplate;
+        /// <summary>A plan: whether it hides the Rooms category, and the Room Tags category, each set apart (View.GetCategoryHidden).</summary>
+        [DataMember(Name = "rooms_hidden", Order = 4, EmitDefaultValue = false)] public bool? RoomsHidden;
+        [DataMember(Name = "room_tags_hidden", Order = 5, EmitDefaultValue = false)] public bool? RoomTagsHidden;
+        /// <summary>A plan: whether it hides the model categories, and the annotation categories, as classes (View.AreModelCategoriesHidden, AreAnnotationCategoriesHidden), which GetCategoryHidden does not read.</summary>
+        [DataMember(Name = "model_categories_hidden", Order = 6, EmitDefaultValue = false)] public bool? ModelCategoriesHidden;
+        [DataMember(Name = "annotation_categories_hidden", Order = 7, EmitDefaultValue = false)] public bool? AnnotationCategoriesHidden;
+        /// <summary>The room schedule: its body section's rows (GetTableData().GetSectionData(SectionType.Body).NumberOfRows, once regenerated and its data refreshed), its column headers among them.</summary>
+        [DataMember(Name = "body_rows", Order = 8, EmitDefaultValue = false)] public int? BodyRows;
+        [DataMember(Name = "error", Order = 9, EmitDefaultValue = false)] public string Error;
+    }
+
+    /// <summary>Since add-in 0.16.1: one change the set made to a plan or the room schedule so it shows its rooms, from what to what, or why it was not made.</summary>
+    [DataContract]
+    public sealed class RoomsFix
+    {
+        /// <summary>phase (its Phase set to the set's rooms_phase), rooms_category or room_tags_category (a plan's category shown).</summary>
+        [DataMember(Name = "what", Order = 0)] public string What;
+        /// <summary>What it was: the phase's name, or hidden.</summary>
+        [DataMember(Name = "was", Order = 1, EmitDefaultValue = false)] public string Was;
+        /// <summary>What it became: the phase's name, or shown; absent when it was not changed, and why says why.</summary>
+        [DataMember(Name = "became", Order = 2, EmitDefaultValue = false)] public string Became;
+        [DataMember(Name = "why", Order = 3, EmitDefaultValue = false)] public string Why;
+    }
+
+    /// <summary>Since add-in 0.16.1: one room tag a plan made, as Revit reads it back once everything is placed.</summary>
+    [DataContract]
+    public sealed class RoomTagReading
+    {
+        [DataMember(Name = "tag_id", Order = 0)] public long TagId;
+        /// <summary>The room it was made for.</summary>
+        [DataMember(Name = "room_id", Order = 1)] public long RoomId;
+        /// <summary>Its text as Revit reads it back (SpatialElementTag.TagText, "The text displayed by the tag", its strings concatenated); empty when it displays none; absent when it could not be read.</summary>
+        [DataMember(Name = "text", Order = 2, EmitDefaultValue = false)] public string Text;
+        /// <summary>Whether Revit passes it in its plan (FilteredElementCollector over the plan, the Room Tags category: "elements ... that may be visible in the input view"); absent when that could not be read.</summary>
+        [DataMember(Name = "in_view", Order = 3, EmitDefaultValue = false)] public bool? InView;
+        [DataMember(Name = "error", Order = 4, EmitDefaultValue = false)] public string Error;
     }
 
     /// <summary>Since add-in 0.16.0: one segment of a room schedule on its sheet: the schedule instance that shows it and its box there (its bounding box in the sheet, sheet feet).</summary>
@@ -1303,7 +1404,12 @@ namespace Flo2Rvt.Addin.Edit
         [DataMember(Name = "segments", Order = 40, EmitDefaultValue = false)] public int Segments;
         /// <summary>Since add-in 0.16.0, the room schedule placed: each segment's schedule instance and its box on the sheet, from the left.</summary>
         [DataMember(Name = "schedule_segments", Order = 41, EmitDefaultValue = false)] public List<ScheduleSegment> ScheduleSegments;
-        /// <summary>Since add-in 0.16.0, the room schedule: the Room elements it lists, as Revit's collector over it passes them once it is placed; absent when that could not be read, and its why says so.</summary>
+        /// <summary>
+        /// Since add-in 0.16.0, the room schedule: the Room elements Revit's collector over it passes once it is placed
+        /// (FilteredElementCollector(document, its id), the Rooms category); absent when that could not be read, and its
+        /// why says so. It counts the elements the collector takes the schedule to hold, not the rows it prints, and is
+        /// not judged; since add-in 0.16.1 the schedule is judged by its rows (schedule_rows).
+        /// </summary>
         [DataMember(Name = "rooms_scheduled", Order = 42, EmitDefaultValue = false)] public int? RoomsScheduled;
         /// <summary>Since add-in 0.16.0, the cover: the sheets its index lists (every sheet the model holds), as Revit's collector over it passes them once it is placed; absent when that could not be read, and its why says so.</summary>
         [DataMember(Name = "sheets_listed", Order = 43, EmitDefaultValue = false)] public int? SheetsListed;
@@ -1316,6 +1422,20 @@ namespace Flo2Rvt.Addin.Edit
         /// <summary>Since add-in 0.16.0, the cover: its note's box on the sheet (its bounding box in the sheet), sheet feet.</summary>
         [DataMember(Name = "note_min_ft", Order = 48, EmitDefaultValue = false)] public List<double> NoteMinFt;
         [DataMember(Name = "note_max_ft", Order = 49, EmitDefaultValue = false)] public List<double> NoteMaxFt;
+        /// <summary>Since add-in 0.16.1, a plan or the room schedule of a set that tags its rooms: Revit's readings of its phase, phase filter, view template and (a plan) categories hidden, or (the schedule) body rows, as made and once fixed. Raw, not judged.</summary>
+        [DataMember(Name = "room_readings", Order = 50, EmitDefaultValue = false)] public List<RoomsViewReading> RoomReadings;
+        /// <summary>Since add-in 0.16.1: what the set changed of it so it shows its rooms (its phase; a plan's Rooms or Room Tags category shown), from what to what, or why not; absent when nothing needed changing.</summary>
+        [DataMember(Name = "room_fixes", Order = 51, EmitDefaultValue = false)] public List<RoomsFix> RoomFixes;
+        /// <summary>Since add-in 0.16.1, a plan: how many of the rooms placed on its level Revit passes in it once everything is placed (FilteredElementCollector over the plan, the Rooms category). A reading, not judged by itself.</summary>
+        [DataMember(Name = "rooms_shown", Order = 52, EmitDefaultValue = false)] public int? RoomsShown;
+        /// <summary>Since add-in 0.16.1, a plan: each room tag it made, its text as Revit reads it back and whether Revit passes it in the plan.</summary>
+        [DataMember(Name = "room_tags", Order = 53, EmitDefaultValue = false)] public List<RoomTagReading> RoomTags;
+        /// <summary>Since add-in 0.16.1, a plan: how many of its room tags Revit shows, by which it is judged: those whose text reads more than blank and which Revit passes in it (DrawingSets.TagsShown); never more than rooms_tagged; fewer says why (why). Absent when that could not be read, and its why says so.</summary>
+        [DataMember(Name = "room_tags_shown", Order = 54, EmitDefaultValue = false)] public int? RoomTagsShown;
+        /// <summary>Since add-in 0.16.1, the room schedule: how many rows of its body list a room once it is placed, those whose Number cell names a placed room's number (DrawingSets.RoomRows), by which it is judged; absent when they could not be read, and its why says so.</summary>
+        [DataMember(Name = "schedule_rows", Order = 55, EmitDefaultValue = false)] public int? ScheduleRows;
+        /// <summary>Since add-in 0.16.1, the room schedule: how many rooms it should list, the placed rooms in its phase and every room whose tag a plan shows (DrawingSets.RoomsToList); fewer schedule_rows says why.</summary>
+        [DataMember(Name = "rooms_to_list", Order = 56, EmitDefaultValue = false)] public int? RoomsToList;
     }
 
     /// <summary>

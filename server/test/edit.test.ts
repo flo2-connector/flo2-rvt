@@ -564,7 +564,7 @@ describe("an edit's report summary", () => {
   // Since add-in 0.15.0 a list may make a drawing set (change-list version 7); the made-up report flo2
   // reads names, per view, the sheet it is on, its scale and where its viewport sits on the sheet. Since add-in
   // 0.16.0 it is a version-8 list's set, the room schedule's sheet among them.
-  test('from a report of add-in 0.16.0, counts the sheets a drawing set added, and each view says its sheet, its scale and that it fits', () => {
+  test('from a report of add-in 0.16.1, counts the sheets a drawing set added, and each view says its sheet, its scale and that it fits', () => {
     const f = fixture('sample-edit-report-drawing-set.json');
     const report = f.report as { edit: { addin_version: string }; exports: { sheets_pdf: { sheets: number } }; changes: Array<{ kind: string; status: string; drawing_set?: Record<string, unknown> }> };
     const s = editSummary(report as unknown as Record<string, unknown>);
@@ -572,7 +572,7 @@ describe("an edit's report summary", () => {
     assert.equal(s.elements_added, 0, 'a drawing set adds no building content');
     assert.equal(s.outcome, 'all_applied');
     assert.ok(EditSummary.safeParse(s).success, 'in the contract');
-    assert.equal(report.edit.addin_version, '0.16.0');
+    assert.equal(report.edit.addin_version, '0.16.1');
     assert.equal(report.exports.sheets_pdf.sheets, 12, "the job's sheets.pdf prints them");
     assert.equal((f.change_list as { version: number }).version, 8, 'of a version 8 list');
     const set = report.changes[0]?.drawing_set as { sheets: Array<Record<string, unknown>>; sheet_area: { usable_min_ft: number[]; usable_max_ft: number[] } };
@@ -596,7 +596,7 @@ describe("an edit's report summary", () => {
   // (`building_elements_seen`, which flo2 reads); its far clip and crop are raw readings, and each elevation
   // gives the view plane its crop and depth were set from, its crop region read back, and Revit's readings of
   // it as made, cropped, far clipped and placed.
-  test("from a report of add-in 0.16.0, each elevation and section says how many of the building's elements Revit shows in it, its far clip and crop as raw readings, and each section looks the way its cut says", () => {
+  test("from a report of add-in 0.16.1, each elevation and section says how many of the building's elements Revit shows in it, its far clip and crop as raw readings, and each section looks the way its cut says", () => {
     const f = fixture('sample-edit-report-drawing-set.json');
     const report = f.report as { changes: Array<{ drawing_set?: { building: { min_ft: number[]; max_ft: number[]; elements: number }; sheets: Array<Record<string, unknown>> } }> };
     const set = report.changes[0]!.drawing_set!;
@@ -647,7 +647,7 @@ describe("an edit's report summary", () => {
   // Since add-in 0.16.0 (change-list version 8): the owner settled that a set tags every plan's rooms and holds a
   // room schedule. flo2 reads, per plan, how many rooms are placed on its level and how many it tagged, and for the
   // room schedule its sheet, its segments on it and how many rooms it lists.
-  test("from a report of add-in 0.16.0, each plan says how many rooms are placed on its level and how many it tagged, and the room schedule its sheet, its segments and the rooms it lists", () => {
+  test("from a report of add-in 0.16.1, each plan says how many rooms are placed on its level and how many it tagged, and the room schedule its sheet, its segments and the rooms it lists", () => {
     const f = fixture('sample-edit-report-drawing-set.json');
     const report = f.report as { changes: Array<{ drawing_set?: Record<string, unknown> & { sheets: Array<Record<string, unknown>>; sheet_area: { usable_min_ft: number[]; usable_max_ft: number[] } } }> };
     const set = report.changes[0]!.drawing_set!;
@@ -684,9 +684,67 @@ describe("an edit's report summary", () => {
     assert.deepEqual([rs.viewport_min_ft, rs.viewport_max_ft], [seg.min_ft, seg.max_ft], 'the box of all its segments is the one segment');
   });
 
+  // Since add-in 0.16.1: the first live run of a version-8 set (2026-11-11, add-in 0.16.0, Autodesk's
+  // rac_basic_sample_project.rvt) printed its room schedule with its title and headers and no row, and its plans'
+  // 14 tags drawing nothing, while its report said every room tagged and every check passed it: rooms_tagged counts
+  // what NewRoomTag returned, never what shows. Now each plan is judged by how many of its tags Revit shows
+  // (`room_tags_shown`, which flo2 reads), and the room schedule by how many rows of its body list a room
+  // (`schedule_rows`, which flo2 reads) beside how many it should list (`rooms_to_list`). Raw, beside them: each
+  // view's phase, phase filter, view template and (a plan's) hidden categories as made and once fixed, what was
+  // fixed, and once for the set the model's phases and each placed room's phase and design option.
+  test("from a report of add-in 0.16.1, each plan says how many of its room tags Revit shows and the room schedule how many rooms its rows list, beside each view's phase as made and once fixed and each room's phase", () => {
+    const f = fixture('sample-edit-report-drawing-set.json');
+    const report = f.report as { changes: Array<{ drawing_set?: Record<string, unknown> & { sheets: Array<Record<string, unknown>> } }> };
+    const set = report.changes[0]!.drawing_set!;
+    const name = (x: unknown) => (x as { id: number; name?: string } | undefined)?.name;
+    assert.deepEqual((set.phases as unknown[]).map(name), ['Existing', 'New Construction'], "the model's phases, earliest first");
+    assert.equal(name(set.last_phase), 'New Construction', 'the last, the phase Design Automation gives what it makes');
+    const rooms = set.rooms as Array<{ room_id: number; number: string; level_id: number; phase?: unknown; phase_from?: string; design_option?: unknown }>;
+    assert.deepEqual(rooms.map((r) => r.number), ['101', '102', '103', '201', '202'], 'each placed room, once for the set');
+    for (const r of rooms) {
+      assert.equal(name(r.phase), 'Existing', `room ${r.number}'s phase`);
+      assert.equal(r.phase_from, 'ROOM_PHASE', `room ${r.number}'s phase, read from its Phase parameter`);
+      assert.equal(r.design_option, undefined, `room ${r.number} stands in the main model`);
+    }
+    assert.equal(name(set.rooms_phase), 'Existing', "the set's plans and room schedule put in the phase its rooms stand in");
+    assert.equal(set.rooms_phase_was, 'one', 'every room it tags stands in it');
+    assert.equal(set.rooms_left_out, undefined, 'so none is left out');
+    for (const x of set.sheets.filter((s) => s.kind === 'plans' || s.kind === 'room_schedule')) {
+      const at = String(x.sheet_number);
+      const readings = x.room_readings as Array<{ at: string; phase?: unknown; phase_filter?: unknown; view_template?: unknown }>;
+      assert.deepEqual(readings.map((r) => [r.at, name(r.phase)]), [['made', 'New Construction'], ['fixed', 'Existing']], `${at}: Revit made it in the last phase, and the set put it in its rooms'`);
+      assert.ok(readings.every((r) => name(r.phase_filter) === 'Show All' && r.view_template === undefined), `${at}: its phase filter, and no view template`);
+      assert.deepEqual(x.room_fixes, [{ what: 'phase', was: 'New Construction', became: 'Existing' }], `${at}'s phase fixed, from what to what`);
+    }
+    const plans = set.sheets.filter((x) => x.kind === 'plans');
+    assert.deepEqual(
+      plans.map((x) => [x.level, x.rooms_on_level, x.rooms_tagged, x.room_tags_shown, x.rooms_shown]),
+      [['Level 1', 3, 3, 3, 3], ['Level 2', 2, 2, 2, 2], ['Roof', 0, 0, 0, 0]],
+      'each plan: the rooms on its level, the tags it made, the tags Revit shows, the rooms Revit passes in it',
+    );
+    for (const x of plans) {
+      const at = String(x.sheet_number);
+      const tags = x.room_tags as Array<{ tag_id: number; room_id: number; text: string; in_view: boolean }>;
+      assert.equal(tags.length, x.rooms_tagged, `${at} names each tag it made`);
+      assert.ok(tags.every((t) => Number.isInteger(t.tag_id) && Number.isInteger(t.room_id) && t.text.trim() !== '' && t.in_view), `${at}: each tag reads text back, and Revit passes it in the plan`);
+      assert.ok(Number(x.room_tags_shown) <= Number(x.rooms_tagged) && Number(x.rooms_tagged) <= Number(x.rooms_on_level), `${at}: tags shown <= tagged <= rooms on its level`);
+      assert.equal(x.why, undefined, `${at} shows every tag, and says nothing against itself`);
+      const hidden = (x.room_readings as Array<Record<string, unknown>>).map((r) => [r.rooms_hidden, r.room_tags_hidden, r.body_rows]);
+      assert.deepEqual(hidden, [[false, false, undefined], [false, false, undefined]], `${at} hides neither Rooms nor Room Tags, as made or once fixed`);
+    }
+    const rs = set.sheets.find((x) => x.kind === 'room_schedule')!;
+    assert.deepEqual((rs.room_readings as Array<{ body_rows?: number }>).map((r) => r.body_rows), [1, 7], "the schedule's body rows as made and once fixed, its column headers among them");
+    assert.equal(rs.schedule_rows, 5, 'its rows list the five rooms');
+    assert.equal(rs.rooms_to_list, 5, 'the five placed rooms in its phase, which it should list');
+    assert.equal(rs.why, undefined, 'so it says nothing against itself');
+    for (const x of set.sheets.filter((s) => s.kind !== 'plans' && s.kind !== 'room_schedule')) {
+      assert.ok(x.room_readings === undefined && x.room_fixes === undefined && x.room_tags_shown === undefined && x.schedule_rows === undefined, `${String(x.sheet_number)} says nothing of rooms`);
+    }
+  });
+
   // Since add-in 0.16.0 (change-list version 8): the owner added a cover. flo2 reads its sheet, its sheet index's
   // segments, how many sheets the index lists, and whether its note was placed, with why when not.
-  test('from a report of add-in 0.16.0, the cover says its sheet A-001, its sheet index, the sheets it lists and its note', () => {
+  test('from a report of add-in 0.16.1, the cover says its sheet A-001, its sheet index, the sheets it lists and its note', () => {
     const f = fixture('sample-edit-report-drawing-set.json');
     const report = f.report as { changes: Array<{ drawing_set?: { sheets: Array<Record<string, unknown>>; sheet_area: { usable_min_ft: number[]; usable_max_ft: number[] } } }> };
     const set = report.changes[0]!.drawing_set!;

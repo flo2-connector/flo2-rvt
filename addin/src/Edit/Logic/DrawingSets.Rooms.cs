@@ -23,6 +23,11 @@
 //     either is placed anyway, and says why (ScheduleFitWhy). It fits, as any view does, when the box of all
 //     its segments lies within the usable area (DrawingSets.Inside). It says how many rooms it lists (Revit's
 //     own collector over it), and a model that holds no room still gets its schedule, saying so.
+//   · WHAT SHOWS (since add-in 0.16.1; DrawingSets.RoomsShown.cs): rooms_tagged counts what NewRoomTag returned and
+//     rooms_scheduled what Revit's collector takes the schedule to hold, neither what prints, and the first live run's
+//     tags drew nothing and its schedule no row while both read whole. Each plan and the schedule are put in their
+//     rooms' phase first, and judged by what Revit shows: the tags it shows (room_tags_shown), the rows that list a
+//     room (schedule_rows).
 //
 // The gap between segments is this add-in's own choice, as the margins are.
 //
@@ -48,6 +53,19 @@ namespace Flo2Rvt.Addin.Edit.Logic
         /// <summary>Its point, internal feet, where its tag goes.</summary>
         public double X;
         public double Y;
+        /// <summary>Since add-in 0.16.1: its name (its Name parameter, never its number with it) and its level's name.</summary>
+        public string Name;
+        public string Level;
+        /// <summary>Since add-in 0.16.1: the phase it stands in, by id (0 when not read) and name, and what it was read from (DrawingSets.FromRoomPhase, FromRoomPhaseId, FromCreatedPhase).</summary>
+        public long PhaseId;
+        public string Phase;
+        public string PhaseFrom;
+        /// <summary>Since add-in 0.16.1: the design option it stands in (Element.DesignOption), by id (0 for the main model) and name, and whether it is its option set's primary one.</summary>
+        public long OptionId;
+        public string Option;
+        public bool? OptionPrimary;
+        /// <summary>Since add-in 0.16.1: what of it Revit would not give, in its words.</summary>
+        public string Error;
     }
 
     public static partial class DrawingSets
@@ -272,6 +290,8 @@ namespace Flo2Rvt.Addin.Edit.Logic
             if (!r.TagsRooms && (r.RoomTagType != null || r.RoomTagTypeWas != null)) found.Add("the set names a room tag type, though its plans tag no rooms");
             if (r.RoomTagTypeWas == NoTagType && r.RoomTagType != null) found.Add("the set says the model holds no room tag type, yet names one");
             if ((r.RoomTagTypeWas == DefaultTagType || r.RoomTagTypeWas == FirstHeld) && r.RoomTagType == null) found.Add("the set says how its room tag type was chosen, but names none");
+            // Since add-in 0.16.1: the model's phases, its rooms and the phase the set's views take (DrawingSets.RoomsShown.cs).
+            SetRoomsShownProblems(r, found);
         }
     }
 }

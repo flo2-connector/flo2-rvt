@@ -42,6 +42,18 @@
 // fits (CoverBox, CoverFitWhy); the invariants on each; and the made-up report flo2 reads, now of a version-8 list
 // (server/test/fixtures/sample-edit-report-drawing-set.json: twelve views, the plans' rooms tagged, the room
 // schedule on A-601, the cover on A-001).
+//
+// Since add-in 0.16.1, what the first live run of a version-8 set found (2026-11-11, add-in 0.16.0, the same Autodesk
+// sample): its cover right, but its room schedule printed with no row (rooms_scheduled 0) and its plans' 14 tags drawing
+// nothing, while its report said every room tagged and every check passed it, because rooms_tagged counts what
+// NewRoomTag returned. Tested here: the phase a set's plans and schedule take, the one its tagged rooms stand in or most
+// of them do, naming the rooms that leaves out (PhaseVoters, ChoosePhase); the report's rooms (RoomReadings); a plan
+// judged by the tags Revit shows, text read back and passed in the plan (TagsShown, Draws), and why when fewer, naming
+// the numbers and what the readings show of its phase, its categories and its rooms' design options (TagsShownWhy,
+// PlanRoomsHint); the room schedule judged by the rows that name a placed room's number (RoomRows) beside the rooms it
+// should list (RoomsToList), and why when fewer (ScheduleRowsWhy, ScheduleRoomsHint); the invariants on each; and the
+// made-up report flo2 reads, now add-in 0.16.1's: each view's phase as made and once fixed, every tag shown, the
+// schedule's rows its five rooms.
 
 using System;
 using System.Collections.Generic;
@@ -893,6 +905,9 @@ namespace Flo2Rvt.Addin.Tests
                 Is(p.Any(x => x.Contains("A-101 Level 1 Floor Plan tags 4 rooms, more than the 3 placed on its level")), string.Join("; ", p));
                 DrawingSetReport fewer = Fixture(root).DrawingSet;
                 fewer.Sheets[1].RoomsTagged = 1;
+                // Since add-in 0.16.1 a plan names each tag it made and how many Revit shows.
+                fewer.Sheets[1].RoomTags.RemoveAt(1);
+                fewer.Sheets[1].RoomTagsShown = 1;
                 p = DrawingSets.Problems(fewer, ChangeStatus.Applied);
                 Is(p.Any(x => x.Contains("A-102 Level 2 Floor Plan tags 1 of the 2 rooms placed on its level, but says not why")), string.Join("; ", p));
                 fewer.Sheets[1].RoomsWhy = DrawingSets.RoomsWhy("Level 2", 2, 1, null, "room 202: ArgumentException: made up");
@@ -916,8 +931,9 @@ namespace Flo2Rvt.Addin.Tests
                 p = DrawingSets.Problems(elevation, ChangeStatus.Applied);
                 Is(p.Any(x => x.Contains("A-201 North Elevation says what rooms it tagged, though it is no plan")), string.Join("; ", p));
                 Is(p.Any(x => x.Contains("A-103 Roof Floor Plan says what it schedules, though it is no room schedule")), string.Join("; ", p));
-                // A version 7 list's set, as add-in 0.15.2 reported it: no tag, no schedule, no tag type.
+                // A version 7 list's set, as add-in 0.15.2 reported it: no tag, no schedule, no tag type (and since 0.16.1 none of what Revit shows of them).
                 DrawingSetReport older = Fixture(root).DrawingSet;
+                Without0161(older);
                 older.TagsRooms = false;
                 older.RoomTagType = null;
                 older.RoomTagTypeWas = null;
@@ -1143,6 +1159,274 @@ namespace Flo2Rvt.Addin.Tests
                 Is(back.Sheets.All(s => s.SheetsListed == null && s.NotePlaced == null && s.NoteWhy == null && s.NoteId == 0 && s.NoteText == null && s.NoteMinFt == null && s.NoteMaxFt == null), "a set rolled back noted nothing");
                 Is(DrawingSets.Problems(back, ChangeStatus.RolledBack).Count == 0, string.Join("; ", DrawingSets.Problems(back, ChangeStatus.RolledBack)));
             });
+
+            // ─── the rooms judged by what Revit shows (since add-in 0.16.1)
+            // The first live run of a version-8 set (2026-11-11, add-in 0.16.0, Autodesk's rac_basic_sample_project.rvt): the room
+            // schedule printed its title and headers and no row (rooms_scheduled 0), and the plans' 14 tags drew nothing, though the
+            // report said 6 of 6 and 8 of 8 tagged and every check passed them: rooms_tagged counts what NewRoomTag returned.
+            Test("a set's plans and room schedule take the phase the placed rooms it tags stand in, or the one most of them do, naming the rooms that leaves out; with no room's phase read, none", () =>
+            {
+                var order = new List<long> { 4800, 4801 };
+                var rooms = new List<SetRoom>
+                {
+                    new SetRoom { Id = 2001, Number = "101", LevelId = 311, Placed = true, PhaseId = 4800 },
+                    new SetRoom { Id = 2002, Number = "102", LevelId = 311, Placed = true, PhaseId = 4800 },
+                    new SetRoom { Id = 2003, Number = "103", LevelId = 311, Placed = false, PhaseId = 4801 },
+                    new SetRoom { Id = 2101, Number = "201", LevelId = 1240, Placed = true, PhaseId = 4800 },
+                    new SetRoom { Id = 2201, Number = "301", LevelId = 1302, Placed = true, PhaseId = 4801 },
+                };
+                List<SetRoom> voters = DrawingSets.PhaseVoters(rooms, new long[] { 311, 1240 });
+                Is(voters.Select(r => r.Id).SequenceEqual(new long[] { 2001, 2002, 2101 }), "the placed rooms on the plans' levels: an unplaced room, and one on a level no plan shows, do not vote: " + string.Join(", ", voters.Select(r => r.Id)));
+                string was;
+                List<long> left;
+                Eq(4800L, DrawingSets.ChoosePhase(voters, order, out was, out left), "every one stands in Existing");
+                Is(was == DrawingSets.PhaseOne && left.Count == 0, "one phase, no room left out: " + was);
+                Is(DrawingSets.PhaseVoters(rooms, new long[0]).Select(r => r.Id).SequenceEqual(new long[] { 2001, 2002, 2101, 2201 }), "a set that makes no plan (its room schedule alone): every placed room");
+                Eq(4, DrawingSets.PhaseVoters(rooms, new long[] { 9999 }).Count, "and one whose plans' levels hold no placed room");
+                Eq(4800L, DrawingSets.ChoosePhase(DrawingSets.PhaseVoters(rooms, null), order, out was, out left), "three of the four stand in Existing");
+                Is(was == DrawingSets.PhaseMost && left.SequenceEqual(new long[] { 2201 }), "the most of them, naming the room it leaves out: " + was + " " + string.Join(", ", left));
+                Func<long, long, SetRoom> at = (id, phase) => new SetRoom { Id = id, LevelId = 311, Placed = true, PhaseId = phase };
+                Eq(4801L, DrawingSets.ChoosePhase(new[] { at(1, 4800), at(2, 4801), at(3, 4800), at(4, 4801) }, order, out was, out left), "a tie goes to the later phase, as Revit gives what it makes in Design Automation the latest");
+                Is(was == DrawingSets.PhaseMost && left.SequenceEqual(new long[] { 1, 3 }), "leaving the others out: " + string.Join(", ", left));
+                Eq(4800L, DrawingSets.ChoosePhase(new[] { at(1, 4800), at(2, 0), at(3, 0) }, order, out was, out left), "a room whose phase was not read does not vote");
+                Is(was == DrawingSets.PhaseOne && left.Count == 0, "and is not left out: " + was);
+                Eq(0L, DrawingSets.ChoosePhase(new[] { at(1, 0) }, order, out was, out left), "no room's phase read: no phase, and no view's phase is set");
+                Is(was == DrawingSets.PhaseNone && left.Count == 0, "none: " + was);
+                Eq(0L, DrawingSets.ChoosePhase(null, order, out was, out left), "no room at all");
+                Eq(DrawingSets.PhaseNone, was, "none");
+                List<SetRoomReading> read = DrawingSets.RoomReadings(new[]
+                {
+                    new SetRoom { Id = 2002, Number = "102", Name = "Kitchen", Level = "Level 1", LevelId = 311, Placed = true, PhaseId = 4800, Phase = "Existing", PhaseFrom = DrawingSets.FromRoomPhase },
+                    new SetRoom { Id = 2001, Number = "101", Placed = true, OptionId = 5200, Option = "Option 2", OptionPrimary = false, Error = "its phase could not be read (made up)" },
+                    new SetRoom { Id = 2003, Number = "103", Placed = false, PhaseId = 4800 },
+                });
+                Is(read.Select(x => x.RoomId).SequenceEqual(new long[] { 2001, 2002 }), "the report's rooms: the placed ones, by id");
+                Is(read[1].Number == "102" && read[1].Name == "Kitchen" && read[1].Level == "Level 1" && read[1].LevelId == 311 && read[1].Phase.Id == 4800 && read[1].Phase.Name == "Existing" && read[1].PhaseFrom == "ROOM_PHASE", "its number, name, level and phase, and what the phase was read from");
+                Is(read[1].DesignOption == null && read[1].DesignOptionPrimary == null, "the main model: no design option");
+                Is(read[0].Phase == null && read[0].PhaseFrom == null && read[0].DesignOption.Id == 5200 && read[0].DesignOption.Name == "Option 2" && read[0].DesignOptionPrimary == false && read[0].Error != null, "no phase read, a secondary design option, and what could not be read");
+            });
+            Test("a plan is judged by the room tags Revit shows in it, their text read back and Revit passing them in the plan; fewer than it made says why, naming the numbers and what its readings show of its phase, its categories and its rooms", () =>
+            {
+                Func<long, string, bool?, RoomTagReading> tag = (id, text, inView) => new RoomTagReading { TagId = id, RoomId = id - 988313, Text = text, InView = inView };
+                Eq(2, DrawingSets.TagsShown(new List<RoomTagReading> { tag(990314, "Living 101", true), tag(990315, "Kitchen 102", true) }), "both read text and are passed in the plan");
+                Eq(0, DrawingSets.TagsShown(new List<RoomTagReading> { tag(1, "", true), tag(2, "  ", true), tag(3, "Hall 103", false) }), "a tag whose text reads empty or blank draws nothing, nor does one Revit does not pass in the plan");
+                Is(DrawingSets.TagsShown(new List<RoomTagReading> { tag(1, null, true) }) == null && DrawingSets.TagsShown(new List<RoomTagReading> { tag(1, "Hall 103", null) }) == null, "a text, or whether Revit passes it, not read: not known, never taken as shown");
+                Is(DrawingSets.TagsShown(null) == null, "no tags given: not known");
+                Eq(0, DrawingSets.TagsShown(new List<RoomTagReading>()), "no tag made: none shown");
+                Is(DrawingSets.Draws(tag(1, "Hall 103", true)) && !DrawingSets.Draws(tag(1, "Hall 103", false)) && !DrawingSets.Draws(tag(1, "", true)) && !DrawingSets.Draws(null), "one tag");
+                Is(DrawingSets.TagsShownWhy("Level 1", 6, 6, 6, null) == null && DrawingSets.TagsShownWhy("Roof", 0, 0, 0, null) == null, "every tag shown, or none made: no why");
+                // The first live run's Level 1, read as add-in 0.16.1 reads it, were it phase (A): its six rooms in one phase, the plan in another.
+                var plan = new RoomsViewReading { At = DrawingSets.AtFixed, Phase = new NamedRef { Id = 4801, Name = "New Construction" }, RoomsHidden = false, RoomTagsHidden = false };
+                List<SetRoomReading> six = Enumerable.Range(1, 6).Select(i => new SetRoomReading { RoomId = 2000 + i, Number = (100 + i).ToString(System.Globalization.CultureInfo.InvariantCulture), LevelId = 311, Phase = new NamedRef { Id = 4800, Name = "Existing" } }).ToList();
+                string hint = DrawingSets.PlanRoomsHint(plan, six, 0);
+                Eq("Revit passes 0 of its 6 rooms in the plan; its 6 rooms stand in phase \"Existing\", the plan in \"New Construction\"", hint, "what its readings show");
+                Eq("Revit shows 0 of the 6 room tags it made for the 6 rooms placed on level \"Level 1\": the others read no text, or Revit does not pass them in the plan; " + hint, DrawingSets.TagsShownWhy("Level 1", 6, 6, 0, hint), "the numbers, and the phase");
+                // Were it (B): its rooms in its phase and passed, its Room Tags and annotation categories hidden.
+                var hides = new RoomsViewReading { At = DrawingSets.AtFixed, Phase = new NamedRef { Id = 4800, Name = "Existing" }, RoomsHidden = false, RoomTagsHidden = true, AnnotationCategoriesHidden = true };
+                Eq("the plan hides the Room Tags category; the plan hides the annotation categories", DrawingSets.PlanRoomsHint(hides, six, 6), "a category hidden");
+                // Were it (C), and some of each.
+                six[0].DesignOption = new NamedRef { Id = 5200, Name = "Option 2" };
+                six[0].DesignOptionPrimary = false;
+                six[1].Phase = new NamedRef { Id = 4801, Name = "New Construction" };
+                Eq("Revit passes 4 of its 6 rooms in the plan; 5 of its 6 rooms stand in phase \"Existing\", the plan in \"New Construction\"; 1 of its 6 rooms stands in a secondary design option (\"Option 2\")", DrawingSets.PlanRoomsHint(plan, six, 4), "some rooms in another phase, one in a secondary design option");
+                Is(DrawingSets.PlanRoomsHint(new RoomsViewReading { At = DrawingSets.AtFixed, Phase = new NamedRef { Id = 4800, Name = "Existing" }, RoomsHidden = false, RoomTagsHidden = false }, six.Skip(2), 4) == null, "readings that say nothing against it: no hint");
+                Is(DrawingSets.PlanRoomsHint(null, null, null) == null, "no readings: no hint");
+                string unread = DrawingSets.TagsShownWhy("Level 2", 8, 8, null, null);
+                Is(unread.Contains("the 8 room tags it made on level \"Level 2\"") && unread.Contains("could not be read back"), "not read: never taken as shown: " + unread);
+                Eq("Revit shows 1 of the 2 room tags it made for the 3 rooms placed on level \"Level 1\": the others read no text, or Revit does not pass them in the plan", DrawingSets.TagsShownWhy("Level 1", 3, 2, 1, null), "fewer tagged than placed: rooms_why says the rest");
+                Eq("Revit shows 0 of the one room tag it made for the one room placed on level \"Level 2\": the others read no text, or Revit does not pass them in the plan", DrawingSets.TagsShownWhy("Level 2", 1, 1, 0, null), "one");
+            });
+            Test("the room schedule is judged by the rows of its body that name a placed room's number, not by its body's rows, which hold its column headers and its grand total too; fewer than the rooms it should list (the placed rooms in its phase, and every room whose tag a plan shows) says why", () =>
+            {
+                var numbers = new[] { "101", "102", "103", "201", "202" };
+                Eq(5, DrawingSets.RoomRows(new[] { "Number", "", "101", "102", "103", "201", " 202 ", "" }, numbers), "its column headers, a blank row and its grand total row name no room");
+                Eq(0, DrawingSets.RoomRows(new[] { "Number" }, numbers), "the first live run's schedule: its title and headers, and no row");
+                Eq(0, DrawingSets.RoomRows(null, numbers), "no rows read");
+                Eq(1, DrawingSets.RoomRows(new[] { "101", "999", null }, numbers), "a number no placed room has (an unplaced room's) is not counted");
+                Eq(0, DrawingSets.RoomRows(new[] { "", " " }, new[] { "", " ", null }), "a room with no number is named by no row");
+                var rooms = new List<SetRoomReading>
+                {
+                    new SetRoomReading { RoomId = 2001, Number = "101", Phase = new NamedRef { Id = 4800, Name = "Existing" } },
+                    new SetRoomReading { RoomId = 2002, Number = "102", Phase = new NamedRef { Id = 4800, Name = "Existing" } },
+                    new SetRoomReading { RoomId = 2201, Number = "301", Phase = new NamedRef { Id = 4801, Name = "New Construction" } },
+                    new SetRoomReading { RoomId = 2301, Number = "401" },
+                };
+                Eq(3, DrawingSets.RoomsToList(rooms, 4800, new long[0]), "the two in its phase, and one whose phase was not read");
+                Eq(4, DrawingSets.RoomsToList(rooms, 4800, new long[] { 2201, 2001 }), "and every room whose tag a plan shows, each once");
+                Eq(4, DrawingSets.RoomsToList(rooms, 0, null), "its own phase not read: every placed room");
+                Eq(0, DrawingSets.RoomsToList(null, 4800, null), "no room: none");
+                // The first live run's schedule, read as add-in 0.16.1 reads it, were it phase (A): 14 placed rooms, no row.
+                var schedule = new RoomsViewReading { At = DrawingSets.AtFixed, Phase = new NamedRef { Id = 4801, Name = "New Construction" }, BodyRows = 1 };
+                List<SetRoomReading> fourteen = Enumerable.Range(1, 14).Select(i => new SetRoomReading { RoomId = 3000 + i, Phase = new NamedRef { Id = 4800, Name = "Existing" } }).ToList();
+                string hint = DrawingSets.ScheduleRoomsHint(schedule, fourteen);
+                Eq("its 14 rooms stand in phase \"Existing\", the schedule in \"New Construction\"", hint, "its phase beside its rooms'");
+                Eq("its rows list 0 of the 14 rooms it should list (the placed rooms in its phase, and every room whose tag a plan shows); " + hint, DrawingSets.ScheduleRowsWhy(0, 14, hint), "the numbers, and the phase");
+                Is(DrawingSets.ScheduleRowsWhy(5, 5, null) == null && DrawingSets.ScheduleRowsWhy(6, 5, null) == null && DrawingSets.ScheduleRowsWhy(0, 0, null) == null && DrawingSets.ScheduleRowsWhy(null, 0, null) == null, "every room listed, or none to list: no why");
+                string unread = DrawingSets.ScheduleRowsWhy(null, 5, null);
+                Is(unread != null && unread.Contains("could not be read back") && unread.Contains("the 5 rooms"), "rows not read: never taken as all: " + unread);
+                Is(DrawingSets.ScheduleRoomsHint(new RoomsViewReading { At = DrawingSets.AtFixed, Phase = new NamedRef { Id = 4800, Name = "Existing" } }, rooms.Take(2)) == null, "in its rooms' phase: no hint");
+                Eq("its view template \"Plan Template\" controls its phase, and the set changes no view template", DrawingSets.TemplateWhy("Plan Template", "its phase"), "a fix a view template stands in the way of");
+                Is(DrawingSets.ShownOnPlans(Fixture(root).DrawingSet.Sheets).SequenceEqual(new long[] { 2001, 2002, 2003, 2101, 2102 }), "the made-up report's plans show the tags of its five rooms");
+            });
+            Test("the invariants hold a plan's room_tags_shown to no more than its rooms_tagged and a shortfall to a why, the room schedule's rows below its rooms to a why, each fix to what it became or why not, and the set's phase to the rooms it leaves out; a report of add-in 0.16.0 keeps them all", () =>
+            {
+                DrawingSetReport whole = Fixture(root).DrawingSet;
+                Is(DrawingSets.Problems(whole, ChangeStatus.Applied).Count == 0, string.Join("; ", DrawingSets.Problems(whole, ChangeStatus.Applied)));
+                DrawingSetReport more = Fixture(root).DrawingSet;
+                more.Sheets[0].RoomTagsShown = 4;
+                List<string> p = DrawingSets.Problems(more, ChangeStatus.Applied);
+                Is(p.Any(x => x.Contains("A-101 Level 1 Floor Plan shows 4 room tags, more than the 3 it made")), string.Join("; ", p));
+                // The first live run's plans, as 0.16.0 judged them: every tag made, none shown, nothing said.
+                DrawingSetReport blank = Fixture(root).DrawingSet;
+                foreach (RoomTagReading t in blank.Sheets[0].RoomTags) t.Text = "";
+                blank.Sheets[0].RoomTagsShown = 0;
+                p = DrawingSets.Problems(blank, ChangeStatus.Applied);
+                Is(p.Any(x => x.Contains("A-101 Level 1 Floor Plan shows 0 of the 3 room tags it made, but says not why")), string.Join("; ", p));
+                Is(p.Any(x => x.Contains("A-101 Level 1 Floor Plan shows the tags of 0 of the 3 rooms placed on its level, but says not why")), string.Join("; ", p));
+                ChangeReport checkedChange = Fixture(root);
+                checkedChange.DrawingSet = blank;
+                Is(ReportCheck.Violations(checkedChange).Any(x => x.Contains("change ds1: A-101 Level 1 Floor Plan shows 0 of the 3 room tags it made, but says not why")), "the report check runs them: " + string.Join("; ", ReportCheck.Violations(checkedChange)));
+                blank.Sheets[0].Why = DrawingSets.TagsShownWhy("Level 1", 3, 3, 0, null);
+                Is(DrawingSets.Problems(blank, ChangeStatus.AppliedInPart).Count == 0, "one that says why breaks none: " + string.Join("; ", DrawingSets.Problems(blank, ChangeStatus.AppliedInPart)));
+                string why;
+                Eq(ChangeStatus.AppliedInPart, DrawingSets.Judge(blank, out why), "a plan whose tags draw nothing makes the set applied in part");
+                Is(why.Contains("A-101 Level 1 Floor Plan: Revit shows 0 of the 3 room tags it made"), why);
+                Is(DrawingSets.Problems(blank, ChangeStatus.Applied).Any(x => x.Contains("reads applied though")), "applied it is not");
+                DrawingSetReport untagged = Fixture(root).DrawingSet;
+                untagged.Sheets[1].RoomTagsShown = 1;
+                untagged.Sheets[1].RoomTags[1].InView = false;
+                p = DrawingSets.Problems(untagged, ChangeStatus.Applied);
+                Is(p.Any(x => x.Contains("A-102 Level 2 Floor Plan shows 1 of the 2 room tags it made, but says not why")), string.Join("; ", p));
+                DrawingSetReport miscounted = Fixture(root).DrawingSet;
+                miscounted.Sheets[0].RoomTags[0].InView = false;
+                p = DrawingSets.Problems(miscounted, ChangeStatus.Applied);
+                Is(p.Any(x => x.Contains("A-101 Level 1 Floor Plan counts 3 room tags shown, though 2 of those it names read text and are passed in it")), string.Join("; ", p));
+                DrawingSetReport named = Fixture(root).DrawingSet;
+                named.Sheets[1].RoomTags.RemoveAt(0);
+                p = DrawingSets.Problems(named, ChangeStatus.Applied);
+                Is(p.Any(x => x.Contains("A-102 Level 2 Floor Plan names 1 room tags, though it counts 2 tagged")), string.Join("; ", p));
+                DrawingSetReport passes = Fixture(root).DrawingSet;
+                passes.Sheets[0].RoomsShown = 4;
+                p = DrawingSets.Problems(passes, ChangeStatus.Applied);
+                Is(p.Any(x => x.Contains("A-101 Level 1 Floor Plan says Revit passes 4 rooms in it, of the 3 placed on its level")), string.Join("; ", p));
+                // The first live run's room schedule, as 0.16.0 judged it: no row, nothing said.
+                DrawingSetReport rows = Fixture(root).DrawingSet;
+                rows.Sheets[10].ScheduleRows = 0;
+                p = DrawingSets.Problems(rows, ChangeStatus.Applied);
+                Is(p.Any(x => x.Contains("A-601 Room Schedule lists 0 of the 5 rooms it should list in its rows, but says not why")), string.Join("; ", p));
+                rows.Sheets[10].Why = DrawingSets.ScheduleRowsWhy(0, 5, null);
+                Is(DrawingSets.Problems(rows, ChangeStatus.AppliedInPart).Count == 0, "one that says why breaks none: " + string.Join("; ", DrawingSets.Problems(rows, ChangeStatus.AppliedInPart)));
+                Eq(ChangeStatus.AppliedInPart, DrawingSets.Judge(rows, out why), "a schedule whose rows list none of its rooms makes the set applied in part");
+                Is(why.Contains("A-601 Room Schedule: its rows list 0 of the 5 rooms it should list"), why);
+                // Each fix says what it became, or why not, and its phase as read once fixed.
+                Func<Action<DrawingSetReport>, List<string>> broken = edit =>
+                {
+                    DrawingSetReport r = Fixture(root).DrawingSet;
+                    edit(r);
+                    return DrawingSets.Problems(r, ChangeStatus.Applied);
+                };
+                p = broken(r => r.Sheets[0].RoomFixes[0].Why = "made up");
+                Is(p.Any(x => x.Contains("A-101 Level 1 Floor Plan's phase fix says both what it became and why not")), string.Join("; ", p));
+                p = broken(r => r.Sheets[0].RoomFixes[0].Became = null);
+                Is(p.Any(x => x.Contains("A-101 Level 1 Floor Plan's phase fix says neither what it became nor why not")), string.Join("; ", p));
+                p = broken(r => r.Sheets[0].RoomFixes[0].Became = "Demolition");
+                Is(p.Any(x => x.Contains("A-101 Level 1 Floor Plan says its phase became \"Demolition\", though it reads \"Existing\" once fixed")), string.Join("; ", p));
+                p = broken(r => r.Sheets[10].RoomFixes.Add(new RoomsFix { What = DrawingSets.FixRoomTagsCategory, Was = DrawingSets.CategoryHidden, Became = DrawingSets.CategoryShown }));
+                Is(p.Any(x => x.Contains("A-601 Room Schedule shows a category, as a plan's fix does, though it is a schedule")), string.Join("; ", p));
+                p = broken(r => r.Sheets[0].RoomFixes.Add(new RoomsFix { What = "view_template", Was = "Plan Template", Became = "none" }));
+                Is(p.Any(x => x.Contains("A-101 Level 1 Floor Plan names a fix of nothing the set fixes (view_template)")), string.Join("; ", p));
+                Is(broken(r => r.Sheets[0].RoomFixes.Add(new RoomsFix { What = DrawingSets.FixRoomTagsCategory, Was = DrawingSets.CategoryHidden, Why = DrawingSets.TemplateWhy("Plan Template", "its Room Tags category") })).Count == 0, "a fix a view template stands in the way of, saying so, breaks none");
+                p = broken(r => r.Sheets[0].RoomReadings[1].At = "placed");
+                Is(p.Any(x => x.Contains("A-101 Level 1 Floor Plan has a reading of its rooms' view at no stage (placed)")), string.Join("; ", p));
+                p = broken(r => r.Sheets[10].RoomReadings[1].RoomTagsHidden = true);
+                Is(p.Any(x => x.Contains("A-601 Room Schedule says what categories it hides, as a plan does, though it is a schedule")), string.Join("; ", p));
+                // What a view says of its rooms only where it has them.
+                p = broken(r =>
+                {
+                    r.Sheets[3].RoomTagsShown = 0;
+                    r.Sheets[0].ScheduleRows = 3;
+                    r.Sheets[11].RoomReadings = new List<RoomsViewReading>();
+                });
+                Is(p.Any(x => x.Contains("A-201 North Elevation says what room tags Revit shows in it, though it is no plan")), string.Join("; ", p));
+                Is(p.Any(x => x.Contains("A-101 Level 1 Floor Plan says what rooms its rows list, though it is no room schedule")), string.Join("; ", p));
+                Is(p.Any(x => x.Contains("A-001 Sheet Index gives the phase and categories its rooms were read and fixed by, though it is neither a plan nor the room schedule")), string.Join("; ", p));
+                // The set's phase and the rooms it leaves out.
+                p = broken(r => r.RoomsPhaseWas = DrawingSets.PhaseMost);
+                Is(p.Any(x => x.Contains("the set says the most of its rooms stand in its phase, yet leaves none out")), string.Join("; ", p));
+                p = broken(r =>
+                {
+                    r.RoomsPhaseWas = DrawingSets.PhaseMost;
+                    r.RoomsLeftOut = new List<long> { 2001, 9999 };
+                });
+                Is(p.Any(x => x.Contains("the set leaves room 101 out of its phase, though it stands in it")), string.Join("; ", p));
+                Is(p.Any(x => x.Contains("the set leaves room 9999 out of its phase, though it reads no such room")), string.Join("; ", p));
+                p = broken(r => r.RoomsLeftOut = new List<long> { 2001 });
+                Is(p.Any(x => x.Contains("the set says its rooms stand in one phase, yet leaves 1 out of it")), string.Join("; ", p));
+                p = broken(r => r.LastPhase = r.Phases[0]);
+                Is(p.Any(x => x.Contains("the set names phase \"Existing\" the last, though the model's phases end with \"New Construction\"")), string.Join("; ", p));
+                p = broken(r => r.RoomsPhase = new NamedRef { Id = 4899, Name = "Demolition" });
+                Is(p.Any(x => x.Contains("the set puts its views in phase \"Demolition\", which is none of the model's phases")), string.Join("; ", p));
+                p = broken(r => r.RoomsPhaseWas = DrawingSets.PhaseNone);
+                Is(p.Any(x => x.Contains("the set says no room's phase was read, yet names the phase its views take")), string.Join("; ", p));
+                // A report of add-in 0.16.0, which says none of it, keeps every invariant.
+                DrawingSetReport older = Fixture(root).DrawingSet;
+                Without0161(older);
+                Is(DrawingSets.Problems(older, ChangeStatus.Applied).Count == 0, "a report of add-in 0.16.0 keeps them all: " + string.Join("; ", DrawingSets.Problems(older, ChangeStatus.Applied)));
+                // A version 7 list's set says none of it.
+                DrawingSetReport v7 = Fixture(root).DrawingSet;
+                v7.TagsRooms = false;
+                v7.RoomTagType = null;
+                v7.RoomTagTypeWas = null;
+                v7.ViewsAsked = DrawingSets.KindsAsked(null, 7);
+                v7.Sheets.RemoveAll(x => DrawingSets.SinceRooms(x.Kind));
+                foreach (DrawingSheet s in v7.Sheets)
+                {
+                    s.RoomsOnLevel = null;
+                    s.RoomsTagged = null;
+                }
+                DrawingSets.Count(v7);
+                p = DrawingSets.Problems(v7, ChangeStatus.Applied);
+                Is(p.Any(x => x.Contains("the set reads the model's phases and rooms, though its plans tag no rooms")), string.Join("; ", p));
+                Is(p.Any(x => x.Contains("A-101 Level 1 Floor Plan says what Revit shows of its rooms, though its set's plans tag none (a list below version 8)")), string.Join("; ", p));
+                DrawingSetReport back = Fixture(root).DrawingSet;
+                DrawingSets.RolledBack(back, "Revit raised an error: made up");
+                Is(back.Sheets.All(s => s.RoomReadings == null && s.RoomFixes == null && s.RoomsShown == null && s.RoomTags == null && s.RoomTagsShown == null && s.ScheduleRows == null && s.RoomsToList == null), "a set rolled back shows nothing of its rooms");
+                Is(DrawingSets.Problems(back, ChangeStatus.RolledBack).Count == 0, string.Join("; ", DrawingSets.Problems(back, ChangeStatus.RolledBack)));
+            });
+            Test("the made-up report of add-in 0.16.1 reads the model's phases and each placed room's phase and design option, each plan's and the room schedule's phase as made and once fixed, and judges each by what Revit shows: every plan's tags shown, the schedule's rows its rooms", () =>
+            {
+                ChangeReport c = Fixture(root);
+                DrawingSetReport set = c.DrawingSet;
+                Is(set.Phases.Select(x => x.Name).SequenceEqual(new[] { "Existing", "New Construction" }) && set.LastPhase.Id == set.Phases.Last().Id && set.LastPhase.Name == "New Construction", "the model's phases, earliest first, and the last");
+                Is(set.Rooms.Select(x => x.Number).SequenceEqual(new[] { "101", "102", "103", "201", "202" }), "its five placed rooms, once for the set: " + string.Join(", ", set.Rooms.Select(x => x.Number)));
+                Is(set.Rooms.All(x => x.Name != null && x.Level != null && x.LevelId != 0 && x.Phase != null && x.Phase.Id == 4800 && x.Phase.Name == "Existing" && x.PhaseFrom == DrawingSets.FromRoomPhase && x.DesignOption == null && x.DesignOptionPrimary == null && x.Error == null), "each in Existing, read from its Phase parameter, in the main model");
+                Is(set.RoomsPhase.Id == 4800 && set.RoomsPhase.Name == "Existing" && set.RoomsPhaseWas == DrawingSets.PhaseOne && set.RoomsLeftOut == null, "the set's plans and schedule put in the one phase its rooms stand in");
+                foreach (DrawingSheet s in set.Sheets.Where(x => x.Kind == DrawingSetViewValues.Plans || x.Kind == RoomSchedule))
+                {
+                    string at = s.SheetNumber + " " + s.ViewName;
+                    Is(s.RoomReadings != null && s.RoomReadings.Select(x => x.At).SequenceEqual(new[] { DrawingSets.AtMade, DrawingSets.AtFixed }), at + " is read as made and once fixed");
+                    Is(s.RoomReadings[0].Phase.Name == "New Construction" && s.RoomReadings[1].Phase.Name == "Existing", at + ": Revit made it in the last phase, and the set put it in its rooms'");
+                    Is(s.RoomReadings.All(x => x.PhaseFilter != null && x.PhaseFilter.Name == "Show All" && x.ViewTemplate == null && x.Error == null), at + ": its phase filter, and no view template");
+                    Is(s.RoomFixes != null && s.RoomFixes.Count == 1 && s.RoomFixes[0].What == DrawingSets.FixPhase && s.RoomFixes[0].Was == "New Construction" && s.RoomFixes[0].Became == "Existing" && s.RoomFixes[0].Why == null, at + "'s phase fixed, from what to what");
+                }
+                foreach (DrawingSheet s in set.Sheets.Where(x => x.Kind == DrawingSetViewValues.Plans))
+                {
+                    string at = s.SheetNumber + " " + s.ViewName;
+                    Is(s.RoomReadings.All(x => x.RoomsHidden == false && x.RoomTagsHidden == false && x.ModelCategoriesHidden == false && x.AnnotationCategoriesHidden == false && x.BodyRows == null), at + " hides neither category, and no class of them");
+                    Is(s.RoomTags.Count == s.RoomsTagged && s.RoomTags.All(DrawingSets.Draws), at + "'s tags each read text and are passed in it");
+                    Is(s.RoomTags.Select(x => x.RoomId).SequenceEqual(set.Rooms.Where(x => x.LevelId == s.LevelId).Select(x => x.RoomId)), at + ": a tag for each room on its level");
+                    Is(s.RoomTagsShown == s.RoomsTagged && s.RoomsShown == s.RoomsOnLevel && s.Why == null, at + ": every tag shown, every room passed, nothing said against it");
+                }
+                Is(set.Sheets.Where(x => x.Kind == DrawingSetViewValues.Plans).Select(x => x.RoomTagsShown + "/" + x.RoomsTagged + "/" + x.RoomsOnLevel).SequenceEqual(new[] { "3/3/3", "2/2/2", "0/0/0" }), "the made-up report's plans: room_tags_shown, rooms_tagged, rooms_on_level");
+                DrawingSheet rs = set.Sheets.Single(x => x.Kind == RoomSchedule);
+                Is(rs.RoomReadings[0].BodyRows == 1 && rs.RoomReadings[1].BodyRows == 7 && rs.RoomReadings.All(x => x.RoomsHidden == null && x.RoomTagsHidden == null), "the schedule's body rows as made (its column headers alone) and once fixed (and its five rooms and the grand total), and no category of a plan's");
+                Eq(5, rs.ScheduleRows, "its rows list the five rooms");
+                Eq(DrawingSets.RoomsToList(set.Rooms, rs.RoomReadings[1].Phase.Id, DrawingSets.ShownOnPlans(set.Sheets)), rs.RoomsToList, "which are the rooms it should list");
+                Eq(5, rs.RoomsToList, "five");
+                Is(rs.Why == null && rs.RoomsScheduled == 5, "it says nothing against itself, and its collector passes the five");
+                Is(set.Sheets.Where(x => x.Kind != DrawingSetViewValues.Plans && x.Kind != RoomSchedule).All(x => x.RoomReadings == null && x.RoomFixes == null && x.RoomsShown == null && x.RoomTags == null && x.RoomTagsShown == null && x.ScheduleRows == null && x.RoomsToList == null), "the other views say none of it");
+                Is(ReportCheck.Violations(c).Count == 0, "the report's invariants: " + string.Join("; ", ReportCheck.Violations(c)));
+            });
         }
 
         /// <summary>A made-up segment of a room schedule on its sheet, its box in sheet feet.</summary>
@@ -1239,6 +1523,27 @@ namespace Flo2Rvt.Addin.Tests
         private static Box3 LiveBuilding()
         {
             return new Box3(-38.149831, -60.379245, -23.300525, 82.965505, 72.222461, 30.179387);
+        }
+
+        /// <summary>The made-up report's set as add-in 0.16.0 wrote it: none of what add-in 0.16.1 reads, fixes and judges of its rooms.</summary>
+        private static void Without0161(DrawingSetReport r)
+        {
+            r.Phases = null;
+            r.LastPhase = null;
+            r.Rooms = null;
+            r.RoomsPhase = null;
+            r.RoomsPhaseWas = null;
+            r.RoomsLeftOut = null;
+            foreach (DrawingSheet s in r.Sheets)
+            {
+                s.RoomReadings = null;
+                s.RoomFixes = null;
+                s.RoomsShown = null;
+                s.RoomTags = null;
+                s.RoomTagsShown = null;
+                s.ScheduleRows = null;
+                s.RoomsToList = null;
+            }
         }
 
         /// <summary>The drawing set change of the made-up report, read through the contract.</summary>

@@ -67,7 +67,9 @@
 //     level and how many it tagged, never more, and why when fewer, which makes it not as asked; a plan of an
 //     older list's set says neither; and the room schedule, only of a set that tags its rooms, is placed by
 //     one schedule instance per segment, fits as any view does (all its segments within the usable area),
-//     and names nothing of a graphic view (RoomProblems).
+//     and names nothing of a graphic view (RoomProblems). Since add-in 0.16.1 a plan is judged by the room tags
+//     Revit shows in it, never more than it tagged, and the room schedule by the rows that list a room, each
+//     shortfall saying why (RoomsShownProblems, DrawingSets.RoomsShown.cs).
 //   · ROOMS IN THE SET (since add-in 0.16.0, change-list version 8; DrawingSets.Rooms.cs): the owner settled
 //     that a set also tags every plan's rooms and holds a room schedule. A version-8 set that says nothing
 //     makes every kind, the room schedule among them (KindsAsked); a version-7 list's set is today's, no tag
@@ -79,6 +81,12 @@
 //     split into the fewest segments that each fit (ScheduleSegments), placed side by side (SideBySide), and
 //     judged by where its segments stand (ScheduleFitWhy). A schedule is no cropped graphic view: no scale,
 //     no crop, nothing seen of the building.
+//   · WHAT REVIT SHOWS OF THE ROOMS (since add-in 0.16.1; DrawingSets.RoomsShown.cs): the first live run of a
+//     version-8 set printed its room schedule with no row and its plans' tags drawing nothing, and its report said
+//     every room tagged. Each plan and the room schedule now take the phase the rooms the set tags stand in (or the
+//     most of them do: ChoosePhase), a plan shows the Rooms and Room Tags it hides, and each is read raw as made and
+//     once fixed; a plan is judged by the tags Revit shows (TagsShown), the schedule by its rows that name a placed
+//     room's number (RoomRows) beside the rooms it should list (RoomsToList).
 //   · THE COVER (since add-in 0.16.0, change-list version 8; DrawingSets.Cover.cs): a version-8 set that says
 //     nothing also makes a cover, sheet A-001 (a new series, A-0xx, the general sheets), which sheets.pdf prints
 //     first: a sheet index of every sheet the model holds, laid out as the room schedule is, and one note saying
@@ -978,6 +986,14 @@ namespace Flo2Rvt.Addin.Edit.Logic
                 s.NoteText = null;
                 s.NoteMinFt = null;
                 s.NoteMaxFt = null;
+                // Since add-in 0.16.1: what was read, fixed and shown of its rooms went with the change.
+                s.RoomReadings = null;
+                s.RoomFixes = null;
+                s.RoomsShown = null;
+                s.RoomTags = null;
+                s.RoomTagsShown = null;
+                s.ScheduleRows = null;
+                s.RoomsToList = null;
                 s.Why = was || s.Why == null ? "rolled back with the change: " + because : s.Why;
             }
             Count(r);
@@ -1041,6 +1057,8 @@ namespace Flo2Rvt.Addin.Edit.Logic
                 }
                 // Since add-in 0.16.0: a plan's rooms tagged, and the room schedule.
                 RoomProblems(r, s, at, found);
+                // Since add-in 0.16.1: what Revit shows of them (DrawingSets.RoomsShown.cs).
+                RoomsShownProblems(r, s, at, found);
             }
             SetRoomProblems(r, found);
             int made = r.Sheets.Count(s => s.ViewWas == Made);
