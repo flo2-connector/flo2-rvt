@@ -128,7 +128,7 @@
 //      (Document.GetDefaultElementTypeId(ElementTypeGroup.TextNoteType)), or the first it holds, its width within
 //      TextElement.GetMinimumAllowedWidth and GetMaximumAllowedWidth, under the index, moved beside it
 //      (ElementTransformUtils.MoveElement) where its box read on the sheet overruns the usable area. Its words name
-//      the project by ProjectInformation's Name, or the model's Document.Title. How many sheets the index lists:
+//      the project by ProjectInformation's Name, or name none (DrawingSets.CoverNote). How many sheets the index lists:
 //      FilteredElementCollector(document, its id), the Sheets category, once placed.
 //
 // The job's existing PDF export (Probe/Exports.cs) then prints every printable sheet, these among them,
@@ -290,7 +290,7 @@ namespace Flo2Rvt.Addin.Jobs
             {
                 try
                 {
-                    noteText = DrawingSets.CoverNote(doc.ProjectInformation != null ? doc.ProjectInformation.Name : null, doc.Title);
+                    noteText = DrawingSets.CoverNote(doc.ProjectInformation != null ? doc.ProjectInformation.Name : null);
                     List<HeldType> textTypes = new FilteredElementCollector(doc).OfClass(typeof(TextNoteType)).Cast<TextNoteType>()
                         .Select(t => new HeldType { Family = t.FamilyName, Type = t.Name, Id = t.Id.Value }).ToList();
                     ElementId defaultText = doc.GetDefaultElementTypeId(ElementTypeGroup.TextNoteType);

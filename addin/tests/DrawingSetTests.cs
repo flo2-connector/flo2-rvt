@@ -662,7 +662,7 @@ namespace Flo2Rvt.Addin.Tests
                 Is(cover.ScheduleFields.SequenceEqual(DrawingSets.SheetIndexFields) && cover.Segments == 1 && cover.ScheduleSegments.Single().InstanceId != 0, "its sheet index, whole, by its schedule instance");
                 Eq(12, cover.SheetsListed, "listing the twelve sheets the model holds, its own among them");
                 Is(cover.NotePlaced == true && cover.NoteId != 0 && cover.NoteWhy == null, "its note placed");
-                Eq(DrawingSets.CoverNote("Made-up Model", "input"), cover.NoteText, "its words");
+                Eq(DrawingSets.CoverNote("Made-up Model"), cover.NoteText, "its words");
                 double[] under = DrawingSets.NoteUnder(cover.ScheduleSegments[0].MinFt, cover.ScheduleSegments[0].MaxFt, set.SheetArea, DrawingSets.SegmentGapFt);
                 Is(Near(cover.NoteMinFt[0], under[0], 1e-6) && Near(cover.NoteMaxFt[1], under[1], 1e-6) && Near(under[1], 2.15 - DrawingSets.SegmentGapFt, 1e-12), "its top-left under its index, a quarter inch below, at the usable area's left");
                 List<double> cmin, cmax;
@@ -1022,16 +1022,17 @@ namespace Flo2Rvt.Addin.Tests
             });
 
             // ─── the cover (since add-in 0.16.0): its sheet index, its note, how it fits
-            Test("the cover's sheet index lists every sheet by its number and name, sorted by number; its note says what the set is, by the project's name, or the model's file name, in words held in one place", () =>
+            Test("the cover's sheet index lists every sheet by its number and name, sorted by number; its note says what the set is, by the project's name when it has one of its own, in words held in one place", () =>
             {
                 Is(DrawingSets.SheetIndexFields.SequenceEqual(new[] { "Sheet Number", "Sheet Name" }), "its fields");
                 Is(DrawingSets.SheetIndexSort.SequenceEqual(new[] { "Sheet Number" }), "sorted by number");
                 Eq("Revit offers a sheet list no Sheet Name field, so it is made without it", DrawingSets.MissingFieldsWhy(new List<string> { "Sheet Name" }, "a sheet list"), "a field Revit does not offer a sheet list");
                 Is(DrawingSets.CoverNoteWords.Contains("{0}"), "the words name the project");
-                Eq("Conceptual drawing set of Made-up Model: drawings of the model to look the design over, not for permit or construction.", DrawingSets.CoverNote("Made-up Model", "input"), "by its Project Name");
-                Eq("Conceptual drawing set of Made-up Model: drawings of the model to look the design over, not for permit or construction.", DrawingSets.CoverNote("  Made-up Model ", null), "trimmed");
-                Eq("Conceptual drawing set of input: drawings of the model to look the design over, not for permit or construction.", DrawingSets.CoverNote(" ", "input"), "no Project Name: the model's file name");
-                Eq("Conceptual drawing set of the model: drawings of the model to look the design over, not for permit or construction.", DrawingSets.CoverNote(null, ""), "neither: the model");
+                Eq("Conceptual drawing set of Made-up Model: drawings of the model to look the design over, not for permit or construction.", DrawingSets.CoverNote("Made-up Model"), "by its Project Name");
+                Eq("Conceptual drawing set of Made-up Model: drawings of the model to look the design over, not for permit or construction.", DrawingSets.CoverNote("  Made-up Model "), "trimmed");
+                Eq("Conceptual drawing set: drawings of the model to look the design over, not for permit or construction.", DrawingSets.CoverNote(" "), "no Project Name: no name, never Design Automation's input.rvt");
+                Eq("Conceptual drawing set: drawings of the model to look the design over, not for permit or construction.", DrawingSets.CoverNote(null), "none read: no name");
+                Eq("Conceptual drawing set: drawings of the model to look the design over, not for permit or construction.", DrawingSets.CoverNote("project name"), "a template's placeholder is no name of its own");
                 Is(DrawingSets.SheetsListedWhy(12) == null && DrawingSets.SheetsListedWhy(0) == null, "a count read is no shortfall");
                 string unread = DrawingSets.SheetsListedWhy(null);
                 Is(unread != null && unread.Contains("could not be read back"), "a count not read is never taken as some: " + unread);

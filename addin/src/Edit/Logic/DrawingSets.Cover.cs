@@ -13,7 +13,8 @@
 //     too. It is laid out as the room schedule is (DrawingSets.Rooms.cs: ScheduleSegments, SideBySide), from the
 //     usable area's top-left. The cover is made last of the set, so its index lists every sheet the set made.
 //   · THE NOTE: one text note in the model's default text note type (or the first it holds), its words
-//     CoverNoteWords about the project's name (CoverNote: ProjectInformation's Name, else the model's file name),
+//     CoverNoteWords about the project's name (CoverNote: ProjectInformation's Name; CoverNoteWordsUnnamed when it
+//     holds none or only a template's placeholder, since Design Automation's model file is always input.rvt),
 //     wrapped to CoverNoteWidthFt (within the widths Revit allows its type, NoteWidth), its top-left under the
 //     index (NoteUnder), or beside it where it does not fit under it (NoteBeside). A model that holds no text note
 //     type still gets its cover, saying why it has no note, which makes the cover not as asked.
@@ -36,6 +37,10 @@ namespace Flo2Rvt.Addin.Edit.Logic
         public const string SheetIndexName = "Sheet Index";
         /// <summary>The words of the cover's note, about the project's name ({0}): the one place they are written.</summary>
         public const string CoverNoteWords = "Conceptual drawing set of {0}: drawings of the model to look the design over, not for permit or construction.";
+        /// <summary>The words of the cover's note for a model whose project has no name of its own.</summary>
+        public const string CoverNoteWordsUnnamed = "Conceptual drawing set: drawings of the model to look the design over, not for permit or construction.";
+        /// <summary>The Project Name Revit's templates hold until someone names the project: no name of its own.</summary>
+        public const string ProjectNamePlaceholder = "Project Name";
         /// <summary>Why a cover has no note when the model holds no text note type.</summary>
         public const string NoTextTypeWhy = "the model holds no text note type";
         /// <summary>The width the cover's note is wrapped to on paper, feet: six inches.</summary>
@@ -46,10 +51,13 @@ namespace Flo2Rvt.Addin.Edit.Logic
         /// <summary>What the sheet index is sorted by.</summary>
         public static readonly string[] SheetIndexSort = { "Sheet Number" };
 
-        /// <summary>The cover's note: CoverNoteWords about the project's name as its Project Information holds it, else the model's file name, else "the model".</summary>
-        public static string CoverNote(string projectName, string fileName)
+        /// <summary>The cover's note: CoverNoteWords about the project's name as its Project Information holds it, or
+        /// CoverNoteWordsUnnamed when it holds none or only the template's placeholder. Never the model's file name: in
+        /// Design Automation that is always input.rvt, which names nothing a person knows.</summary>
+        public static string CoverNote(string projectName)
         {
-            string name = !string.IsNullOrWhiteSpace(projectName) ? projectName.Trim() : !string.IsNullOrWhiteSpace(fileName) ? fileName.Trim() : "the model";
+            string name = projectName == null ? "" : projectName.Trim();
+            if (name.Length == 0 || string.Equals(name, ProjectNamePlaceholder, System.StringComparison.OrdinalIgnoreCase)) return CoverNoteWordsUnnamed;
             return string.Format(CultureInfo.InvariantCulture, CoverNoteWords, name);
         }
 
